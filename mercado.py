@@ -91,48 +91,6 @@ class Mercado:
         return float(preco)
 
 
-class Cotacoes:
-    """Cache das cotações dos ativos em carteira, atualizado em segundo plano."""
-
-    VALIDADE = 60
-
-    def __init__(self, mercado):
-        self.mercado = mercado
-        self.precos = {}     # ticker -> (preço ou None, hora)
-        self._rodando = False
-        self._trava = threading.Lock()
-
-    def preco(self, ticker):
-        p = self.precos.get(ticker)
-        return p[0] if p else None
-
-    def pendentes(self, tickers):
-        agora = time.time()
-        return sorted(t for t in set(tickers) if t not in self.precos or agora - self.precos[t][1] > self.VALIDADE)
-
-    def atualizar(self, tickers, ao_terminar):
-        """Busca as cotações vencidas numa thread e chama ao_terminar() (da thread) se algo mudou."""
-        faltam = self.pendentes(tickers)
-        with self._trava:
-            if not faltam or self._rodando:
-                return False
-            self._rodando = True
-
-        def trabalho():
-            try:
-                for t in faltam:
-                    try:
-                        p = self.mercado.cotacao(t)
-                    except Exception:
-                        p = self.preco(t)
-                    self.precos[t] = (p, time.time())
-            finally:
-                self._rodando = False
-            ao_terminar()
-
-        threading.Thread(target=trabalho, daemon=True).start()
-        return True
-
     def dados(self, ticker, nome_conhecido=""):
         """Executar fora da thread da interface. Usa o yfinance quando instalado (Windows) e a API
         de gráficos do Yahoo diretamente quando não (Android)."""
@@ -224,3 +182,46 @@ class Cotacoes:
             risco = classificar_risco(atr_pct) if atr_pct is not None else None
             return {"ticker": ticker, "nome": nome, "preco": preco, "media6m": h[1]["media6m"],
                     "atr": atr, "atr_pct": atr_pct, "risco": risco, "hora": time.time()}
+
+
+class Cotacoes:
+    """Cache das cotações dos ativos em carteira, atualizado em segundo plano."""
+
+    VALIDADE = 60
+
+    def __init__(self, mercado):
+        self.mercado = mercado
+        self.precos = {}     # ticker -> (preço ou None, hora)
+        self._rodando = False
+        self._trava = threading.Lock()
+
+    def preco(self, ticker):
+        p = self.precos.get(ticker)
+        return p[0] if p else None
+
+    def pendentes(self, tickers):
+        agora = time.time()
+        return sorted(t for t in set(tickers) if t not in self.precos or agora - self.precos[t][1] > self.VALIDADE)
+
+    def atualizar(self, tickers, ao_terminar):
+        """Busca as cotações vencidas numa thread e chama ao_terminar() (da thread) se algo mudou."""
+        faltam = self.pendentes(tickers)
+        with self._trava:
+            if not faltam or self._rodando:
+                return False
+            self._rodando = True
+
+        def trabalho():
+            try:
+                for t in faltam:
+                    try:
+                        p = self.mercado.cotacao(t)
+                    except Exception:
+                        p = self.preco(t)
+                    self.precos[t] = (p, time.time())
+            finally:
+                self._rodando = False
+            ao_terminar()
+
+        threading.Thread(target=trabalho, daemon=True).start()
+        return True
