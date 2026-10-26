@@ -56,6 +56,13 @@ def parse_num(s):
     return v
 
 
+def fmt_num(v):
+    """Número para preencher um campo de edição: 32.5 -> "32,50"."""
+    t = f"{v:.8f}".rstrip("0")
+    inteiro, dec = t.split(".")
+    return f"{inteiro},{dec.ljust(2, '0')}"
+
+
 def parse_qtd(s):
     v = int(s.strip().replace(".", ""))
     if v <= 0:
@@ -207,6 +214,23 @@ def vendido(lote):
 
 def restante(lote):
     return lote["qtd"] - vendido(lote)
+
+
+def sem_venda(lote, venda_id):
+    """Cópia da compra sem uma das vendas (usada ao editar essa venda)."""
+    return {**lote, "vendas": [v for v in lote["vendas"] if v["id"] != venda_id]}
+
+
+def erro_edicao_lote(lote, novo):
+    """Valida a edição de uma compra que já pode ter vendas. Retorna a mensagem de erro ou None."""
+    ja = vendido(lote)
+    if novo["qtd"] < ja:
+        return f"A quantidade não pode ser menor que a já vendida ({ja})."
+    if lote["vendas"]:
+        primeira = min(v["data"] for v in lote["vendas"])
+        if novo["data_compra"] > primeira:
+            return f"A data da compra não pode ser depois da primeira venda ({fmt_data(primeira)})."
+    return None
 
 
 def status_lote(lote):

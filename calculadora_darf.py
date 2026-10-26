@@ -162,9 +162,19 @@ class FormBase(Janela):
 
 
 class FormCompra(FormBase):
-    def __init__(self, master, sugestoes, tipos, iniciais=None):
+    def __init__(self, master, sugestoes, tipos, iniciais=None, editar=None):
         ini = iniciais or {}
-        super().__init__(master, "Novo ativo", "Dados da compra")
+        self.editar = editar
+        maximo = date.today()
+        if editar:
+            ini = {"ticker": editar["ticker"], "tipo": editar["tipo"], "qtd": str(editar["qtd"]),
+                   "preco": nc.fmt_num(editar["preco"])}
+            if editar["vendas"]:
+                maximo = min(maximo, date.fromisoformat(min(v["data"] for v in editar["vendas"])))
+            sub = f"Já vendidas: {vendido(editar)}" if editar["vendas"] else "Dados da compra"
+            super().__init__(master, "Editar compra", sub)
+        else:
+            super().__init__(master, "Novo ativo", "Dados da compra")
         self.tipos = tipos
         self.rotulo("TICKER")
         self.en_ticker = self.entrada("Ex.: PETR4", ini.get("ticker", ""))
@@ -176,7 +186,8 @@ class FormCompra(FormBase):
         self.seg_tipo.set(ini.get("tipo") or "Ação")
         self.seg_tipo.pack(fill="x", padx=24)
         self.rotulo("DATA DA COMPRA")
-        self.data = CampoData(self.caixa, valor=date.today(), maximo=date.today())
+        inicial = date.fromisoformat(editar["data_compra"]) if editar else date.today()
+        self.data = CampoData(self.caixa, valor=inicial, maximo=maximo)
         self.data.pack(fill="x", padx=24)
         self.rotulo("QUANTIDADE")
         self.en_qtd = self.entrada("Ex.: 100", ini.get("qtd", ""))
@@ -219,15 +230,25 @@ class FormCompra(FormBase):
             p = parse_num(self.en_preco.get())
         except ValueError:
             return self.erro("Preço inválido.")
-        self.resultado = {"ticker": ticker, "tipo": self.seg_tipo.get(), "data_compra": dc.isoformat(),
-                          "qtd": q, "preco": p}
+        novo = {"ticker": ticker, "tipo": self.seg_tipo.get(), "data_compra": dc.isoformat(), "qtd": q, "preco": p}
+        if self.editar:
+            msg = nc.erro_edicao_lote(self.editar, novo)
+            if msg:
+                return self.erro(msg)
+        self.resultado = novo
         self.destroy()
 
 
 class FormVenda(FormBase):
-    def __init__(self, master, d, sugestoes, lote_inicial=None, ticker_inicial=""):
-        super().__init__(master, "Registrar venda", f"Mês {fmt_mes(d['mes'])}")
-        self.abertos = [l for l in d["lotes"] if restante(l) > 0]
+    def __init__(self, master, d, sugestoes, lote_inicial=None, ticker_inicial="", editar=None):
+        """editar=(lote, venda): edita a venda; a compra fica fixa."""
+        super().__init__(master, "Editar venda" if editar else "Registrar venda", f"Mês {fmt_mes(d['mes'])}")
+        if editar:
+            lote_inicial = nc.sem_venda(editar[0], editar[1]["id"])
+            self.abertos = [lote_inicial]
+            sugestoes = []
+        else:
+            self.abertos = [l for l in d["lotes"] if restante(l) > 0]
         self.inicio_mes, self.fim_mes = limites_mes(d["mes"])
         self.opcoes = {}
         self.lote = None
@@ -258,6 +279,14 @@ class FormVenda(FormBase):
 
         t = lote_inicial["ticker"] if lote_inicial else ticker_inicial
         self.selecionar_ticker(t or "", lote_inicial=lote_inicial)
+        if editar:
+            v = editar[1]
+            self.en_ticker.configure(state="disabled")
+            self.om_lote.configure(state="disabled")
+            self.data.set(date.fromisoformat(v["data"]))
+            self.en_qtd.delete(0, "end")
+            self.en_qtd.insert(0, str(v["qtd"]))
+            self.en_preco.insert(0, nc.fmt_num(v["preco"]))
         self.after(150, (self.en_preco if t else self.en_ticker).focus_set)
         self.mostrar()
 
@@ -729,10 +758,12 @@ class App(ctk.CTk):
         self.lb_qtd_lotes = top[1]
         self.bt_excluir_lote = botao(top[0], "Excluir", self.excluir_lote, "perigo", width=90)
         self.bt_excluir_lote.pack(side="right")
+        self.bt_editar_lote = botao(top[0], "Editar", self.editar_lote, "neutro", width=80)
+        self.bt_editar_lote.pack(side="right", padx=(0, 8))
         self.bt_venda = botao(top[0], "Registrar venda", lambda: self.registrar_venda(), "neutro", width=140)
-        self.bt_venda.pack(side="right", padx=8)
+        self.bt_venda.pack(side="right", padx=(0, 8))
         self.bt_novo = botao(top[0], "+  Novo ativo", lambda: self.novo_ativo(), "accent", width=140)
-        self.bt_novo.pack(side="right")
+        self.bt_novo.pack(side="right", padx=(0, 8))
         filtro = ctk.CTkFrame(c1, fg_color="transparent")
         filtro.pack(fill="x", padx=18, pady=(0, 10))
         ctk.CTkLabel(filtro, text="SITUAÇÃO", font=F(11, "bold"), text_color=C["muted"]).pack(side="left", padx=(0, 8))
@@ -763,6 +794,8 @@ class App(ctk.CTk):
         self.lb_qtd_vendas = top[1]
         self.bt_excluir_venda = botao(top[0], "Excluir venda", self.excluir_venda, "perigo", width=120)
         self.bt_excluir_venda.pack(side="right")
+        self.bt_editar_venda = botao(top[0], "Editar venda", self.editar_venda, "neutro", width=110)
+        self.bt_editar_venda.pack(side="right", padx=(0, 8))
         self.t_vendas = Tabela(c2, [
             ("ticker", "TICKER", 80, "w"), ("tipo", "TIPO", 60, "w"), ("data", "VENDA", 95, "center"),
             ("qtd", "QTD", 60, "e"), ("preco", "PREÇO", 100, "e"), ("regime", "OPERAÇÃO", 120, "center"),
@@ -771,6 +804,8 @@ class App(ctk.CTk):
             "Nenhuma venda registrada neste mês.",
             ordenaveis=("ticker", "data", "qtd", "preco", "taxas", "bruto", "liquido", "imposto"))
         self.t_vendas.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+        for ev in ("<Double-1>", "<<Duplo>>"):
+            self.t_vendas.tv.bind(ev, lambda e: self.editar_venda())
 
         # lateral
         lat = self.card(corpo, width=340)
@@ -899,7 +934,8 @@ class App(ctk.CTk):
         else:
             self.badge.configure(text="● Aberto", fg_color=C["accent_bg"], text_color=C["accent"])
         estado = "disabled" if (fechado or self.visao) else "normal"
-        for b in (self.bt_novo, self.bt_venda, self.bt_excluir_lote, self.bt_excluir_venda, self.bt_fechar):
+        for b in (self.bt_novo, self.bt_venda, self.bt_editar_lote, self.bt_excluir_lote, self.bt_editar_venda,
+                  self.bt_excluir_venda, self.bt_fechar):
             b.configure(state=estado)
 
         linhas = []
@@ -1016,6 +1052,37 @@ class App(ctk.CTk):
         lote_id = r.pop("lote_id")
         alvo = next(l for l in self.d["lotes"] if l["id"] == lote_id)
         alvo["vendas"].append({"id": uuid.uuid4().hex, **r})
+        self.gravar()
+
+    def editar_lote(self):
+        if self.visao or self.d["fechado"]:
+            return
+        lid = self.t_lotes.selecionado()
+        lote = next((l for l in self.d["lotes"] if l["id"] == lid), None) if lid else None
+        if not lote:
+            avisar(self, "Editar", "Selecione uma compra na tabela de ativos comprados.")
+            return
+        sugestoes, tipos = self.sugestoes()
+        f = FormCompra(self, sugestoes, tipos, editar=lote)
+        if not f.resultado:
+            return
+        lote.update(f.resultado)
+        self.gravar()
+
+    def editar_venda(self):
+        if self.visao or self.d["fechado"]:
+            return
+        vid = self.t_vendas.selecionado()
+        par = next(((l, v) for l in self.d["lotes"] for v in l["vendas"] if v["id"] == vid), None) if vid else None
+        if not par:
+            avisar(self, "Editar", "Selecione uma venda na tabela de vendas.")
+            return
+        f = FormVenda(self, self.d, [], editar=par)
+        if not f.resultado:
+            return
+        r = dict(f.resultado)
+        r.pop("lote_id")
+        par[1].update(r)
         self.gravar()
 
     def excluir_lote(self):

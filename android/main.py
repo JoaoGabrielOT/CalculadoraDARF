@@ -34,9 +34,18 @@ AMARELO = "#f59e0b"
 MUTED = ft.Colors.ON_SURFACE_VARIANT
 NOME_APK = "CalculadoraDARF.apk"
 URL_RELEASES = f"https://github.com/{upd.REPOSITORIO}/releases/latest"
-ORDENS = [("cadastro", "Ordem de cadastro"), ("data_desc", "Compra mais recente"), ("data_asc", "Compra mais antiga"),
-          ("ticker_az", "Ticker A–Z"), ("ticker_za", "Ticker Z–A"), ("preco_desc", "Maior preço"),
-          ("preco_asc", "Menor preço"), ("total_desc", "Maior total"), ("total_asc", "Menor total")]
+ORD_LOTES = [("cadastro", "Cadastro"), ("data", "Data da compra"), ("ticker", "Ticker"), ("qtd", "Quantidade"),
+             ("preco", "Preço de compra"), ("atual", "Preço atual"), ("total", "Total"),
+             ("resultado", "Ganho/perda"), ("restante", "Restante")]
+ORD_VENDAS = [("data", "Data da venda"), ("ticker", "Ticker"), ("qtd", "Quantidade"), ("preco", "Preço de venda"),
+              ("bruto", "Lucro bruto"), ("liquido", "Após taxas"), ("imposto", "Imposto"), ("taxas", "Taxas B3")]
+SITUACOES = ["Todos", "Em aberto", "Vendidos"]
+TIPOS = ["Todos", "Ação", "BDR"]
+OPERACOES = ["Todas", "Swing", "Day trade"]
+FILTRO_LOTES = {"situacao": "Todos", "tipo": "Todos", "busca": "", "ordem": "cadastro", "desc": False,
+                "buscando": False}
+FILTRO_VENDAS = {"operacao": "Todas", "tipo": "Todos", "busca": "", "ordem": "data", "desc": True,
+                 "buscando": False}
 MESES_CURTOS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
 
@@ -92,6 +101,37 @@ def bloco(conteudo, padding=16, cor=None, borda=None, **kw):
 def pilula(valor, fundo, cor="#ffffff", tam=11):
     return ft.Container(content=texto(valor, tam, ft.FontWeight.BOLD, cor), bgcolor=fundo,
                         padding=ft.Padding.symmetric(horizontal=10, vertical=3), border_radius=ft.BorderRadius.all(12))
+
+
+def menu_inferior(titulo, subtitulo, opcoes):
+    """BottomSheet que cresce com o conteúdo e não fica atrás da barra de navegação do sistema."""
+    return ft.BottomSheet(show_drag_handle=True, scrollable=True, content=ft.SafeArea(
+        avoid_intrusions_top=False, minimum_padding=ft.Padding.only(bottom=12),
+        content=ft.Column(tight=True, scroll=ft.ScrollMode.AUTO, controls=[
+            ft.ListTile(title=texto(titulo, 16, ft.FontWeight.BOLD), subtitle=ft.Text(subtitulo)), *opcoes])))
+
+
+def chip(conteudo, ativo=False, icone=None):
+    """Aparência de chip para o conteúdo de um PopupMenuButton ou botão."""
+    controles = [ft.Icon(icone, size=16, color=VERDE if ativo else MUTED)] if icone else []
+    if conteudo:
+        controles.append(texto(conteudo, 13, ft.FontWeight.BOLD if ativo else None, VERDE if ativo else None))
+    return ft.Container(
+        padding=ft.Padding.symmetric(horizontal=10, vertical=7), border_radius=ft.BorderRadius.all(10),
+        bgcolor=ft.Colors.with_opacity(0.15, VERDE) if ativo else None,
+        border=ft.Border.all(1, VERDE if ativo else ft.Colors.OUTLINE_VARIANT),
+        content=ft.Row(spacing=4, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=controles))
+
+
+def chip_menu(titulo, valor, opcoes, ao_escolher, padrao, sempre_valor=False):
+    """Chip que abre um menu com as opções; opcoes é uma lista de (chave, texto)."""
+    rotulo_txt = dict(opcoes).get(valor, valor)
+    ativo = valor != padrao
+    conteudo = chip(f"{titulo}: {rotulo_txt}" if ativo or sempre_valor else titulo, ativo)
+    conteudo.content.controls.append(ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=18, color=VERDE if ativo else MUTED))
+    return ft.PopupMenuButton(content=conteudo, tooltip=titulo, items=[
+        ft.PopupMenuItem(content=ft.Text(t), checked=k == valor, on_click=lambda e, k=k: ao_escolher(k))
+        for k, t in opcoes])
 
 
 def cor_resultado(v):
@@ -184,9 +224,11 @@ class App:
         self.d = nc.carregar(self.mes)
         self.visao = None
         self.dados_amigo = {}
-        self.filtro = "Todos"
-        self.ordem = "cadastro"
+        self.f_lotes = dict(FILTRO_LOTES)
+        self.f_vendas = dict(FILTRO_VENDAS)
+        self.col_lotes = self.col_vendas = self.cont_lotes = self.cont_vendas = None
         self.aba = 0
+        self.navegando = None  # (aba de destino, hora) durante a animação disparada pela barra inferior
         self.g = gs.Google(nc.DADOS, AQUI)
         self.mercado = mk.Mercado()
         self.cotacoes = mk.Cotacoes(self.mercado)
@@ -216,9 +258,11 @@ class App:
             ft.NavigationBarDestination(icon=ft.Icons.RECEIPT_LONG, label="Apuração"),
             ft.NavigationBarDestination(icon=ft.Icons.INSIGHTS, label="Radar"),
             ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_CIRCLE, label="Conta")])
-        self.corpo = ft.Container(expand=True)
-        page.add(self.corpo)
-        self.render()
+        # as três telas ficam lado a lado: dá para trocar arrastando para os lados
+        self.paginas = [ft.Container(expand=True) for _ in range(3)]
+        self.pv = ft.PageView(controls=self.paginas, selected_index=0, expand=True, on_change=self.pagina_arrastada)
+        page.add(self.pv)
+        self.render(todas=True)
 
         if self.g.tem_token():
             page.run_thread(self.conectar_token)
@@ -246,29 +290,44 @@ class App:
     def abrir_url(self, url):
         self.page.run_task(self.launcher.launch_url, url, mode=ft.LaunchMode.EXTERNAL_APPLICATION)
 
-    def ir_para(self, aba):
+    def ir_para(self, aba, animar=True):
+        anterior = self.aba
         self.aba = aba
         self.page.navigation_bar.selected_index = aba
         self.render()
+        if animar and aba != anterior:
+            self.navegando = (aba, time.time())
+            self.page.run_task(self.pv.go_to_page, aba, ft.Duration(milliseconds=280))
         if aba == 1:
             self.atualizar_radar()
 
     def trocar_aba(self, e):
         self.ir_para(e.control.selected_index)
 
-    def render(self):
+    def pagina_arrastada(self, e):
         try:
-            if self.aba == 0:
-                self.corpo.content = self.tela_apuracao()
-                editavel = not self.visao and not self.d["fechado"]
-                self.page.floating_action_button = ft.FloatingActionButton(
-                    icon=ft.Icons.ADD, on_click=lambda e: self.form_compra()) if editavel else None
-            elif self.aba == 1:
-                self.corpo.content = self.tela_radar()
-                self.page.floating_action_button = None
-            else:
-                self.corpo.content = self.tela_conta()
-                self.page.floating_action_button = None
+            idx = int(e.data)
+        except (TypeError, ValueError):
+            idx = e.control.selected_index
+        if self.navegando:
+            destino, hora = self.navegando
+            if time.time() - hora < 2:
+                if idx == destino:  # páginas intermediárias da animação são ignoradas
+                    self.navegando = None
+                return
+            self.navegando = None
+        if idx != self.aba:
+            self.ir_para(idx, animar=False)
+
+    def render(self, todas=False):
+        telas = (self.tela_apuracao, self.tela_radar, self.tela_conta)
+        try:
+            for i, tela in enumerate(telas):
+                if todas or i == self.aba:
+                    self.paginas[i].content = tela()
+            editavel = self.aba == 0 and not self.visao and not self.d["fechado"]
+            self.page.floating_action_button = ft.FloatingActionButton(
+                icon=ft.Icons.ADD, on_click=lambda e: self.form_compra()) if editavel else None
             self.atualizar_icone_sync()
             self.page.update()
         except Exception:
@@ -350,47 +409,154 @@ class App:
             texto("Código da DARF: 6015 · vencimento no último dia útil do mês seguinte", 11, cor=MUTED)])))
 
         # ativos comprados
-        lotes = list(d["lotes"])
-        if self.filtro == "Em aberto":
-            lotes = [l for l in lotes if nc.restante(l) > 0]
-        elif self.filtro == "Vendidos":
-            lotes = [l for l in lotes if nc.restante(l) == 0]
-        chaves = {"data": lambda l: l["data_compra"], "ticker": lambda l: l["ticker"],
-                  "preco": lambda l: l["preco"], "total": lambda l: l["qtd"] * l["preco"]}
-        if self.ordem != "cadastro":
-            campo, sentido = self.ordem.split("_")
-            lotes.sort(key=chaves[campo], reverse=sentido in ("desc", "za"))
         total = len(d["lotes"])
-        cont = str(len(lotes)) if self.filtro == "Todos" else f"{len(lotes)}/{total}"
-        itens.append(ft.Row(controls=[texto("Ativos comprados", 17, ft.FontWeight.BOLD),
-                                      pilula(cont, ft.Colors.SURFACE_CONTAINER_HIGHEST, MUTED),
+        self.cont_lotes = pilula("", ft.Colors.SURFACE_CONTAINER_HIGHEST, MUTED)
+        itens.append(ft.Row(controls=[texto("Ativos comprados", 17, ft.FontWeight.BOLD), self.cont_lotes,
                                       ft.Container(expand=True),
                                       ft.FilledTonalButton("Registrar venda", icon=ft.Icons.SELL,
                                                            on_click=lambda e: self.form_venda())
                                       if editavel else ft.Container()]))
-        itens.append(ft.SegmentedButton(
-            selected=[self.filtro], on_change=self.mudar_filtro, show_selected_icon=False,
-            segments=[ft.Segment(value=x, label=ft.Text(x)) for x in ("Todos", "Em aberto", "Vendidos")]))
-        itens.append(ft.Dropdown(label="Ordenar por", value=self.ordem, dense=True, on_select=self.mudar_ordem,
-                                 options=[ft.DropdownOption(key=k, text=t) for k, t in ORDENS]))
-        if not lotes:
-            itens.append(texto("Nenhum ativo neste mês. Toque em + para cadastrar uma compra." if not total
-                               else "Nenhum ativo para esse filtro.", 13, cor=MUTED))
-        for l in lotes:
-            itens.append(self.item_lote(l, editavel))
+        if total:
+            itens += self.barra_filtros(self.f_lotes, ORD_LOTES, "cadastro", [
+                ("situacao", "Situação", [(x, x) for x in SITUACOES], "Todos"),
+                ("tipo", "Tipo", [(x, x) for x in TIPOS], "Todos")])
+        self.col_lotes = ft.Column(spacing=12)
+        itens.append(self.col_lotes)
 
         # vendas
-        ops = sorted(r["ops"], key=lambda o: o["data"], reverse=True)
-        itens.append(ft.Row(controls=[texto("Vendas do mês", 17, ft.FontWeight.BOLD),
-                                      pilula(str(len(ops)), ft.Colors.SURFACE_CONTAINER_HIGHEST, MUTED)]))
-        if not ops:
-            itens.append(texto("Nenhuma venda registrada neste mês.", 13, cor=MUTED))
-        for o in ops:
-            itens.append(self.item_venda(o, editavel))
+        self.cont_vendas = pilula("", ft.Colors.SURFACE_CONTAINER_HIGHEST, MUTED)
+        itens.append(ft.Row(controls=[texto("Vendas do mês", 17, ft.FontWeight.BOLD), self.cont_vendas]))
+        if r["ops"]:
+            itens += self.barra_filtros(self.f_vendas, ORD_VENDAS, "data", [
+                ("operacao", "Operação", [(x, x) for x in OPERACOES], "Todas"),
+                ("tipo", "Tipo", [(x, x) for x in TIPOS], "Todos")])
+        self.col_vendas = ft.Column(spacing=12)
+        itens.append(self.col_vendas)
+        self.preencher_listas(r)
         itens.append(ft.Container(height=80))
         em_carteira = {l["ticker"] for l in d["lotes"] if nc.restante(l) > 0}
-        self.cotacoes.atualizar(em_carteira, lambda: self.render() if self.aba == 0 else None)
+        self.cotacoes.atualizar(em_carteira, self.cotacoes_chegaram)
         return ft.ListView(controls=itens, padding=ft.Padding.all(16), spacing=12, expand=True)
+
+    # ------------------------------------------------------------ filtros e ordenação das listas
+    def barra_filtros(self, f, ordens, ordem_padrao, menus):
+        """Linha de chips (busca, filtros, ordenação e sentido) e o campo de busca quando aberto."""
+        padrao = FILTRO_LOTES if f is self.f_lotes else FILTRO_VENDAS
+
+        def definir(chave, valor):
+            f[chave] = valor
+            if chave == "ordem":
+                f["desc"] = valor in ("data", "total", "resultado", "atual", "bruto", "liquido", "imposto", "taxas")
+            self.render()
+
+        def alternar_busca(e):
+            f["buscando"] = not f["buscando"]
+            if not f["buscando"]:
+                f["busca"] = ""
+            self.render()
+
+        def inverter(e):
+            f["desc"] = not f["desc"]
+            self.render()
+
+        def limpar(e):
+            f.clear()
+            f.update(padrao)
+            self.render()
+
+        def digitou(e):
+            f["busca"] = (e.control.value or "").strip().upper()
+            self.preencher_listas(atualizar=True)
+
+        chips = [ft.Container(content=chip("", bool(f["busca"]) or f["buscando"], ft.Icons.SEARCH),
+                              on_click=alternar_busca, tooltip="Buscar ticker")]
+        for chave, titulo, opcoes, pad in menus:
+            chips.append(chip_menu(titulo, f[chave], opcoes, lambda v, c=chave: definir(c, v), pad))
+        chips.append(chip_menu("Ordenar", f["ordem"], ordens, lambda v: definir("ordem", v), ordem_padrao,
+                               sempre_valor=True))
+        chips.append(ft.Container(
+            content=chip("", False, ft.Icons.ARROW_DOWNWARD if f["desc"] else ft.Icons.ARROW_UPWARD),
+            on_click=inverter, tooltip="Decrescente" if f["desc"] else "Crescente"))
+        filtrado = any(f[k] != padrao[k] for k in ("busca",) + tuple(m[0] for m in menus))
+        if filtrado:
+            chips.append(ft.Container(content=chip("Limpar", False, ft.Icons.FILTER_ALT_OFF), on_click=limpar))
+        controles = [ft.Row(scroll=ft.ScrollMode.HIDDEN, spacing=8, controls=chips)]
+        if f["buscando"] or f["busca"]:
+            controles.append(ft.TextField(
+                value=f["busca"], hint_text="Buscar ticker", dense=True, autofocus=not f["busca"],
+                prefix_icon=ft.Icons.SEARCH, capitalization=ft.TextCapitalization.CHARACTERS, on_change=digitou))
+        return controles
+
+    def lotes_filtrados(self):
+        f = self.f_lotes
+        lotes = list(self.d["lotes"])
+        if f["situacao"] == "Em aberto":
+            lotes = [l for l in lotes if nc.restante(l) > 0]
+        elif f["situacao"] == "Vendidos":
+            lotes = [l for l in lotes if nc.restante(l) == 0]
+        if f["tipo"] != "Todos":
+            lotes = [l for l in lotes if l["tipo"] == f["tipo"]]
+        if f["busca"]:
+            lotes = [l for l in lotes if f["busca"] in l["ticker"]]
+
+        def resultado(l):
+            res = nc.resultado_aberto(l, self.cotacoes.preco(l["ticker"]))
+            return res[0] if res else float("-inf")
+
+        chaves = {"data": lambda l: l["data_compra"], "ticker": lambda l: l["ticker"], "qtd": lambda l: l["qtd"],
+                  "preco": lambda l: l["preco"], "total": lambda l: l["qtd"] * l["preco"],
+                  "atual": lambda l: (self.cotacoes.preco(l["ticker"]) if nc.restante(l) > 0 else None)
+                  or float("-inf"),
+                  "resultado": resultado, "restante": nc.restante}
+        if f["ordem"] in chaves:
+            lotes.sort(key=chaves[f["ordem"]], reverse=f["desc"])
+        elif f["desc"]:
+            lotes.reverse()
+        return lotes
+
+    def vendas_filtradas(self, ops):
+        f = self.f_vendas
+        ops = list(ops)
+        if f["operacao"] != "Todas":
+            ops = [o for o in ops if o["regime"].startswith(f["operacao"])]
+        if f["tipo"] != "Todos":
+            ops = [o for o in ops if o["tipo"] == f["tipo"]]
+        if f["busca"]:
+            ops = [o for o in ops if f["busca"] in o["ticker"]]
+        chaves = {"data": lambda o: o["data"], "ticker": lambda o: o["ticker"], "qtd": lambda o: o["qtd"],
+                  "preco": lambda o: o["preco"], "bruto": lambda o: o["bruto"], "liquido": lambda o: o["liquido"],
+                  "imposto": lambda o: o["imposto"], "taxas": lambda o: o["taxas"] + o["corretagem"]}
+        ops.sort(key=chaves.get(f["ordem"], chaves["data"]), reverse=f["desc"])
+        return ops
+
+    def preencher_listas(self, r=None, atualizar=False):
+        """Recria só os itens das listas (sem refazer a tela, para não perder o foco da busca)."""
+        if self.col_lotes is None:
+            return
+        r = r or nc.apurar(self.d)
+        editavel = not self.visao and not self.d["fechado"]
+        total = len(self.d["lotes"])
+        lotes = self.lotes_filtrados()
+        self.col_lotes.controls = [self.item_lote(l, editavel) for l in lotes] or [
+            texto("Nenhum ativo neste mês. Toque em + para cadastrar uma compra." if not total
+                  else "Nenhum ativo para esse filtro.", 13, cor=MUTED)]
+        self.cont_lotes.content.value = str(total) if len(lotes) == total else f"{len(lotes)}/{total}"
+        ops = self.vendas_filtradas(r["ops"])
+        self.col_vendas.controls = [self.item_venda(o, editavel) for o in ops] or [
+            texto("Nenhuma venda registrada neste mês." if not r["ops"] else "Nenhuma venda para esse filtro.",
+                  13, cor=MUTED)]
+        n = len(r["ops"])
+        self.cont_vendas.content.value = str(n) if len(ops) == n else f"{len(ops)}/{n}"
+        if atualizar:
+            try:
+                for c in (self.col_lotes, self.col_vendas, self.cont_lotes, self.cont_vendas):
+                    c.update()
+            except Exception:
+                traceback.print_exc()
+
+    def cotacoes_chegaram(self):
+        if self.aba == 0:
+            self.preencher_listas(atualizar=True)
 
     def item_lote(self, l, editavel):
         st = nc.status_lote(l)
@@ -434,14 +600,6 @@ class App:
                     texto(brl(o["liquido"]), 15, ft.FontWeight.BOLD, cor_resultado(o["liquido"])),
                     texto(f"Imposto: {brl(o['imposto'])}", 12, cor=MUTED)])]))
 
-    def mudar_filtro(self, e):
-        self.filtro = e.control.selected[0] if e.control.selected else "Todos"
-        self.render()
-
-    def mudar_ordem(self, e):
-        self.ordem = e.control.value or "cadastro"
-        self.render()
-
     def acoes_lote(self, l):
         def fechar_e(f):
             def h(e):
@@ -453,14 +611,13 @@ class App:
         if nc.restante(l) > 0:
             opcoes.append(ft.ListTile(leading=ft.Icon(ft.Icons.SELL), title=ft.Text("Registrar venda"),
                                       on_click=fechar_e(lambda: self.form_venda(lote_id=l["id"]))))
+        opcoes.append(ft.ListTile(leading=ft.Icon(ft.Icons.EDIT_OUTLINED), title=ft.Text("Editar compra"),
+                                  on_click=fechar_e(lambda: self.form_compra(editar=l))))
         opcoes.append(ft.ListTile(leading=ft.Icon(ft.Icons.DELETE_OUTLINE, color=VERMELHO),
                                   title=ft.Text("Excluir compra", color=VERMELHO),
                                   on_click=fechar_e(lambda: self.excluir_lote(l))))
-        self.page.show_dialog(ft.BottomSheet(show_drag_handle=True, content=ft.Container(
-            padding=ft.Padding.only(bottom=24), content=ft.Column(tight=True, controls=[
-                ft.ListTile(title=texto(l["ticker"], 16, ft.FontWeight.BOLD),
-                            subtitle=ft.Text(f"{fmt_data(l['data_compra'])} · {l['qtd']} × {brl(l['preco'])}")),
-                *opcoes]))))
+        self.page.show_dialog(menu_inferior(
+            l["ticker"], f"{fmt_data(l['data_compra'])} · {l['qtd']} × {brl(l['preco'])}", opcoes))
 
     def acoes_venda(self, o):
         def excluir(e):
@@ -470,12 +627,17 @@ class App:
                                                                                 if v["id"] != o["venda_id"]])
                                                                 for l in d["lotes"]]))
 
-        self.page.show_dialog(ft.BottomSheet(show_drag_handle=True, content=ft.Container(
-            padding=ft.Padding.only(bottom=24), content=ft.Column(tight=True, controls=[
-                ft.ListTile(title=texto(f"Venda de {o['ticker']}", 16, ft.FontWeight.BOLD),
-                            subtitle=ft.Text(f"{fmt_data(o['data'])} · {o['qtd']} × {brl(o['preco'])}")),
+        def editar(e):
+            self.page.pop_dialog()
+            par = next(((l, v) for l in self.d["lotes"] for v in l["vendas"] if v["id"] == o["venda_id"]), None)
+            if par:
+                self.form_venda(editar=par)
+
+        self.page.show_dialog(menu_inferior(
+            f"Venda de {o['ticker']}", f"{fmt_data(o['data'])} · {o['qtd']} × {brl(o['preco'])}", [
+                ft.ListTile(leading=ft.Icon(ft.Icons.EDIT_OUTLINED), title=ft.Text("Editar venda"), on_click=editar),
                 ft.ListTile(leading=ft.Icon(ft.Icons.DELETE_OUTLINE, color=VERMELHO),
-                            title=ft.Text("Excluir venda", color=VERMELHO), on_click=excluir)]))))
+                            title=ft.Text("Excluir venda", color=VERMELHO), on_click=excluir)]))
 
     def excluir_lote(self, l):
         msg = f"Excluir {l['ticker']}" + (" e todas as vendas dele?" if l["vendas"] else "?")
@@ -565,17 +727,24 @@ class App:
         for c in linha.controls:
             c.bgcolor = ft.Colors.with_opacity(0.25, VERDE) if c.label.value == ticker else None
 
-    def form_compra(self, ini=None):
+    def form_compra(self, ini=None, editar=None):
         if self.visao or self.d["fechado"]:
             return
         ini = ini or {}
+        maximo = date.today()
+        if editar:
+            ini = {"ticker": editar["ticker"], "tipo": editar["tipo"], "qtd": str(editar["qtd"]),
+                   "preco": nc.fmt_num(editar["preco"])}
+            if editar["vendas"]:
+                maximo = min(maximo, date.fromisoformat(min(v["data"] for v in editar["vendas"])))
         sugestoes, tipos = nc.sugestoes(self.d)
         tk = ft.TextField(label="Ticker", value=ini.get("ticker", ""), hint_text="Ex.: PETR4",
                           capitalization=ft.TextCapitalization.CHARACTERS)
         tipo = ft.SegmentedButton(selected=[ini.get("tipo") or "Ação"], show_selected_icon=False,
                                   segments=[ft.Segment(value="Ação", label=ft.Text("Ação")),
                                             ft.Segment(value="BDR", label=ft.Text("BDR"))])
-        data = CampoData(self, "Data da compra", valor=date.today(), maximo=date.today())
+        data = CampoData(self, "Data da compra", valor=date.fromisoformat(editar["data_compra"]) if editar
+                         else date.today(), maximo=maximo)
         qtd = ft.TextField(label="Quantidade", keyboard_type=ft.KeyboardType.NUMBER, value=ini.get("qtd", ""))
         preco = ft.TextField(label="Preço unitário (R$)", keyboard_type=ft.KeyboardType.NUMBER,
                              value=ini.get("preco", ""), hint_text="Ex.: 32,50")
@@ -619,8 +788,31 @@ class App:
                 erro.value = str(ex)
                 dlg.update()
                 return
-            lote = {"id": nc.novo_id(), "ticker": t, "tipo": tipo.selected[0], "data_compra": data.valor.isoformat(),
-                    "qtd": q, "preco": p, "vendas": []}
+            novo = {"ticker": t, "tipo": tipo.selected[0], "data_compra": data.valor.isoformat(), "qtd": q, "preco": p}
+            if editar:
+                lid = editar["id"]
+
+                def aplicar(d):
+                    alvo = next((x for x in d["lotes"] if x["id"] == lid), None)
+                    if alvo is None:
+                        raise ValueError("A compra foi excluída em outro aparelho.")
+                    msg = nc.erro_edicao_lote(alvo, novo)
+                    if msg:
+                        raise ValueError(msg)
+                    alvo.update(novo)
+
+                msg = nc.erro_edicao_lote(editar, novo)
+                if msg:
+                    erro.value = msg
+                    dlg.update()
+                    return
+                self.page.pop_dialog()
+                try:
+                    self.mutar(aplicar)
+                except ValueError as ex:
+                    self.aviso(str(ex))
+                return
+            lote = {"id": nc.novo_id(), **novo, "vendas": []}
             self.page.pop_dialog()
             self.mutar(lambda d: d["lotes"].append(lote))
             self.perguntar("Venda", f"Você já fez a venda de {t}?", "Sim, registrar venda",
@@ -630,21 +822,30 @@ class App:
         if sugestoes:
             conteudo += [texto("Frequentes", 11, cor=MUTED), chips]
         conteudo += [rotulo("Tipo"), tipo, data.controle, qtd, preco, erro]
-        dlg = ft.AlertDialog(title=ft.Text("Novo ativo"), scrollable=True,
+        if editar and editar["vendas"]:
+            conteudo.insert(0, texto(f"Já vendidas: {nc.vendido(editar)}", 12, cor=MUTED))
+        dlg = ft.AlertDialog(title=ft.Text("Editar compra" if editar else "Novo ativo"), scrollable=True,
                              content=ft.Container(width=380, content=ft.Column(tight=True, spacing=12,
                                                                                controls=conteudo)),
                              actions=[ft.TextButton("Cancelar", on_click=lambda e: self.page.pop_dialog()),
                                       ft.FilledButton("Salvar", on_click=salvar)])
         self.page.show_dialog(dlg)
 
-    def form_venda(self, lote_id=None, ticker=""):
+    def form_venda(self, lote_id=None, ticker="", editar=None):
+        """editar=(compra, venda): edita a venda; a compra fica fixa."""
         if self.visao or self.d["fechado"]:
             return
-        abertos = [l for l in self.d["lotes"] if nc.restante(l) > 0]
-        if not abertos:
-            self.aviso("Não há compras em aberto neste mês.")
-            return
-        sugestoes, _ = nc.sugestoes(self.d, so_custodia=True)
+        if editar:
+            base = nc.sem_venda(editar[0], editar[1]["id"])
+            abertos = [base]
+            lote_id = base["id"]
+            sugestoes = []
+        else:
+            abertos = [l for l in self.d["lotes"] if nc.restante(l) > 0]
+            if not abertos:
+                self.aviso("Não há compras em aberto neste mês.")
+                return
+            sugestoes, _ = nc.sugestoes(self.d, so_custodia=True)
         inicio_mes, fim_mes = nc.limites_mes(self.mes)
         estado = {"ticker": None, "lote": None}
         tk = ft.TextField(label="Ticker", hint_text="Ex.: PETR4", capitalization=ft.TextCapitalization.CHARACTERS)
@@ -722,6 +923,13 @@ class App:
             selecionar_ticker(t0, lote_inicial=lote_id)
         else:
             selecionar_ticker("")
+        if editar:
+            v0 = editar[1]
+            tk.disabled = compra.disabled = True
+            data.valor = date.fromisoformat(v0["data"])
+            data.valor_txt.value = data.valor.strftime("%d/%m/%Y")
+            qtd.value = str(v0["qtd"])
+            preco.value = nc.fmt_num(v0["preco"])
 
         def salvar(e):
             l = estado["lote"]
@@ -744,14 +952,26 @@ class App:
                 erro.value = str(ex)
                 dlg.update()
                 return
-            venda = {"id": nc.novo_id(), "data": data.valor.isoformat(), "qtd": q, "preco": p}
+            venda = {"id": editar[1]["id"] if editar else nc.novo_id(), "data": data.valor.isoformat(),
+                     "qtd": q, "preco": p}
             lid = l["id"]
 
             def aplicar(d):
                 alvo = next((x for x in d["lotes"] if x["id"] == lid), None)
-                if alvo is None or nc.restante(alvo) < q:
-                    raise ValueError("A compra foi alterada em outro aparelho. Abra a venda novamente.")
-                alvo["vendas"].append(venda)
+                mudou = "A compra foi alterada em outro aparelho. Abra a venda novamente."
+                if alvo is None:
+                    raise ValueError(mudou)
+                if editar:
+                    existente = next((x for x in alvo["vendas"] if x["id"] == venda["id"]), None)
+                    if existente is None:
+                        raise ValueError("A venda foi excluída em outro aparelho.")
+                    if nc.restante(nc.sem_venda(alvo, venda["id"])) < q:
+                        raise ValueError(mudou)
+                    existente.update(data=venda["data"], qtd=q, preco=p)
+                else:
+                    if nc.restante(alvo) < q:
+                        raise ValueError(mudou)
+                    alvo["vendas"].append(venda)
 
             self.page.pop_dialog()
             try:
@@ -763,7 +983,7 @@ class App:
         if sugestoes:
             conteudo += [texto("Em carteira", 11, cor=MUTED), chips]
         conteudo += [compra, info, data.controle, qtd, preco, erro]
-        dlg = ft.AlertDialog(title=ft.Text("Registrar venda"), scrollable=True,
+        dlg = ft.AlertDialog(title=ft.Text("Editar venda" if editar else "Registrar venda"), scrollable=True,
                              content=ft.Container(width=380, content=ft.Column(tight=True, spacing=12,
                                                                                controls=conteudo)),
                              actions=[ft.TextButton("Cancelar", on_click=lambda e: self.page.pop_dialog()),
@@ -1234,7 +1454,7 @@ class App:
                     self.atualizar_radar()
                 if self.aba == 0:
                     em_carteira = {l["ticker"] for l in self.d["lotes"] if nc.restante(l) > 0}
-                    self.cotacoes.atualizar(em_carteira, lambda: self.render() if self.aba == 0 else None)
+                    self.cotacoes.atualizar(em_carteira, self.cotacoes_chegaram)
             except Exception:
                 traceback.print_exc()
 
