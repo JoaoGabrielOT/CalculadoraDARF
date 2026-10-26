@@ -205,13 +205,20 @@ class Google:
                              else f"O login não foi concluído: {q['error'][0]}")
         if q.get("state", [""])[0] != estado or not q.get("code"):
             raise ErroGoogle("O login não foi concluído.")
-        try:
-            r = requests.post(cliente["token_uri"], timeout=30, data={
-                "code": q["code"][0], "client_id": cliente["client_id"],
-                "client_secret": cliente.get("client_secret", ""), "redirect_uri": redirect,
-                "grant_type": "authorization_code", "code_verifier": verificador})
-        except (requests.ConnectionError, requests.Timeout) as e:
-            raise Offline(str(e))
+        # O Android bloqueia a rede de apps em segundo plano (o navegador está na frente quando o Google
+        # redireciona). Repete a troca do código até o usuário voltar ao app ou o prazo acabar.
+        prazo = time.time() + tempo_limite
+        while True:
+            try:
+                r = requests.post(cliente["token_uri"], timeout=30, data={
+                    "code": q["code"][0], "client_id": cliente["client_id"],
+                    "client_secret": cliente.get("client_secret", ""), "redirect_uri": redirect,
+                    "grant_type": "authorization_code", "code_verifier": verificador})
+                break
+            except (requests.ConnectionError, requests.Timeout) as e:
+                if time.time() > prazo:
+                    raise Offline(str(e))
+                time.sleep(2)
         tok = r.json() if r.content else {}
         if r.status_code >= 400 or "access_token" not in tok:
             raise ErroGoogle(f"O login não foi concluído: {tok.get('error_description') or tok.get('error') or r.status_code}")
@@ -220,8 +227,14 @@ class Google:
                             token_uri=cliente["token_uri"], client_id=cliente["client_id"],
                             client_secret=cliente.get("client_secret"), scopes=SCOPES, expiry=validade)
         self.token_path.write_text(creds.to_json(), encoding="utf-8")
-        self._iniciar(creds)
-        return self.email
+        while True:
+            try:
+                self._iniciar(creds)
+                return self.email
+            except Offline:
+                if time.time() > prazo:
+                    raise
+                time.sleep(2)
 
     def _iniciar(self, creds):
         from google.auth.transport.requests import AuthorizedSession
