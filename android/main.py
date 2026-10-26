@@ -189,6 +189,7 @@ class App:
         self.aba = 0
         self.g = gs.Google(nc.DADOS, AQUI)
         self.mercado = mk.Mercado()
+        self.cotacoes = mk.Cotacoes(self.mercado)
         self.radar_dados = {}
         self.radar_rodando = False
         self.radar_hora = 0
@@ -387,11 +388,24 @@ class App:
         for o in ops:
             itens.append(self.item_venda(o, editavel))
         itens.append(ft.Container(height=80))
+        em_carteira = {l["ticker"] for l in d["lotes"] if nc.restante(l) > 0}
+        self.cotacoes.atualizar(em_carteira, lambda: self.render() if self.aba == 0 else None)
         return ft.ListView(controls=itens, padding=ft.Padding.all(16), spacing=12, expand=True)
 
     def item_lote(self, l, editavel):
         st = nc.status_lote(l)
         cor_st = MUTED if st == "Vendido" else (AMARELO if st == "Vendido parcial" else VERDE)
+        linha_atual = ft.Container()
+        if nc.restante(l) > 0:
+            atual = self.cotacoes.preco(l["ticker"])
+            res = nc.resultado_aberto(l, atual)
+            if atual:
+                linha_atual = ft.Row(spacing=6, wrap=True, controls=[
+                    texto(f"Atual: {brl(atual)}", 12, ft.FontWeight.BOLD),
+                    texto(nc.fmt_resultado(res), 12, ft.FontWeight.BOLD, cor_resultado(res[0]) if res else None)])
+            else:
+                linha_atual = texto("Atual: carregando…" if l["ticker"] not in self.cotacoes.precos
+                                    else "Atual: sem cotação", 12, cor=MUTED)
         return ft.Container(
             padding=ft.Padding.all(14), border_radius=ft.BorderRadius.all(14), bgcolor=ft.Colors.SURFACE_CONTAINER,
             on_click=(lambda e, l=l: self.acoes_lote(l)) if editavel else None,
@@ -400,6 +414,7 @@ class App:
                     ft.Row(spacing=8, controls=[texto(l["ticker"], 16, ft.FontWeight.BOLD),
                                                 pilula(l["tipo"], ft.Colors.SURFACE_CONTAINER_HIGHEST, MUTED, 10)]),
                     texto(f"{fmt_data(l['data_compra'])} · {l['qtd']} × {brl(l['preco'])}", 12, cor=MUTED),
+                    linha_atual,
                     texto(st, 12, ft.FontWeight.BOLD, cor_st)]),
                 ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.END, controls=[
                     texto(brl(l["qtd"] * l["preco"]), 15, ft.FontWeight.BOLD),
@@ -1217,6 +1232,9 @@ class App:
                     self.conectar_token()
                 if self.aba == 1 and time.time() - self.radar_hora > 60:
                     self.atualizar_radar()
+                if self.aba == 0:
+                    em_carteira = {l["ticker"] for l in self.d["lotes"] if nc.restante(l) > 0}
+                    self.cotacoes.atualizar(em_carteira, lambda: self.render() if self.aba == 0 else None)
             except Exception:
                 traceback.print_exc()
 

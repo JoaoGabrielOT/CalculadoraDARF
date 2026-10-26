@@ -53,6 +53,86 @@ class Mercado:
         with self._trava:
             self._hist.clear()
 
+    def cotacao(self, ticker):
+        """Preço atual (com o atraso do Yahoo). Executar fora da thread da interface."""
+        try:
+            import yfinance as yf
+        except ImportError:
+            yf = None
+        if yf is not None:
+            t = yf.Ticker(f"{ticker}.SA")
+            try:
+                preco = float(t.fast_info.last_price)
+            except Exception:
+                preco = None
+            if not _valido(preco):
+                df = t.history(period="5d", interval="1d", auto_adjust=False)
+                if df is None or df.empty:
+                    raise SemDados(f"Sem cotação para {ticker}.")
+                preco = float(df["Close"].dropna().tolist()[-1])
+            return preco
+        import requests
+        r = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}.SA",
+                         params={"range": "5d", "interval": "1d"}, headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+        if r.status_code == 429:
+            raise RuntimeError("Too Many Requests")
+        if r.status_code == 404:
+            raise SemDados(f"Sem cotação para {ticker}.")
+        r.raise_for_status()
+        res = (r.json().get("chart") or {}).get("result") or []
+        if not res:
+            raise SemDados(f"Sem cotação para {ticker}.")
+        preco = res[0].get("meta", {}).get("regularMarketPrice")
+        if not _valido(preco):
+            fech = [c for c in ((res[0].get("indicators") or {}).get("quote") or [{}])[0].get("close") or [] if _valido(c)]
+            if not fech:
+                raise SemDados(f"Sem cotação para {ticker}.")
+            preco = fech[-1]
+        return float(preco)
+
+
+class Cotacoes:
+    """Cache das cotações dos ativos em carteira, atualizado em segundo plano."""
+
+    VALIDADE = 60
+
+    def __init__(self, mercado):
+        self.mercado = mercado
+        self.precos = {}     # ticker -> (preço ou None, hora)
+        self._rodando = False
+        self._trava = threading.Lock()
+
+    def preco(self, ticker):
+        p = self.precos.get(ticker)
+        return p[0] if p else None
+
+    def pendentes(self, tickers):
+        agora = time.time()
+        return sorted(t for t in set(tickers) if t not in self.precos or agora - self.precos[t][1] > self.VALIDADE)
+
+    def atualizar(self, tickers, ao_terminar):
+        """Busca as cotações vencidas numa thread e chama ao_terminar() (da thread) se algo mudou."""
+        faltam = self.pendentes(tickers)
+        with self._trava:
+            if not faltam or self._rodando:
+                return False
+            self._rodando = True
+
+        def trabalho():
+            try:
+                for t in faltam:
+                    try:
+                        p = self.mercado.cotacao(t)
+                    except Exception:
+                        p = self.preco(t)
+                    self.precos[t] = (p, time.time())
+            finally:
+                self._rodando = False
+            ao_terminar()
+
+        threading.Thread(target=trabalho, daemon=True).start()
+        return True
+
     def dados(self, ticker, nome_conhecido=""):
         """Executar fora da thread da interface. Usa o yfinance quando instalado (Windows) e a API
         de gráficos do Yahoo diretamente quando não (Android)."""

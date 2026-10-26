@@ -367,6 +367,22 @@ def sugestoes(d, so_custodia=False):
     return lista[:6], tipos
 
 
+def resultado_aberto(lote, preco_atual):
+    """Ganho ou perda da quantidade ainda não vendida: (valor em R$, variação em %)."""
+    if not preco_atual or restante(lote) <= 0:
+        return None
+    return (preco_atual - lote["preco"]) * restante(lote), (preco_atual / lote["preco"] - 1) * 100
+
+
+def fmt_resultado(res):
+    if res is None:
+        return "—"
+    valor, pct = res
+    sinal = "+" if valor > 0.004 else ""
+    pct_txt = f"{pct:.2f}".replace(".", ",")
+    return f"{sinal}{brl(valor)} ({sinal}{pct_txt}%)"
+
+
 def custodia_atual():
     return {l["ticker"] for l in carregar(mes_inicial())["lotes"] if restante(l) > 0}
 

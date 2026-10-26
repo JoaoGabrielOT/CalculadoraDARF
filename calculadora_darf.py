@@ -563,6 +563,7 @@ class App(ctk.CTk):
         self.ultima_puxada = datetime.now()
         self.ultimo_erro = ""
         self.mercado = mk.Mercado()
+        self.cotacoes = mk.Cotacoes(self.mercado)
         self.radar_dados = {}
         self.radar_cards = {}
         self.radar_rodando = False
@@ -691,10 +692,11 @@ class App(ctk.CTk):
                      text_color=C["muted"]).pack(side="right")
         self.t_lotes = Tabela(c1, [
             ("ticker", "TICKER", 90, "w"), ("tipo", "TIPO", 70, "w"), ("data", "COMPRA", 100, "center"),
-            ("qtd", "QTD", 70, "e"), ("preco", "PREÇO", 110, "e"), ("total", "TOTAL", 130, "e"),
-            ("vendida", "VENDIDA", 80, "e"), ("restante", "RESTANTE", 85, "e"), ("status", "SITUAÇÃO", 130, "center")],
+            ("qtd", "QTD", 60, "e"), ("preco", "PREÇO", 100, "e"), ("atual", "ATUAL", 100, "e"),
+            ("total", "TOTAL", 115, "e"), ("resultado", "GANHO/PERDA", 175, "e"),
+            ("vendida", "VENDIDA", 75, "e"), ("restante", "RESTANTE", 80, "e"), ("status", "SITUAÇÃO", 120, "center")],
             "Nenhum ativo neste mês. Clique em  +  Novo ativo  para começar.",
-            ordenaveis=("ticker", "data", "qtd", "preco", "total", "restante"))
+            ordenaveis=("ticker", "data", "qtd", "preco", "atual", "total", "resultado", "restante"))
         self.t_lotes.pack(fill="both", expand=True, padx=16, pady=(0, 16))
         self.t_lotes.tv.bind("<Double-1>", lambda e: self.registrar_venda())
 
@@ -845,16 +847,28 @@ class App(ctk.CTk):
             b.configure(state=estado)
 
         linhas = []
+        em_carteira = set()
         for l in self.d["lotes"]:
             st = status_lote(l)
             tags = ("muted",) if st == "Vendido" else ()
+            atual = self.cotacoes.preco(l["ticker"]) if restante(l) > 0 else None
+            if restante(l) > 0:
+                em_carteira.add(l["ticker"])
+            res = nc.resultado_aberto(l, atual)
+            if restante(l) == 0:
+                txt_atual = "—"
+            else:
+                txt_atual = brl(atual) if atual else ("…" if l["ticker"] not in self.cotacoes.precos else "—")
             linhas.append((l["id"], (l["ticker"], l["tipo"], fmt_data(l["data_compra"]), l["qtd"],
-                                     brl(l["preco"]), brl(l["qtd"] * l["preco"]), vendido(l),
-                                     restante(l), st), tags,
+                                     brl(l["preco"]), txt_atual, brl(l["qtd"] * l["preco"]),
+                                     ("▲ " if res and res[0] > 0.004 else "▼ " if res and res[0] < -0.004 else "")
+                                     + nc.fmt_resultado(res), vendido(l), restante(l), st), tags,
                            {"ticker": l["ticker"], "data": l["data_compra"], "qtd": l["qtd"], "preco": l["preco"],
-                            "total": l["qtd"] * l["preco"], "restante": restante(l)}))
+                            "atual": atual or float("-inf"), "total": l["qtd"] * l["preco"],
+                            "resultado": res[0] if res else float("-inf"), "restante": restante(l)}))
         self.t_lotes.preencher(linhas)
         self.contar_lotes()
+        self.cotacoes.atualizar(em_carteira, lambda: self.fila.put((lambda _: self.atualizar(), None, None)))
 
         r = apurar(self.d)
         linhas = []
@@ -1139,6 +1153,9 @@ class App(ctk.CTk):
     def tick_radar(self):
         if self.pagina == "radar" and not self.radar_rodando:
             self.atualizar_radar()
+        if self.pagina == "apuracao":
+            em_carteira = {l["ticker"] for l in self.d["lotes"] if restante(l) > 0}
+            self.cotacoes.atualizar(em_carteira, lambda: self.fila.put((lambda _: self.atualizar(), None, None)))
         self.after(60000, self.tick_radar)
 
     def preparar_operacao(self):
