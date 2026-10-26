@@ -9,6 +9,7 @@ import webbrowser
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
+import tkinter as tk
 from tkinter import ttk
 
 import customtkinter as ctk
@@ -364,6 +365,10 @@ class Tabela(ctk.CTkFrame):
         self.linhas = []
         self.visiveis = 0
         self.vazio = vazio
+        self.ancoras = {c[0]: c[3] for c in colunas}
+        self.cores_cel = {}  # iid -> {coluna: tag de cor}; o Treeview não colore células isoladas
+        self.rotulos = []
+        self.redesenho = None
         self.tv = ttk.Treeview(self, columns=[c[0] for c in colunas], show="headings",
                                selectmode="browse", style="D.Treeview")
         for chave, titulo, larg, ancora in colunas:
@@ -371,7 +376,9 @@ class Tabela(ctk.CTkFrame):
             self.tv.heading(chave, text=titulo, anchor=ancora, **kw)
             self.tv.column(chave, width=larg, minwidth=60, anchor=ancora)
         sb = ctk.CTkScrollbar(self, command=self.tv.yview)
-        self.tv.configure(yscrollcommand=sb.set)
+        self.tv.configure(yscrollcommand=lambda *a: (sb.set(*a), self._agendar_cores()))
+        for ev in ("<Configure>", "<<TreeviewSelect>>", "<ButtonRelease-1>", "<B1-Motion>"):
+            self.tv.bind(ev, lambda e: self._agendar_cores(), add="+")
         self.tv.grid(row=0, column=0, sticky="nsew")
         sb.grid(row=0, column=1, sticky="ns")
         self.lb_vazio = ctk.CTkLabel(self, text=vazio, font=F(13), text_color=C["muted"])
@@ -409,8 +416,12 @@ class Tabela(ctk.CTkFrame):
                 t += "  ↕"
             self.tv.heading(c, text=t)
         self.tv.delete(*self.tv.get_children())
-        for i, (iid, valores, tags, _) in enumerate(linhas):
+        self.cores_cel = {}
+        for i, (iid, valores, tags, chaves) in enumerate(linhas):
             self.tv.insert("", "end", iid=iid, values=valores, tags=("impar" if i % 2 else "par", *tags))
+            if chaves.get("_cores"):
+                self.cores_cel[iid] = chaves["_cores"]
+        self._agendar_cores()
         if sel and self.tv.exists(sel):
             self.tv.selection_set(sel)
         self.visiveis = len(linhas)
@@ -424,7 +435,51 @@ class Tabela(ctk.CTkFrame):
         s = self.tv.selection()
         return s[0] if s else None
 
+    def _agendar_cores(self):
+        if self.redesenho is None:
+            self.redesenho = self.after_idle(self._desenhar_cores)
+
+    def _rotulo(self, n):
+        while len(self.rotulos) <= n:
+            lb = tk.Label(self.tv, bd=0, highlightthickness=0, padx=4, font=(FONTE, 10))
+            lb.bind("<Button-1>", lambda e, lb=lb: self._clique(lb))
+            lb.bind("<Double-1>", lambda e, lb=lb: (self._clique(lb), self.tv.event_generate("<<Duplo>>")))
+            lb.bind("<MouseWheel>", lambda e: self.tv.yview_scroll(int(-e.delta / 120), "units"))
+            self.rotulos.append(lb)
+        return self.rotulos[n]
+
+    def _clique(self, lb):
+        iid = getattr(lb, "iid", None)
+        if iid and self.tv.exists(iid):
+            self.tv.selection_set(iid)
+            self.tv.focus(iid)
+            self.tv.focus_set()
+
+    def _desenhar_cores(self):
+        self.redesenho = None
+        n = 0
+        selecionados = set(self.tv.selection())
+        for i, iid in enumerate(self.tv.get_children()):
+            for col, tag in self.cores_cel.get(iid, {}).items():
+                caixa = self.tv.bbox(iid, col)
+                if not caixa:
+                    continue
+                x, y, w, h = caixa
+                if iid in selecionados:
+                    fundo = cor("selecao")
+                else:
+                    fundo = cor("zebra" if i % 2 else "card")
+                lb = self._rotulo(n)
+                lb.iid = iid
+                anc = self.ancoras.get(col, "w")
+                lb.configure(text=self.tv.set(iid, col), bg=fundo, fg=cor(tag), anchor=anc)
+                lb.place(x=x, y=y, width=w, height=h)
+                n += 1
+        for lb in self.rotulos[n:]:
+            lb.place_forget()
+
     def aplicar_cores(self):
+        self._agendar_cores()
         self.tv.tag_configure("par", background=cor("card"))
         self.tv.tag_configure("impar", background=cor("zebra"))
         self.tv.tag_configure("neg", foreground=cor("danger"))
@@ -698,7 +753,8 @@ class App(ctk.CTk):
             "Nenhum ativo neste mês. Clique em  +  Novo ativo  para começar.",
             ordenaveis=("ticker", "data", "qtd", "preco", "atual", "total", "resultado", "restante"))
         self.t_lotes.pack(fill="both", expand=True, padx=16, pady=(0, 16))
-        self.t_lotes.tv.bind("<Double-1>", lambda e: self.registrar_venda())
+        for ev in ("<Double-1>", "<<Duplo>>"):
+            self.t_lotes.tv.bind(ev, lambda e: self.registrar_venda())
 
         # vendas
         c2 = self.card(corpo)
@@ -865,7 +921,9 @@ class App(ctk.CTk):
                                      + nc.fmt_resultado(res), vendido(l), restante(l), st), tags,
                            {"ticker": l["ticker"], "data": l["data_compra"], "qtd": l["qtd"], "preco": l["preco"],
                             "atual": atual or float("-inf"), "total": l["qtd"] * l["preco"],
-                            "resultado": res[0] if res else float("-inf"), "restante": restante(l)}))
+                            "resultado": res[0] if res else float("-inf"), "restante": restante(l),
+                            "_cores": {"resultado": "accent" if res[0] > 0.004 else "danger"}
+                            if res and abs(res[0]) > 0.004 else {}}))
         self.t_lotes.preencher(linhas)
         self.contar_lotes()
         self.cotacoes.atualizar(em_carteira, lambda: self.fila.put((lambda _: self.atualizar(), None, None)))
