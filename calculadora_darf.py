@@ -588,6 +588,7 @@ class App(ctk.CTk):
         self.after(60000, self.tick_sync)
         self.after(60000, self.tick_radar)
         if upd.pode_atualizar():
+            upd.limpar_sobras()
             self.after(3000, self.verificar_atualizacao)
         if self.g.tem_token():
             self.conectar_token()
@@ -1192,6 +1193,12 @@ class App(ctk.CTk):
         threading.Thread(target=rodar, daemon=True).start()
 
     def processar_fila(self):
+        # agenda a próxima rodada antes de executar os callbacks: um callback que abre uma janela modal
+        # (ex.: aviso de atualização) bloqueia aqui, e a fila precisa continuar sendo processada
+        try:
+            self.after(100, self.processar_fila)
+        except Exception:
+            return
         try:
             while True:
                 cb, res, exc = self.fila.get_nowait()
@@ -1199,7 +1206,6 @@ class App(ctk.CTk):
                     cb(exc if exc is not None else res)
         except queue.Empty:
             pass
-        self.after(100, self.processar_fila)
 
     # --- conta Google
     def status_sync(self, estado):

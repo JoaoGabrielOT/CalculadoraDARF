@@ -28,6 +28,15 @@ def pode_atualizar():
     return getattr(sys, "frozen", False) and sys.platform == "win32"
 
 
+def limpar_sobras():
+    """Apaga um download de atualização que não chegou a ser instalado."""
+    try:
+        exe = Path(sys.executable)
+        exe.with_name(exe.stem + ".novo.exe").unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def verificar(nome_asset=NOME_ASSET):
     """Retorna os dados da nova versão ou None. Executar fora da thread da interface."""
     import requests

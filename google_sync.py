@@ -139,20 +139,36 @@ class Google:
         return self.email
 
     def login_navegador(self, abrir_url, tempo_limite=600):
-        """Login para plataformas sem `webbrowser` (Android).
+        """Login para plataformas sem `webbrowser` nem `wsgiref` (Android).
 
-        Abre a autorização com abrir_url(url) e espera o redirecionamento do Google em 127.0.0.1.
+        Abre a autorização com abrir_url(url), espera o redirecionamento do Google em 127.0.0.1 e troca o
+        código pelo token diretamente (OAuth 2.0 com PKCE), sem depender do google-auth-oauthlib.
         """
+        import base64
+        import hashlib
         import http.server
+        import json
+        import secrets
         import time
-        from google_auth_oauthlib.flow import Flow
+        import urllib.parse
+        from datetime import datetime, timedelta, timezone
+
+        import requests
+        from google.oauth2.credentials import Credentials
+
         if not self.cred_path:
             raise SemCredencial("Arquivo credentials.json não encontrado.")
+        cliente = json.loads(self.cred_path.read_text(encoding="utf-8-sig"))
+        cliente = cliente.get("installed") or cliente.get("web") or cliente
 
         recebido = {}
 
         class Retorno(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
+                if "code=" not in self.path and "error=" not in self.path:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
                 recebido["url"] = self.path
                 corpo = ("<html><body style='font-family:sans-serif;text-align:center;padding:48px'>"
                          "<h2>Login concluído</h2><p>Volte para a Calculadora DARF.</p></body></html>")
@@ -166,25 +182,43 @@ class Google:
 
         servidor = http.server.HTTPServer(("127.0.0.1", 0), Retorno)
         servidor.timeout = 1
-        porta = servidor.server_address[1]
+        redirect = f"http://127.0.0.1:{servidor.server_address[1]}/"
+        verificador = secrets.token_urlsafe(64)
+        desafio = base64.urlsafe_b64encode(hashlib.sha256(verificador.encode("ascii")).digest()).rstrip(b"=")
+        estado = secrets.token_urlsafe(16)
+        url = cliente["auth_uri"] + "?" + urllib.parse.urlencode({
+            "client_id": cliente["client_id"], "redirect_uri": redirect, "response_type": "code",
+            "scope": " ".join(SCOPES), "access_type": "offline", "prompt": "consent",
+            "code_challenge": desafio.decode("ascii"), "code_challenge_method": "S256", "state": estado})
         try:
-            flow = Flow.from_client_secrets_file(str(self.cred_path), SCOPES,
-                                                 redirect_uri=f"http://127.0.0.1:{porta}/")
-            url, _ = flow.authorization_url(access_type="offline", prompt="consent")
             abrir_url(url)
             fim = time.time() + tempo_limite
             while "url" not in recebido and time.time() < fim:
                 servidor.handle_request()
         finally:
             servidor.server_close()
-        caminho = recebido.get("url")
-        if not caminho or "code=" not in caminho:
+        if "url" not in recebido:
+            raise ErroGoogle("O login não foi concluído.")
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(recebido["url"]).query)
+        if q.get("error"):
+            raise ErroGoogle("O login foi cancelado." if q["error"][0] == "access_denied"
+                             else f"O login não foi concluído: {q['error'][0]}")
+        if q.get("state", [""])[0] != estado or not q.get("code"):
             raise ErroGoogle("O login não foi concluído.")
         try:
-            flow.fetch_token(authorization_response=f"https://127.0.0.1:{porta}{caminho}")
-        except Exception as e:
-            raise ErroGoogle(f"O login não foi concluído: {e}")
-        creds = flow.credentials
+            r = requests.post(cliente["token_uri"], timeout=30, data={
+                "code": q["code"][0], "client_id": cliente["client_id"],
+                "client_secret": cliente.get("client_secret", ""), "redirect_uri": redirect,
+                "grant_type": "authorization_code", "code_verifier": verificador})
+        except (requests.ConnectionError, requests.Timeout) as e:
+            raise Offline(str(e))
+        tok = r.json() if r.content else {}
+        if r.status_code >= 400 or "access_token" not in tok:
+            raise ErroGoogle(f"O login não foi concluído: {tok.get('error_description') or tok.get('error') or r.status_code}")
+        validade = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=int(tok.get("expires_in", 3600)) - 60)
+        creds = Credentials(token=tok["access_token"], refresh_token=tok.get("refresh_token"),
+                            token_uri=cliente["token_uri"], client_id=cliente["client_id"],
+                            client_secret=cliente.get("client_secret"), scopes=SCOPES, expiry=validade)
         self.token_path.write_text(creds.to_json(), encoding="utf-8")
         self._iniciar(creds)
         return self.email

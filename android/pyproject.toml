@@ -7,7 +7,6 @@ dependencies = [
     "flet==1.0.5",
     "requests",
     "google-auth",
-    "google-auth-oauthlib",
 ]
 
 [tool.flet]
