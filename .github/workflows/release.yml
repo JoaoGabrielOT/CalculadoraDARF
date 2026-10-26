@@ -28,11 +28,12 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
-          if ($env:GOOGLE_CREDENTIALS) {
-            Set-Content -Path credentials.json -Value $env:GOOGLE_CREDENTIALS -Encoding utf8 -NoNewline
-          } else {
-            Write-Warning "Segredo GOOGLE_CREDENTIALS ausente: o login com Google não vai funcionar nesta versão."
+          if (-not $env:GOOGLE_CREDENTIALS) {
+            Write-Output "::error::Segredo GOOGLE_CREDENTIALS ausente. Cadastre em Settings > Secrets and variables > Actions."
+            exit 1
           }
+          Set-Content -Path credentials.json -Value $env:GOOGLE_CREDENTIALS -Encoding utf8 -NoNewline
+          python -c "import json; d=json.load(open('credentials.json', encoding='utf-8-sig')); assert 'installed' in d, 'credentials.json sem a chave installed'"
 
       - name: Instalar dependências
         run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
@@ -40,10 +41,8 @@ jobs:
       - name: Gerar o executável
         shell: pwsh
         run: |
-          $extra = @()
-          if (Test-Path credentials.json) { $extra += @("--add-data", "credentials.json;.") }
           pyinstaller --onefile --noconsole --clean --collect-data customtkinter `
-            --collect-all yfinance --collect-all curl_cffi @extra `
+            --collect-all yfinance --collect-all curl_cffi --add-data "credentials.json;." `
             --name CalculadoraDARF calculadora_darf.py
 
       - name: Publicar a release
