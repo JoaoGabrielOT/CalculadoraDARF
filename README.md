@@ -27,26 +27,3 @@ Na [última release](../../releases/latest):
 | `calculadora_darf.py`, `tema.py`, `componentes.py` | App Windows (CustomTkinter) |
 | `android/main.py` | App Android (Flet) |
 | `assets/` | Logo e ícones |
-
-## Publicar uma nova versão
-
-Crie uma release com uma tag nova (ex.: `v1.2.0`) em **Releases → Draft a new release**, ou:
-
-```
-git tag v1.2.0
-git push origin v1.2.0
-```
-
-O GitHub Actions gera o `.exe` e o `.apk` e os anexa à release. Os apps instalados detectam a nova versão ao abrir.
-
-Segredos usados pelo build (Settings → Secrets and variables → Actions):
-
-- `GOOGLE_CREDENTIALS`: conteúdo do `credentials.json` (cliente OAuth do Google)
-- `ANDROID_KEYSTORE_BASE64`: chave de assinatura do APK em base64
-- `ANDROID_KEYSTORE_PASSWORD`: senha da chave
-
-O APK precisa ser sempre assinado com a mesma chave; sem ela, o Android não instala as atualizações.
-
-## Gerar localmente (Windows)
-
-Com o Python instalado, rode `gerar_exe.bat` (o `credentials.json` precisa estar na pasta).
