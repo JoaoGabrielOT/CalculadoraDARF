@@ -11,7 +11,7 @@ if not defined PY (
     exit /b 1
 )
 
-for %%F in (google_sync.py mercado.py tema.py componentes.py atualizador.py versao.py) do (
+for %%F in (nucleo.py google_sync.py mercado.py tema.py componentes.py atualizador.py versao.py assets\icone.ico) do (
     if not exist %%F (
         echo Arquivo %%F nao encontrado nesta pasta.
         pause
@@ -28,7 +28,7 @@ if exist credentials.json (
 )
 
 %PY% -m pip install --upgrade pyinstaller -r requirements.txt || goto erro
-%PY% -m PyInstaller --onefile --noconsole --clean --collect-data customtkinter --collect-all yfinance --collect-all curl_cffi %CRED% --name CalculadoraDARF calculadora_darf.py || goto erro
+%PY% -m PyInstaller --onefile --noconsole --clean --collect-data customtkinter --collect-all yfinance --collect-all curl_cffi --icon assets\icone.ico --add-data "assets\icone.ico;assets" %CRED% --name CalculadoraDARF calculadora_darf.py || goto erro
 
 echo.
 echo Executavel gerado em: %~dp0dist\CalculadoraDARF.exe

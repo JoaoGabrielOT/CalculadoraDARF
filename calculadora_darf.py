@@ -15,309 +15,29 @@ import customtkinter as ctk
 
 import atualizador as upd
 import google_sync as gs
+import nucleo as nc
 import mercado as mk
 from componentes import CampoData, SeletorMes
 from tema import C, F, FONTE, botao, cor, estilo_botao
+from nucleo import (DARF_MINIMO, LIMITE_ISENCAO, apurar, brl, carregar, fmt_data, fmt_mes, gravar_config,
+                    historico_tickers, inferir_tipo, ler_config, limites_mes, listar_meses, mes_inicial, mes_vazio,
+                    montar_linhas, parse_num, parse_qtd, preco_texto, proximo_mes, reconstruir, restante, salvar,
+                    status_lote, vendido)
 from versao import VERSAO
 
-TAXA_B3_SWING = 0.0003        # 0,0300% por operação (compra e venda)
-TAXA_B3_DAYTRADE = 0.00023    # 0,0230% por operação (compra e venda)
-CORRETAGEM_POR_ORDEM = 0.0
-ALIQ_SWING = 0.15
-ALIQ_DAYTRADE = 0.20
-IRRF_SWING = 0.00005          # 0,005% sobre o valor da venda
-IRRF_DAYTRADE = 0.01          # 1% sobre o lucro do dia
-LIMITE_ISENCAO = 20000.0
-DARF_MINIMO = 10.0
 PAGINA_APURACAO = "Apuração / DARF"
 PAGINA_RADAR = "Radar de Ações"
 
 BASE = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
 DADOS = BASE / "dados"
-DADOS.mkdir(exist_ok=True)
-CONFIG = DADOS / "config.json"
-
-# ---------------------------------------------------------------- dados e cálculo
-
-def brl(v):
-    s = f"{abs(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    return ("-R$ " if v < -0.004 else "R$ ") + s
+nc.configurar(DADOS)
 
 
-def parse_num(s):
-    s = s.strip().replace("R$", "").replace(" ", "")
-    if "," in s:
-        s = s.replace(".", "").replace(",", ".")
-    v = float(s)
-    if v <= 0:
-        raise ValueError
-    return v
+def recurso(nome):
+    """Arquivo empacotado no .exe (PyInstaller) ou ao lado do script."""
+    raiz = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    return raiz / nome
 
-
-def parse_qtd(s):
-    v = int(s.strip().replace(".", ""))
-    if v <= 0:
-        raise ValueError
-    return v
-
-
-def parse_data(s):
-    return datetime.strptime(s.strip(), "%d/%m/%Y").date()
-
-
-def fmt_data(iso):
-    return date.fromisoformat(iso).strftime("%d/%m/%Y")
-
-
-def fmt_mes(mes):
-    a, m = mes.split("-")
-    return f"{m}/{a}"
-
-
-def arquivo(mes):
-    return DADOS / f"{mes}.json"
-
-
-def carregar(mes):
-    p = arquivo(mes)
-    if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
-    return {"mes": mes, "fechado": False, "darf_anterior": 0.0, "lotes": []}
-
-
-def salvar(d):
-    arquivo(d["mes"]).write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def listar_meses():
-    return sorted(p.stem for p in DADOS.glob("????-??.json"))
-
-
-def proximo_mes(mes):
-    a, m = map(int, mes.split("-"))
-    m += 1
-    if m > 12:
-        a, m = a + 1, 1
-    return f"{a:04d}-{m:02d}"
-
-
-def vendido(lote):
-    return sum(v["qtd"] for v in lote["vendas"])
-
-
-def restante(lote):
-    return lote["qtd"] - vendido(lote)
-
-
-def status_lote(lote):
-    r = restante(lote)
-    if r == lote["qtd"]:
-        return "Não vendido"
-    if r == 0:
-        return "Vendido"
-    return "Vendido parcial"
-
-
-def calcular_venda(lote, v):
-    q = v["qtd"]
-    compra = q * lote["preco"]
-    venda = q * v["preco"]
-    dt = v["data"] == lote["data_compra"]
-    taxa = TAXA_B3_DAYTRADE if dt else TAXA_B3_SWING
-    taxas = (compra + venda) * taxa
-    corretagem = CORRETAGEM_POR_ORDEM * (1 + q / lote["qtd"])
-    bruto = venda - compra
-    liquido = bruto - taxas - corretagem
-    return {"dt": dt, "compra": compra, "venda": venda, "taxas": taxas,
-            "corretagem": corretagem, "bruto": bruto, "liquido": liquido}
-
-
-def apurar(d):
-    ops = []
-    for l in d["lotes"]:
-        for v in l["vendas"]:
-            c = calcular_venda(l, v)
-            c.update(ticker=l["ticker"], tipo=l["tipo"], data=v["data"], qtd=v["qtd"],
-                     preco=v["preco"], lote_id=l["id"], venda_id=v["id"])
-            ops.append(c)
-
-    vendas_acoes_st = sum(o["venda"] for o in ops if not o["dt"] and o["tipo"] == "Ação")
-    isento = vendas_acoes_st <= LIMITE_ISENCAO
-
-    for o in ops:
-        if o["dt"]:
-            o["regime"] = "Day trade"
-            o["imposto"] = max(o["liquido"], 0) * ALIQ_DAYTRADE
-        elif o["tipo"] == "Ação" and isento:
-            o["regime"] = "Swing (isento)"
-            o["imposto"] = 0.0
-        else:
-            o["regime"] = "Swing"
-            o["imposto"] = max(o["liquido"], 0) * ALIQ_SWING
-
-    res_acoes_st = sum(o["liquido"] for o in ops if not o["dt"] and o["tipo"] == "Ação")
-    res_bdr_st = sum(o["liquido"] for o in ops if not o["dt"] and o["tipo"] == "BDR")
-    base_st = (min(res_acoes_st, 0) if isento else res_acoes_st) + res_bdr_st
-    base_dt = sum(o["liquido"] for o in ops if o["dt"])
-    imp_st = max(base_st, 0) * ALIQ_SWING
-    imp_dt = max(base_dt, 0) * ALIQ_DAYTRADE
-
-    irrf_st_dia = defaultdict(float)
-    res_dt_dia = defaultdict(float)
-    for o in ops:
-        if o["dt"]:
-            res_dt_dia[o["data"]] += o["liquido"]
-        else:
-            irrf_st_dia[o["data"]] += o["venda"] * IRRF_SWING
-    irrf_st = sum(x for x in irrf_st_dia.values() if x > 1)
-    irrf_dt = sum(r * IRRF_DAYTRADE for r in res_dt_dia.values() if r * IRRF_DAYTRADE > 1)
-    irrf = irrf_st + irrf_dt
-
-    imposto_total = imp_st + imp_dt
-    darf_mes = max(imposto_total - irrf, 0)
-    darf_anterior = d.get("darf_anterior", 0.0)
-    darf = darf_mes + darf_anterior
-
-    return {
-        "ops": ops,
-        "vendas_acoes_st": vendas_acoes_st,
-        "isento": isento,
-        "bruto": sum(o["bruto"] for o in ops),
-        "custos": sum(o["taxas"] + o["corretagem"] for o in ops),
-        "imp_st": imp_st,
-        "imp_dt": imp_dt,
-        "imposto_total": imposto_total,
-        "irrf": irrf,
-        "lucro_liquido": sum(o["liquido"] for o in ops) - imposto_total,
-        "darf_mes": darf_mes,
-        "darf_anterior": darf_anterior,
-        "darf": darf,
-    }
-
-
-def ler_config():
-    try:
-        return json.loads(CONFIG.read_text(encoding="utf-8"))
-    except Exception:
-        return {"tema": "Dark"}
-
-
-def gravar_config(cfg):
-    CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def mes_inicial():
-    abertos = [m for m in listar_meses() if not carregar(m)["fechado"]]
-    return abertos[0] if abertos else date.today().strftime("%Y-%m")
-
-
-def mes_vazio(mes):
-    return {"mes": mes, "fechado": False, "darf_anterior": 0.0, "lotes": []}
-
-
-# ---------------------------------------------------------------- planilha (linhas <-> dados)
-
-EPOCA = date(1899, 12, 30)
-
-
-def serial(iso):
-    return (date.fromisoformat(iso) - EPOCA).days
-
-
-def de_serial(v):
-    if isinstance(v, (int, float)) and not isinstance(v, bool):
-        return (EPOCA + timedelta(days=int(v))).isoformat()
-    s = str(v).strip()
-    try:
-        return parse_data(s).isoformat()
-    except ValueError:
-        return date.fromisoformat(s).isoformat()
-
-
-def mes_iso(rotulo):
-    m, a = str(rotulo).strip().split("/")
-    return f"{int(a):04d}-{int(m):02d}"
-
-
-def montar_linhas(meses, amigos, radar):
-    resumo, compras, vendas = [], [], []
-    for mes in meses:
-        d = carregar(mes)
-        r = apurar(d)
-        m = fmt_mes(mes)
-        resumo.append([m, "Fechado" if d["fechado"] else "Aberto", round(r["vendas_acoes_st"], 2),
-                       "Sim" if r["isento"] else "Não", round(r["bruto"], 2), round(r["custos"], 2),
-                       round(r["imp_st"], 2), round(r["imp_dt"], 2), round(r["irrf"], 2),
-                       round(r["lucro_liquido"], 2), round(r["darf_anterior"], 2), round(r["darf"], 2)])
-        ops = {o["venda_id"]: o for o in r["ops"]}
-        linhas_v = []
-        for l in d["lotes"]:
-            compras.append([m, l["ticker"], l["tipo"], serial(l["data_compra"]), l["qtd"], l["preco"],
-                            round(l["qtd"] * l["preco"], 2), vendido(l), restante(l), status_lote(l),
-                            l["id"], l.get("origem", "")])
-            for v in l["vendas"]:
-                o = ops[v["id"]]
-                linhas_v.append([m, l["ticker"], l["tipo"], serial(l["data_compra"]), l["preco"],
-                                 serial(v["data"]), v["qtd"], v["preco"], round(o["venda"], 2), o["regime"],
-                                 round(o["taxas"] + o["corretagem"], 2), round(o["bruto"], 2),
-                                 round(o["liquido"], 2), round(o["imposto"], 2), v["id"], l["id"]])
-        vendas += sorted(linhas_v, key=lambda x: x[5])
-    lista_amigos = [[a["email"], serial(a["desde"])] for a in amigos]
-    lista_radar = [[r["ticker"], r.get("nome", ""), serial(r["desde"])] for r in radar]
-    return {"Resumo": resumo, "Compras": compras, "Vendas": vendas, "Amigos": lista_amigos, "Radar": lista_radar}
-
-
-def reconstruir(abas):
-    meses, lotes = {}, {}
-    for row in abas.get("Resumo", []):
-        try:
-            mes = mes_iso(row[0])
-            meses[mes] = {"mes": mes, "fechado": row[1] == "Fechado",
-                          "darf_anterior": float(row[10] or 0), "lotes": []}
-        except (ValueError, TypeError):
-            continue
-    for row in abas.get("Compras", []):
-        try:
-            mes = mes_iso(row[0])
-            l = {"id": str(row[10]) or uuid.uuid4().hex, "ticker": str(row[1]).upper(), "tipo": str(row[2]),
-                 "data_compra": de_serial(row[3]), "qtd": int(row[4]), "preco": float(row[5]), "vendas": []}
-        except (ValueError, TypeError):
-            continue
-        if row[11]:
-            l["origem"] = str(row[11])
-        meses.setdefault(mes, mes_vazio(mes))["lotes"].append(l)
-        lotes[(mes, l["id"])] = l
-    for row in abas.get("Vendas", []):
-        try:
-            mes = mes_iso(row[0])
-            l = lotes.get((mes, str(row[15])))
-            if l is not None:
-                l["vendas"].append({"id": str(row[14]) or uuid.uuid4().hex, "data": de_serial(row[5]),
-                                    "qtd": int(row[6]), "preco": float(row[7])})
-        except (ValueError, TypeError):
-            continue
-    amigos = []
-    for row in abas.get("Amigos", []):
-        email = str(row[0]).strip().lower()
-        if email:
-            try:
-                desde = de_serial(row[1])
-            except (ValueError, TypeError):
-                desde = date.today().isoformat()
-            amigos.append({"email": email, "desde": desde})
-    radar = []
-    for row in abas.get("Radar", []):
-        ticker = str(row[0]).strip().upper()
-        if ticker and all(r["ticker"] != ticker for r in radar):
-            try:
-                desde = de_serial(row[2])
-            except (ValueError, TypeError):
-                desde = date.today().isoformat()
-            radar.append({"ticker": ticker, "nome": str(row[1] or ""), "desde": desde})
-    return meses, amigos, radar
-
-
-# ---------------------------------------------------------------- componentes
 
 class Janela(ctk.CTkToplevel):
     def __init__(self, master, titulo):
@@ -378,32 +98,6 @@ def confirmar(master, titulo, texto, sim="Sim", nao="Cancelar", perigo=False):
 
 def avisar(master, titulo, texto):
     Mensagem(master, titulo, texto, [("OK", True, "accent")])
-
-
-def inferir_tipo(ticker, conhecidos=None):
-    if conhecidos and ticker in conhecidos:
-        return conhecidos[ticker]
-    m = re.fullmatch(r"[A-Z]{4}(\d{2})", ticker)
-    return "BDR" if m and m.group(1) in ("31", "32", "33", "34", "35", "39") else "Ação"
-
-
-def historico_tickers(meses_recentes=6):
-    """Frequência de operações por ticker nos últimos meses e o tipo conhecido de cada um."""
-    freq, tipos = Counter(), {}
-    for mes in listar_meses()[-meses_recentes:]:
-        for l in carregar(mes)["lotes"]:
-            freq[l["ticker"]] += (0 if l.get("origem") else 1) + len(l["vendas"])
-            tipos[l["ticker"]] = l["tipo"]
-    return freq, tipos
-
-
-def limites_mes(mes):
-    a, m = map(int, mes.split("-"))
-    return date(a, m, 1), date(a, m, calendar.monthrange(a, m)[1])
-
-
-def preco_texto(v):
-    return f"{v:.2f}".replace(".", ",")
 
 
 class FormBase(Janela):
@@ -842,6 +536,11 @@ class App(ctk.CTk):
         self.geometry("1360x860")
         self.minsize(1150, 720)
         self.configure(fg_color=C["bg"])
+        icone = recurso("assets/icone.ico")
+        if sys.platform == "win32" and icone.exists():
+            # o CustomTkinter troca o ícone ~200 ms após abrir; reaplica o nosso depois disso
+            self.iconbitmap(str(icone))
+            self.after(300, lambda: self.iconbitmap(str(icone)))
         if sys.platform == "win32":
             self.after(0, lambda: self.state("zoomed"))
 
@@ -861,6 +560,7 @@ class App(ctk.CTk):
         self.sync_job = None
         self.carregando_token = False
         self.ultima_sync = None
+        self.ultima_puxada = datetime.now()
         self.ultimo_erro = ""
         self.mercado = mk.Mercado()
         self.radar_dados = {}
@@ -1275,30 +975,8 @@ class App(ctk.CTk):
                          f"Depois de fechado, o mês não pode ser alterado.\n\nTotal da DARF: {brl(r['darf'])}",
                          sim="Fechar mês"):
             return
-        self.d["fechado"] = True
-        self.d["resumo"] = {k: v for k, v in r.items() if k != "ops"}
-        salvar(self.d)
-
-        prox = proximo_mes(self.mes)
-        nd = carregar(prox)
-        if not nd["fechado"]:
-            ja = {l.get("origem") for l in nd["lotes"]}
-            for l in self.d["lotes"]:
-                if restante(l) > 0 and l["id"] not in ja:
-                    nd["lotes"].append({"id": uuid.uuid4().hex, "origem": l["id"], "ticker": l["ticker"],
-                                        "tipo": l["tipo"], "data_compra": l["data_compra"],
-                                        "qtd": restante(l), "preco": l["preco"], "vendas": []})
-            nd["darf_anterior"] = r["darf"] if r["darf"] < DARF_MINIMO else 0.0
-            salvar(nd)
-
-        if r["darf"] >= DARF_MINIMO:
-            msg = (f"DARF a pagar: {brl(r['darf'])}\nCódigo: 6015\n"
-                   f"Vencimento: último dia útil de {fmt_mes(prox)}.")
-        elif r["darf"] > 0:
-            msg = f"A DARF de {brl(r['darf'])} é menor que R$ 10 e foi transferida para {fmt_mes(prox)}."
-        else:
-            msg = "Não há DARF a pagar neste mês."
-        avisar(self, "Mês fechado", msg + f"\n\nAtivos não vendidos foram levados para {fmt_mes(prox)}.")
+        r, prox = nc.fechar_mes(self.d)
+        avisar(self, "Mês fechado", nc.mensagem_fechamento(r, prox))
         self.atualizar()
         self.agendar_sync()
 
@@ -1587,8 +1265,6 @@ class App(ctk.CTk):
         self.status_sync("sync")
         email = self.g.email
         sid = self.cfg["planilhas"].get(email)
-        local_vazio = (not self.cfg["amigos"] and not self.cfg["radar"]
-                       and not any(carregar(m)["lotes"] for m in listar_meses()))
 
         def preparar():
             atual = sid
@@ -1596,40 +1272,19 @@ class App(ctk.CTk):
                 atual = None
             if not atual:
                 atual = self.g.buscar_planilha("me")
-            importado = None
-            if atual and local_vazio:
-                importado = reconstruir(self.g.ler(atual))
             if not atual:
                 atual = self.g.criar_planilha()
-            return email, atual, importado
+            return email, atual
 
         self.bg(preparar, ok=self.pos_preparar, erro=self.erro_sync)
 
     def pos_preparar(self, res):
-        email, sid, importado = res
+        email, sid = res
         if email != self.g.email:
             return
         self.cfg["planilhas"][email] = sid
-        if importado and any(importado):
-            meses, amigos, radar = importado
-            for d in meses.values():
-                salvar(d)
-            self.cfg["amigos"] = amigos
-            self.cfg["radar"] = radar
-            self.radar_redesenhar()
-            self.cfg["pendente"] = False
-            gravar_config(self.cfg)
-            if not self.visao:
-                self.mes = mes_inicial()
-                self.d = carregar(self.mes)
-            self.atualizar()
-            self.atualizar_conta()
-            self.ultima_sync = datetime.now()
-            self.status_sync("ok")
-        else:
-            self.cfg["pendente"] = True
-            gravar_config(self.cfg)
-            self.sincronizar()
+        gravar_config(self.cfg)
+        self.sincronizar()
 
     def menu_conta(self):
         sid = self.cfg["planilhas"].get(self.g.email)
@@ -1683,15 +1338,34 @@ class App(ctk.CTk):
         sid = self.cfg["planilhas"].get(self.g.email)
         if not sid:
             return
-        dados = montar_linhas(listar_meses(), self.cfg["amigos"], self.cfg["radar"])
         self.sync_rodando = True
         self.resync = False
         self.status_sync("sync")
+        self.bg(lambda: (sid, self.g.ler(sid)), ok=self.mesclar_e_enviar, erro=self.erro_sync)
+
+    def mesclar_e_enviar(self, res):
+        try:
+            if self.grab_current() is not None:  # há uma janela aberta: espera para não mudar dados sob ela
+                self.after(2000, lambda: self.mesclar_e_enviar(res))
+                return
+        except Exception:
+            pass
+        sid, abas = res
+        mudou = nc.mesclar_tudo(reconstruir(abas), self.cfg)
+        if mudou:
+            if not self.visao:
+                self.d = carregar(self.mes)
+                self.atualizar()
+            self.atualizar_conta()
+            if self.pagina == "radar":
+                self.radar_redesenhar()
+        dados = montar_linhas(listar_meses(), self.cfg)
         self.bg(lambda: self.g.escrever(sid, dados), ok=self.sync_ok, erro=self.erro_sync)
 
     def sync_ok(self, _):
         self.sync_rodando = False
         self.ultimo_erro = ""
+        self.ultima_puxada = datetime.now()
         if self.resync:
             self.sincronizar()
             return
@@ -1720,7 +1394,8 @@ class App(ctk.CTk):
 
     def tick_sync(self):
         if self.g.email:
-            if self.cfg["pendente"] and not self.sync_rodando:
+            atrasada = (datetime.now() - self.ultima_puxada).total_seconds() > 300
+            if (self.cfg["pendente"] or atrasada) and not self.sync_rodando:
                 if self.cfg["planilhas"].get(self.g.email):
                     self.sincronizar()
                 else:

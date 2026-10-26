@@ -54,7 +54,53 @@ class Mercado:
             self._hist.clear()
 
     def dados(self, ticker, nome_conhecido=""):
-        """Executar fora da thread da interface."""
+        """Executar fora da thread da interface. Usa o yfinance quando instalado (Windows) e a API
+        de gráficos do Yahoo diretamente quando não (Android)."""
+        try:
+            import yfinance  # noqa: F401
+        except ImportError:
+            return self._dados_api(ticker, nome_conhecido)
+        return self._dados_yf(ticker, nome_conhecido)
+
+    def _dados_api(self, ticker, nome_conhecido=""):
+        import requests
+        with self._trava:
+            agora = time.time()
+            h = self._hist.get(ticker)
+            if not h or agora - h[0] > 60:
+                fim = int(agora)
+                inicio = fim - DIAS_HISTORICO * 86400
+                r = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}.SA",
+                                 params={"period1": inicio, "period2": fim, "interval": "1d"},
+                                 headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+                if r.status_code == 429:
+                    raise RuntimeError("Too Many Requests")
+                if r.status_code == 404:
+                    raise SemDados(f"Sem dados para {ticker} no Yahoo Finance.")
+                r.raise_for_status()
+                res = (r.json().get("chart") or {}).get("result") or []
+                if not res:
+                    raise SemDados(f"Sem dados para {ticker} no Yahoo Finance.")
+                meta = res[0].get("meta", {})
+                q = ((res[0].get("indicators") or {}).get("quote") or [{}])[0]
+                linhas = [(a, b, c) for a, b, c in zip(q.get("high") or [], q.get("low") or [], q.get("close") or [])
+                          if _valido(a) and _valido(b) and _valido(c)]
+                if len(linhas) < PERIODOS_ATR + 1:
+                    raise SemDados(f"Histórico insuficiente para {ticker}.")
+                hi, lo, cl = (list(x) for x in zip(*linhas))
+                h = (agora, {"media6m": sum(cl) / len(cl), "atr": calcular_atr(hi, lo, cl), "ultimo": cl[-1],
+                             "preco": meta.get("regularMarketPrice"),
+                             "nome": meta.get("longName") or meta.get("shortName") or ""})
+                self._hist[ticker] = h
+            preco = h[1]["preco"] if _valido(h[1]["preco"]) else h[1]["ultimo"]
+            nome = nome_conhecido or h[1]["nome"]
+            atr = h[1]["atr"]
+            atr_pct = atr / preco * 100 if atr and preco else None
+            risco = classificar_risco(atr_pct) if atr_pct is not None else None
+            return {"ticker": ticker, "nome": nome, "preco": preco, "media6m": h[1]["media6m"],
+                    "atr": atr, "atr_pct": atr_pct, "risco": risco, "hora": time.time()}
+
+    def _dados_yf(self, ticker, nome_conhecido=""):
         import yfinance as yf
 
         with self._trava:

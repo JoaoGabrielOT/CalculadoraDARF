@@ -28,7 +28,7 @@ def pode_atualizar():
     return getattr(sys, "frozen", False) and sys.platform == "win32"
 
 
-def verificar():
+def verificar(nome_asset=NOME_ASSET):
     """Retorna os dados da nova versão ou None. Executar fora da thread da interface."""
     import requests
     r = requests.get(API, timeout=15, headers={"Accept": "application/vnd.github+json",
@@ -42,7 +42,7 @@ def verificar():
     tag = rel.get("tag_name", "")
     if versao_tupla(tag) <= versao_tupla(VERSAO):
         return None
-    asset = next((a for a in rel.get("assets", []) if a.get("name") == NOME_ASSET), None)
+    asset = next((a for a in rel.get("assets", []) if a.get("name") == nome_asset), None)
     if not asset:
         return None
     digest = asset.get("digest") or ""
@@ -51,11 +51,13 @@ def verificar():
             "sha256": digest.split(":", 1)[1] if digest.startswith("sha256:") else ""}
 
 
-def baixar(info, progresso):
-    """Baixa o novo .exe ao lado do atual. progresso(baixado, total) é chamado durante o download."""
+def baixar(info, progresso, destino=None):
+    """Baixa a nova versão (por padrão ao lado do .exe atual). progresso(baixado, total) é chamado no download."""
     import requests
-    exe = Path(sys.executable)
-    destino = exe.with_name(exe.stem + ".novo.exe")
+    if destino is None:
+        exe = Path(sys.executable)
+        destino = exe.with_name(exe.stem + ".novo.exe")
+    destino = Path(destino)
     h = hashlib.sha256()
     baixado = 0
     try:

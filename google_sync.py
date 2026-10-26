@@ -16,22 +16,26 @@ ABAS = {
         ("Isento", "centro", 80), ("Lucro bruto", "resultado", 130), ("Taxas B3", "moeda", 110),
         ("Imposto swing (15%)", "moeda", 150), ("Imposto day trade (20%)", "moeda", 170),
         ("IRRF retido", "moeda", 120), ("Lucro líquido", "resultado", 130),
-        ("DARF meses anteriores", "moeda", 170), ("Total DARF", "destaque", 130)]},
+        ("DARF meses anteriores", "moeda", 170), ("Total DARF", "destaque", 130), ("Modificado", "id", 80)]},
     "Compras": {"cor": "#2563eb", "colunas": [
         ("Mês", "centro", 90), ("Ticker", "negrito", 90), ("Tipo", "centro", 70),
         ("Data da compra", "data", 120), ("Quantidade", "inteiro", 100), ("Preço unitário", "moeda", 120),
         ("Total", "moeda", 130), ("Qtd vendida", "inteiro", 100), ("Qtd restante", "inteiro", 110),
-        ("Situação", "centro", 130), ("ID", "id", 80), ("Origem", "id", 80)]},
+        ("Situação", "centro", 130), ("ID", "id", 80), ("Origem", "id", 80), ("Modificado", "id", 80)]},
     "Vendas": {"cor": "#d97706", "colunas": [
         ("Mês", "centro", 90), ("Ticker", "negrito", 90), ("Tipo", "centro", 70),
         ("Data da compra", "data", 120), ("Preço compra", "moeda", 120), ("Data da venda", "data", 120),
         ("Quantidade", "inteiro", 100), ("Preço venda", "moeda", 120), ("Total venda", "moeda", 130),
         ("Operação", "centro", 130), ("Taxas B3", "moeda", 110), ("Lucro bruto", "resultado", 130),
         ("Lucro após taxas", "resultado", 140), ("Imposto", "moeda", 120), ("ID", "id", 80),
-        ("ID compra", "id", 80)]},
-    "Amigos": {"cor": "#7c3aed", "colunas": [("E-mail", "texto", 300), ("Adicionado em", "data", 130)]},
+        ("ID compra", "id", 80), ("Modificado", "id", 80)]},
+    "Amigos": {"cor": "#7c3aed", "colunas": [
+        ("E-mail", "texto", 300), ("Adicionado em", "data", 130), ("Modificado", "id", 80)]},
     "Radar": {"cor": "#0891b2", "colunas": [
-        ("Ticker", "negrito", 100), ("Empresa", "texto", 300), ("Adicionado em", "data", 130)]},
+        ("Ticker", "negrito", 100), ("Empresa", "texto", 300), ("Adicionado em", "data", 130),
+        ("Modificado", "id", 80)]},
+    "Exclusões": {"cor": "#6b7280", "oculta": True, "colunas": [
+        ("Tipo", "texto", 100), ("Mês", "centro", 90), ("ID", "texto", 280), ("Excluído em", "texto", 140)]},
 }
 
 
@@ -134,6 +138,57 @@ class Google:
         self._iniciar(creds)
         return self.email
 
+    def login_navegador(self, abrir_url, tempo_limite=600):
+        """Login para plataformas sem `webbrowser` (Android).
+
+        Abre a autorização com abrir_url(url) e espera o redirecionamento do Google em 127.0.0.1.
+        """
+        import http.server
+        import time
+        from google_auth_oauthlib.flow import Flow
+        if not self.cred_path:
+            raise SemCredencial("Arquivo credentials.json não encontrado.")
+
+        recebido = {}
+
+        class Retorno(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                recebido["url"] = self.path
+                corpo = ("<html><body style='font-family:sans-serif;text-align:center;padding:48px'>"
+                         "<h2>Login concluído</h2><p>Volte para a Calculadora DARF.</p></body></html>")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(corpo.encode("utf-8"))
+
+            def log_message(self, *a):
+                pass
+
+        servidor = http.server.HTTPServer(("127.0.0.1", 0), Retorno)
+        servidor.timeout = 1
+        porta = servidor.server_address[1]
+        try:
+            flow = Flow.from_client_secrets_file(str(self.cred_path), SCOPES,
+                                                 redirect_uri=f"http://127.0.0.1:{porta}/")
+            url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+            abrir_url(url)
+            fim = time.time() + tempo_limite
+            while "url" not in recebido and time.time() < fim:
+                servidor.handle_request()
+        finally:
+            servidor.server_close()
+        caminho = recebido.get("url")
+        if not caminho or "code=" not in caminho:
+            raise ErroGoogle("O login não foi concluído.")
+        try:
+            flow.fetch_token(authorization_response=f"https://127.0.0.1:{porta}{caminho}")
+        except Exception as e:
+            raise ErroGoogle(f"O login não foi concluído: {e}")
+        creds = flow.credentials
+        self.token_path.write_text(creds.to_json(), encoding="utf-8")
+        self._iniciar(creds)
+        return self.email
+
     def _iniciar(self, creds):
         from google.auth.transport.requests import AuthorizedSession
         self.sessao = AuthorizedSession(creds)
@@ -192,7 +247,7 @@ class Google:
         corpo = {
             "properties": {"title": NOME_PLANILHA, "locale": "pt_BR", "timeZone": "America/Sao_Paulo"},
             "sheets": [{"properties": {
-                "title": nome, "index": i, "tabColor": rgb(spec["cor"]),
+                "title": nome, "index": i, "tabColor": rgb(spec["cor"]), "hidden": spec.get("oculta", False),
                 "gridProperties": {"rowCount": 1000, "columnCount": len(spec["colunas"]),
                                    "frozenRowCount": 1, "hideGridlines": True}}}
                 for i, (nome, spec) in enumerate(ABAS.items())],
@@ -206,13 +261,13 @@ class Google:
     def _garantir_abas(self, sid):
         """Cria (formatadas) as abas que faltam em planilhas de versões anteriores. Retorna as propriedades."""
         meta = self._req("GET", f"{SHEETS}/{sid}", params={
-            "fields": "sheets.properties(sheetId,title,gridProperties.rowCount)"})
+            "fields": "sheets.properties(sheetId,title,gridProperties(rowCount,columnCount))"})
         abas = {s["properties"]["title"]: s["properties"] for s in meta.get("sheets", [])}
         faltando = [a for a in ABAS if a not in abas]
         if not faltando:
             return abas
         reqs = [{"addSheet": {"properties": {
-            "title": nome, "tabColor": rgb(ABAS[nome]["cor"]),
+            "title": nome, "tabColor": rgb(ABAS[nome]["cor"]), "hidden": ABAS[nome].get("oculta", False),
             "gridProperties": {"rowCount": 1000, "columnCount": len(ABAS[nome]["colunas"]),
                                "frozenRowCount": 1, "hideGridlines": True}}}} for nome in faltando]
         r = self._req("POST", f"{SHEETS}/{sid}:batchUpdate", json={"requests": reqs})
@@ -220,7 +275,8 @@ class Google:
                for rep in r.get("replies", []) if "addSheet" in rep}
         self._formatar(sid, ids)
         for nome, g in ids.items():
-            abas[nome] = {"sheetId": g, "title": nome, "gridProperties": {"rowCount": 1000}}
+            abas[nome] = {"sheetId": g, "title": nome,
+                          "gridProperties": {"rowCount": 1000, "columnCount": len(ABAS[nome]["colunas"])}}
         return abas
 
     def _formatar(self, sid, ids):
@@ -288,11 +344,26 @@ class Google:
         reqs = []
         for aba, linhas in dados.items():
             p = abas[aba]
-            n = len(ABAS[aba]["colunas"])
-            total = p["gridProperties"]["rowCount"]
+            g = p["sheetId"]
+            colunas = ABAS[aba]["colunas"]
+            n = len(colunas)
+            total = p["gridProperties"].get("rowCount", 1000)
             if len(linhas) + 1 > total:
-                reqs.append({"appendDimension": {"sheetId": p["sheetId"], "dimension": "ROWS",
+                reqs.append({"appendDimension": {"sheetId": g, "dimension": "ROWS",
                                                  "length": len(linhas) + 1 - total + 200}})
+            # planilhas de versões anteriores podem ter menos colunas
+            atuais = p["gridProperties"].get("columnCount", n)
+            if atuais < n:
+                reqs.append({"appendDimension": {"sheetId": g, "dimension": "COLUMNS", "length": n - atuais}})
+                for j in range(atuais, n):
+                    if colunas[j][1] == "id":
+                        reqs.append({"updateDimensionProperties": {
+                            "range": {"sheetId": g, "dimension": "COLUMNS", "startIndex": j, "endIndex": j + 1},
+                            "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}})
+            reqs.append({"updateCells": {
+                "range": {"sheetId": g, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0,
+                          "endColumnIndex": n},
+                "rows": [{"values": [celula(c[0]) for c in colunas]}], "fields": "userEnteredValue"}})
             reqs.append({"updateCells": {
                 "range": {"sheetId": p["sheetId"], "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": n},
                 "rows": [{"values": [celula(v) for v in linha]} for linha in linhas],
@@ -300,14 +371,16 @@ class Google:
         self._req("POST", f"{SHEETS}/{sid}:batchUpdate", json={"requests": reqs})
 
     def ler(self, sid):
-        meta = self._req("GET", f"{SHEETS}/{sid}", params={"fields": "sheets.properties.title"})
-        existentes = {s["properties"]["title"] for s in meta.get("sheets", [])}
-        nomes = [a for a in ABAS if a in existentes]
+        meta = self._req("GET", f"{SHEETS}/{sid}", params={
+            "fields": "sheets.properties(title,gridProperties.columnCount)"})
+        colunas = {s["properties"]["title"]: s["properties"].get("gridProperties", {}).get("columnCount", 26)
+                   for s in meta.get("sheets", [])}
+        nomes = [a for a in ABAS if a in colunas]
         res = {a: [] for a in ABAS}
         if not nomes:
             return res
         r = self._req("GET", f"{SHEETS}/{sid}/values:batchGet", params={
-            "ranges": [f"'{a}'!A2:{letra(len(ABAS[a]['colunas']))}" for a in nomes],
+            "ranges": [f"'{a}'!A2:{letra(min(len(ABAS[a]['colunas']), colunas[a]))}" for a in nomes],
             "valueRenderOption": "UNFORMATTED_VALUE", "dateTimeRenderOption": "SERIAL_NUMBER"})
         for aba, vr in zip(nomes, r.get("valueRanges", [])):
             n = len(ABAS[aba]["colunas"])

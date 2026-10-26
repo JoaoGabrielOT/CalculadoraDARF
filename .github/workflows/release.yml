@@ -3,12 +3,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:  # gera os arquivos para teste, sem publicar release
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +21,7 @@ jobs:
       - name: Definir a versão a partir da tag
         shell: pwsh
         run: |
-          $v = "${{ github.ref_name }}".TrimStart("v")
+          $v = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "0.0.0" }
           Set-Content -Path versao.py -Value "VERSAO = `"$v`"" -Encoding utf8
 
       - name: Criar credentials.json a partir do segredo
@@ -43,10 +44,81 @@ jobs:
         run: |
           pyinstaller --onefile --noconsole --clean --collect-data customtkinter `
             --collect-all yfinance --collect-all curl_cffi --add-data "credentials.json;." `
+            --icon assets\icone.ico --add-data "assets\icone.ico;assets" `
             --name CalculadoraDARF calculadora_darf.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/CalculadoraDARF.exe
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Preparar o app (versão, módulos compartilhados, credencial e chave)
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_SENHA: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          if [ -z "$GOOGLE_CREDENTIALS" ]; then
+            echo "::error::Segredo GOOGLE_CREDENTIALS ausente."; exit 1
+          fi
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_SENHA" ]; then
+            echo "::error::Segredos ANDROID_KEYSTORE_BASE64 e ANDROID_KEYSTORE_PASSWORD ausentes."; exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="0.0.0"; fi
+          printf 'VERSAO = "%s"\n' "$V" > versao.py
+          cp nucleo.py google_sync.py mercado.py atualizador.py versao.py android/
+          printf '%s' "$GOOGLE_CREDENTIALS" > android/credentials.json
+          python -c "import json; assert 'installed' in json.load(open('android/credentials.json'))"
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "VERSAO=$V" >> "$GITHUB_ENV"
+          echo "NUMERO=$(echo "$V" | awk -F. '{print $1*10000 + $2*100 + $3}')" >> "$GITHUB_ENV"
+
+      - name: Instalar o Flet
+        run: python -m pip install --upgrade pip "flet[cli]==1.0.5"
+
+      - name: Gerar o APK
+        working-directory: android
+        env:
+          FLET_ANDROID_SIGNING_KEY_STORE: ${{ runner.temp }}/upload.jks
+          FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          FLET_ANDROID_SIGNING_KEY_ALIAS: calculadoradarf
+        run: |
+          flet build apk --yes --python-version 3.12 --arch arm64-v8a armeabi-v7a \
+            --build-version "$VERSAO" --build-number "$NUMERO"
+          APK=$(find build/apk -name "*.apk" | head -n 1)
+          test -n "$APK"
+          cp "$APK" ../CalculadoraDARF.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: CalculadoraDARF.apk
+
+  publicar:
+    if: github.ref_type == 'tag'
+    needs: [windows, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: saida
+          merge-multiple: true
 
       - name: Publicar a release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/CalculadoraDARF.exe
+          files: |
+            saida/CalculadoraDARF.exe
+            saida/CalculadoraDARF.apk
           generate_release_notes: true

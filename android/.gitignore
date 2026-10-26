@@ -1,0 +1,9 @@
+build/
+dados/
+.flet/
+credentials.json
+nucleo.py
+google_sync.py
+mercado.py
+atualizador.py
+versao.py

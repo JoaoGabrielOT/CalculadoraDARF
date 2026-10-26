@@ -1,0 +1,29 @@
+[project]
+name = "calculadoradarf"
+version = "1.0.0"
+description = "Calculadora DARF: apuração de imposto de ações e BDRs"
+requires-python = ">=3.12"
+dependencies = [
+    "flet==1.0.5",
+    "requests",
+    "google-auth",
+    "google-auth-oauthlib",
+]
+
+[tool.flet]
+org = "io.github.joaogabrielot"
+product = "Calculadora DARF"
+company = "JoaoGabrielOT"
+copyright = "Copyright (C) 2026 JoaoGabrielOT"
+
+[tool.flet.android]
+dependencies = ["pyjnius"]
+adaptive_icon_background = "#111827"
+min_sdk_version = 24
+
+[tool.flet.android.permission]
+"android.permission.INTERNET" = true
+"android.permission.REQUEST_INSTALL_PACKAGES" = true
+
+[tool.flet.android.signing]
+key_alias = "calculadoradarf"
