@@ -94,8 +94,17 @@ jobs:
           FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           FLET_ANDROID_SIGNING_KEY_ALIAS: calculadoradarf
         run: |
-          flet build apk --yes --python-version 3.12 --arch arm64-v8a armeabi-v7a \
-            --build-version "$VERSAO" --build-number "$NUMERO"
+          # o download do Python do serious_python às vezes chega corrompido (erro intermitente em
+          # downloadDistArchive_*); nesse caso apaga a pasta de build e tenta de novo
+          for tentativa in 1 2 3; do
+            if flet build apk --yes --python-version 3.12 --arch arm64-v8a armeabi-v7a \
+                 --build-version "$VERSAO" --build-number "$NUMERO"; then
+              break
+            fi
+            if [ "$tentativa" = 3 ]; then exit 1; fi
+            echo "::warning::Falha ao gerar o APK (tentativa $tentativa); tentando de novo"
+            rm -rf build
+          done
           APK=$(find build/apk -name "*.apk" | head -n 1)
           test -n "$APK"
           cp "$APK" ../CalculadoraDARF.apk
