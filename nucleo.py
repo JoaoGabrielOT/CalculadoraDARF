@@ -10,6 +10,7 @@ import time
 import uuid
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 
 TAXA_B3_SWING = 0.0003        # 0,0300% por operação (compra e venda)
@@ -54,6 +55,17 @@ def parse_num(s):
     if v <= 0:
         raise ValueError
     return v
+
+
+def parse_valor(s):
+    """Valor em reais que aceita zero e negativo: "10.000,50", "-250", "R$ 0"."""
+    s = (s or "").strip().replace("R$", "").replace(" ", "")
+    negativo = s.startswith("-")
+    s = s.lstrip("-")
+    if "," in s or re.fullmatch(r"\d{1,3}(\.\d{3})+", s):  # "10.000" é dez mil
+        s = s.replace(".", "").replace(",", ".")
+    v = float(s)
+    return -v if negativo else v
 
 
 def fmt_num(v):
@@ -164,7 +176,8 @@ def mes_inicial():
     return abertos[0] if abertos else date.today().strftime("%Y-%m")
 
 
-CONFIG_PADRAO = {"tema": "Dark", "amigos": [], "radar": [], "planilhas": {}, "pendente": False, "excluidos": {}}
+CONFIG_PADRAO = {"tema": "Dark", "amigos": [], "radar": [], "planilhas": {}, "pendente": False, "excluidos": {},
+                 "caixa": {"saldo": 0.0, "data": "", "mod": 0}}
 
 
 def ler_config():
@@ -441,6 +454,196 @@ def fmt_resultado(res):
     return f"{sinal}{brl(valor)} ({sinal}{pct_txt}%)"
 
 
+# ---------------------------------------------------------------- caixa e liquidação (D+2)
+
+DIAS_SEMANA = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+DIAS_LIQUIDACAO = 2
+
+
+def _pascoa(ano):
+    """Domingo de Páscoa (algoritmo de Meeus/Jones/Butcher)."""
+    a, b, c = ano % 19, ano // 100, ano % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    mes = (h + l - 7 * m + 114) // 31
+    dia = (h + l - 7 * m + 114) % 31 + 1
+    return date(ano, mes, dia)
+
+
+@lru_cache(maxsize=None)
+def feriados_b3(ano):
+    """Dias sem pregão na B3: feriados nacionais, Carnaval, Sexta-feira Santa, Corpus Christi, 24 e 31/12."""
+    p = _pascoa(ano)
+    fixos = [(1, 1), (4, 21), (5, 1), (9, 7), (10, 12), (11, 2), (11, 15), (12, 24), (12, 25), (12, 31)]
+    dias = {date(ano, m, d) for m, d in fixos}
+    if ano >= 2024:
+        dias.add(date(ano, 11, 20))  # Consciência Negra (Lei 14.759/2023)
+    dias |= {p - timedelta(days=48), p - timedelta(days=47), p - timedelta(days=2), p + timedelta(days=60)}
+    return frozenset(dias)
+
+
+def dia_util(d):
+    return d.weekday() < 5 and d not in feriados_b3(d.year)
+
+
+def calcular_data_liquidacao(data_operacao, dias_uteis=DIAS_LIQUIDACAO):
+    """Data de liquidação financeira na B3: D+2 em dias úteis (sem fins de semana nem feriados)."""
+    d = date.fromisoformat(data_operacao) if isinstance(data_operacao, str) else data_operacao
+    n = 0
+    while n < dias_uteis:
+        d += timedelta(days=1)
+        if dia_util(d):
+            n += 1
+    return d
+
+
+def fmt_liquidacao(d):
+    return f"{DIAS_SEMANA[d.weekday()]}, {d:%d/%m/%Y}"
+
+
+def dias_uteis_entre(inicio, fim):
+    """Quantos dias úteis há depois de inicio até fim (0 se fim <= inicio)."""
+    n, d = 0, inicio
+    while d < fim:
+        d += timedelta(days=1)
+        if dia_util(d):
+            n += 1
+    return n
+
+
+def rotulo_vencimento(d, hoje=None):
+    """Rótulo do agrupamento da agenda: Hoje, Amanhã (D+1), Depois de amanhã (D+2) ou o dia da semana."""
+    hoje = hoje or date.today()
+    if d < hoje:
+        return f"Liquidado em {d:%d/%m/%Y}"
+    if d == hoje:
+        return "Hoje"
+    n = dias_uteis_entre(hoje, d)
+    if d == hoje + timedelta(days=1):
+        nome = "Amanhã"
+    elif d == hoje + timedelta(days=2):
+        nome = "Depois de amanhã"
+    else:
+        nome = f"{DIAS_SEMANA[d.weekday()]}, {d:%d/%m}"
+    return f"{nome} (D+{n})"
+
+
+def resumo_ordem(lado, qtd, preco, data_operacao, preco_compra=None, day_trade=False):
+    """Impacto financeiro de uma ordem. lado: "compra" ou "venda". Na venda em day trade, informe o preço
+    de compra: a B3 liquida só o resultado do dia. Retorna bruto, taxas, irrf, liquido (com sinal) e liquidacao."""
+    bruto = qtd * preco
+    irrf = 0.0
+    if lado == "compra":
+        taxas = bruto * TAXA_B3_SWING
+        liquido = -(bruto + taxas)
+    elif day_trade:
+        compra = qtd * (preco_compra or 0)
+        taxas = (bruto + compra) * TAXA_B3_DAYTRADE
+        resultado = bruto - compra - taxas
+        irrf = resultado * IRRF_DAYTRADE if resultado * IRRF_DAYTRADE > 1 else 0.0
+        liquido = resultado - irrf
+    else:
+        taxas = bruto * TAXA_B3_SWING
+        irrf = bruto * IRRF_SWING if bruto * IRRF_SWING > 1 else 0.0
+        liquido = bruto - taxas - irrf
+    return {"bruto": bruto, "taxas": taxas, "irrf": irrf, "liquido": liquido, "day_trade": day_trade and lado != "compra",
+            "liquidacao": calcular_data_liquidacao(data_operacao)}
+
+
+def lancamentos_caixa():
+    """Movimentos financeiros de todas as operações gravadas, com data de liquidação (D+2).
+
+    Compra (parte que não virou day trade): -(valor + taxas B3). Venda swing: +(valor - taxas B3).
+    Day trade: só o resultado do dia (venda - compra - taxas). IRRF retido entra como débito no dia.
+    Compras levadas de um mês para o outro (origem) não geram novo débito."""
+    itens = []
+    irrf_st_dia, res_dt_dia = defaultdict(float), defaultdict(float)
+    for mes in listar_meses():
+        for l in carregar(mes)["lotes"]:
+            if not l.get("origem"):
+                q = l["qtd"] - sum(v["qtd"] for v in l["vendas"] if v["data"] == l["data_compra"])
+                if q > 0:
+                    bruto = q * l["preco"]
+                    itens.append({"id": f"c:{l['id']}", "data": l["data_compra"], "ticker": l["ticker"],
+                                  "tipo": "Compra", "qtd": q, "valor": -(bruto + bruto * TAXA_B3_SWING)})
+            for v in l["vendas"]:
+                c = calcular_venda(l, v)
+                if c["dt"]:
+                    res_dt_dia[v["data"]] += c["liquido"]
+                    itens.append({"id": f"v:{v['id']}", "data": v["data"], "ticker": l["ticker"],
+                                  "tipo": "Day trade", "qtd": v["qtd"], "valor": c["liquido"]})
+                else:
+                    irrf_st_dia[v["data"]] += c["venda"] * IRRF_SWING
+                    itens.append({"id": f"v:{v['id']}", "data": v["data"], "ticker": l["ticker"],
+                                  "tipo": "Venda", "qtd": v["qtd"], "valor": c["venda"] - c["venda"] * TAXA_B3_SWING})
+    for dia, valor in irrf_st_dia.items():
+        if valor > 1:
+            itens.append({"id": f"irrf:st:{dia}", "data": dia, "ticker": "IRRF", "tipo": "IRRF (dedo-duro)",
+                          "qtd": 0, "valor": -valor})
+    for dia, res in res_dt_dia.items():
+        if res * IRRF_DAYTRADE > 1:
+            itens.append({"id": f"irrf:dt:{dia}", "data": dia, "ticker": "IRRF", "tipo": "IRRF day trade",
+                          "qtd": 0, "valor": -res * IRRF_DAYTRADE})
+    for it in itens:
+        it["liquidacao"] = calcular_data_liquidacao(it["data"])
+    itens.sort(key=lambda x: (x["liquidacao"], x["data"], x["ticker"]))
+    return itens
+
+
+def resumo_caixa(cfg, hoje=None):
+    """Saldo disponível (D+0), em trânsito e projetado, a partir do saldo informado pelo usuário.
+
+    O saldo informado vale para o dia em que foi definido e já inclui o que liquidou até esse dia.
+    O que liquida depois disso é somado ao disponível quando a data chega (status Liquidado)."""
+    hoje = hoje or date.today()
+    caixa = cfg.get("caixa") or {}
+    base = date.fromisoformat(caixa["data"]) if caixa.get("data") else None
+    saldo = float(caixa.get("saldo") or 0.0)
+    itens = lancamentos_caixa()
+    entrou = 0.0
+    for it in itens:
+        it["status"] = "Liquidado" if it["liquidacao"] <= hoje else "Pendente"
+        if base and base < it["liquidacao"] <= hoje:
+            entrou += it["valor"]
+    pendentes = [it for it in itens if it["status"] == "Pendente"]
+    a_debitar = sum(it["valor"] for it in pendentes if it["valor"] < 0)
+    a_receber = sum(it["valor"] for it in pendentes if it["valor"] > 0)
+    disponivel = saldo + entrou
+    return {"definido": base is not None, "base": base, "disponivel": disponivel,
+            "a_debitar": a_debitar, "a_receber": a_receber, "transito": a_debitar + a_receber,
+            "projetado": disponivel + a_debitar + a_receber, "itens": itens}
+
+
+def agenda_caixa(resumo, hoje=None, dias_historico=15):
+    """Lançamentos pendentes e os liquidados nos últimos dias, agrupados pela data de liquidação:
+    lista de (data, rótulo, total do dia, itens)."""
+    hoje = hoje or date.today()
+    limite = hoje - timedelta(days=dias_historico)
+    grupos = defaultdict(list)
+    for it in resumo["itens"]:
+        if it["liquidacao"] > limite:
+            grupos[it["liquidacao"]].append(it)
+    return [(d, rotulo_vencimento(d, hoje), sum(i["valor"] for i in grupos[d]), grupos[d])
+            for d in sorted(grupos, reverse=False)]
+
+
+def definir_saldo(cfg, valor, hoje=None):
+    """Define o saldo disponível de hoje (o que já liquidou até hoje deve estar incluído)."""
+    hoje = hoje or date.today()
+    cfg["caixa"] = {"saldo": round(float(valor), 2), "data": hoje.isoformat(), "mod": agora()}
+
+
+def ajustar_saldo(cfg, delta, hoje=None):
+    """Aporte (delta > 0) ou retirada (delta < 0) sobre o saldo disponível atual."""
+    atual = resumo_caixa(cfg, hoje)["disponivel"]
+    definir_saldo(cfg, atual + delta, hoje)
+
+
 def custodia_atual():
     return {l["ticker"] for l in carregar(mes_inicial())["lotes"] if restante(l) > 0}
 
@@ -507,13 +710,16 @@ def montar_linhas(meses, cfg):
         excl.append([tipo, "", valor, t])
     lista_amigos = [[a["email"], serial(a["desde"]), a.get("mod", 0)] for a in cfg.get("amigos", [])]
     lista_radar = [[r["ticker"], r.get("nome", ""), serial(r["desde"]), r.get("mod", 0)] for r in cfg.get("radar", [])]
+    caixa = cfg.get("caixa") or {}
+    lista_caixa = [[round(float(caixa.get("saldo") or 0), 2), serial(caixa["data"]), caixa.get("mod", 0)]] \
+        if caixa.get("data") else []
     return {"Resumo": resumo, "Compras": compras, "Vendas": vendas, "Amigos": lista_amigos,
-            "Radar": lista_radar, "Exclusões": excl}
+            "Radar": lista_radar, "Caixa": lista_caixa, "Exclusões": excl}
 
 
 def reconstruir(abas):
-    """Converte as linhas da planilha em (meses, amigos, radar, exclusões da configuração)."""
-    larguras = {"Resumo": 13, "Compras": 13, "Vendas": 17, "Amigos": 3, "Radar": 4, "Exclusões": 4}
+    """Converte as linhas da planilha em (meses, amigos, radar, exclusões da configuração, caixa)."""
+    larguras = {"Resumo": 13, "Compras": 13, "Vendas": 17, "Amigos": 3, "Radar": 4, "Exclusões": 4, "Caixa": 3}
     abas = {k: [(list(r) + [""] * larguras.get(k, 0))[:max(larguras.get(k, 0), len(r))] for r in v]
             for k, v in abas.items()}
     meses, lotes = {}, {}
@@ -574,9 +780,15 @@ def reconstruir(abas):
             except (ValueError, TypeError):
                 desde = date.today().isoformat()
             radar.append({"ticker": ticker, "nome": str(row[1] or ""), "desde": desde, "mod": _num(row[3])})
+    caixa = None
+    for row in abas.get("Caixa", [])[:1]:
+        try:
+            caixa = {"saldo": _num(row[0]), "data": de_serial(row[1]), "mod": _num(row[2])}
+        except (ValueError, TypeError, IndexError):
+            caixa = None
     for d in meses.values():
         corrigir_tipos_mes(d)
-    return meses, amigos, radar, excl_cfg
+    return meses, amigos, radar, excl_cfg, caixa
 
 
 # ---------------------------------------------------------------- mesclagem (vários aparelhos)
@@ -639,7 +851,8 @@ def mesclar_lista(local, remoto, chave, excl, prefixo):
 
 def mesclar_tudo(remoto, cfg):
     """Mescla os dados da planilha com os locais e grava o resultado. Retorna True se algo local mudou."""
-    meses_r, amigos_r, radar_r, excl_r = remoto
+    meses_r, amigos_r, radar_r, excl_r = remoto[:4]
+    caixa_r = remoto[4] if len(remoto) > 4 else None
     mudou = False
     with TRAVA:
         for mes in sorted(set(listar_meses()) | set(meses_r)):
@@ -656,6 +869,9 @@ def mesclar_tudo(remoto, cfg):
         antes = json.dumps([cfg.get("amigos"), cfg.get("radar"), cfg.get("excluidos")], sort_keys=True)
         cfg["amigos"], cfg["radar"], cfg["excluidos"] = amigos, radar, excl
         if json.dumps([amigos, radar, excl], sort_keys=True) != antes:
+            mudou = True
+        if caixa_r and caixa_r.get("mod", 0) > (cfg.get("caixa") or {}).get("mod", 0):
+            cfg["caixa"] = caixa_r
             mudou = True
         gravar_config(cfg, carimbar=False)
         if corrigir_tipos():

@@ -28,6 +28,7 @@ from versao import VERSAO
 
 PAGINA_APURACAO = "Apuração / DARF"
 PAGINA_RADAR = "Radar de Ações"
+PAGINA_CAIXA = "Caixa"
 
 BASE = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
 DADOS = BASE / "dados"
@@ -160,6 +161,56 @@ class FormBase(Janela):
     def ok(self):
         raise NotImplementedError
 
+    # --- resumo financeiro da ordem
+    def montar_resumo(self):
+        f = self.fr_resumo = ctk.CTkFrame(self.caixa, fg_color=C["card2"], corner_radius=10,
+                                         border_width=1, border_color=C["borda"])
+        f.pack(fill="x", padx=24, pady=(16, 0))
+        ctk.CTkLabel(f, text="RESUMO FINANCEIRO DA ORDEM", font=F(11, "bold"), text_color=C["muted"]).pack(
+            anchor="w", padx=14, pady=(10, 4))
+        self.rs_linhas = {}
+        for chave, titulo in (("bruto", "Valor bruto"), ("taxas", "Taxas B3 (estimadas)"), ("irrf", "IRRF retido")):
+            linha = ctk.CTkFrame(f, fg_color="transparent")
+            linha.pack(fill="x", padx=14)
+            ctk.CTkLabel(linha, text=titulo, font=F(12), text_color=C["muted"]).pack(side="left")
+            v = ctk.CTkLabel(linha, text="—", font=F(12, "bold"), text_color=C["texto"])
+            v.pack(side="right")
+            self.rs_linhas[chave] = (linha, v)
+        self.rs_impacto = ctk.CTkLabel(f, text="", font=F(13, "bold"), text_color=C["texto"], justify="left",
+                                       wraplength=self.LARGURA - 20)
+        self.rs_impacto.pack(anchor="w", padx=14, pady=(8, 0))
+        self.rs_liq = ctk.CTkLabel(f, text="", font=F(12, "bold"), text_color=C["texto"])
+        self.rs_liq.pack(anchor="w", padx=14)
+        self.rs_nota = ctk.CTkLabel(f, text="", font=F(11), text_color=C["muted"], justify="left",
+                                    wraplength=self.LARGURA - 20)
+        self.rs_nota.pack(anchor="w", padx=14, pady=(2, 10))
+
+    def mostrar_resumo(self, res, nota=""):
+        """res: resultado de nc.resumo_ordem ou None (campos incompletos)."""
+        if res is None:
+            for _, v in self.rs_linhas.values():
+                v.configure(text="—")
+            self.rs_impacto.configure(text="Preencha quantidade, preço e data.", text_color=C["muted"])
+            self.rs_liq.configure(text="")
+            self.rs_nota.configure(text=nota)
+            return
+        self.rs_linhas["bruto"][1].configure(text=brl(res["bruto"]))
+        self.rs_linhas["taxas"][1].configure(text=brl(res["taxas"]))
+        self.rs_linhas["irrf"][1].configure(text=brl(res["irrf"]) if res["irrf"] else "R$ 0,00")
+        liq = res["liquido"]
+        if liq < 0:
+            self.rs_impacto.configure(text=f"Será debitado da conta: {brl(-liq)}", text_color=C["danger"])
+        else:
+            self.rs_impacto.configure(text=f"Será creditado na conta: {brl(liq)}", text_color=C["accent"])
+        self.rs_liq.configure(text=f"📅 Liquidação financeira: {nc.fmt_liquidacao(res['liquidacao'])}")
+        self.rs_nota.configure(text=nota)
+
+    def valores_ordem(self):
+        try:
+            return parse_qtd(self.en_qtd.get()), parse_num(self.en_preco.get())
+        except ValueError:
+            return None
+
 
 class FormCompra(FormBase):
     def __init__(self, master, sugestoes, tipos, iniciais=None, editar=None):
@@ -185,18 +236,29 @@ class FormCompra(FormBase):
         self.mostrar_tipo(ini.get("ticker", ""))
         self.rotulo("DATA DA COMPRA")
         inicial = date.fromisoformat(editar["data_compra"]) if editar else date.today()
-        self.data = CampoData(self.caixa, valor=inicial, maximo=maximo)
+        self.data = CampoData(self.caixa, valor=inicial, maximo=maximo, ao_mudar=lambda d: self.atualizar_resumo())
         self.data.pack(fill="x", padx=24)
         self.rotulo("QUANTIDADE")
         self.en_qtd = self.entrada("Ex.: 100", ini.get("qtd", ""))
         self.rotulo("PREÇO UNITÁRIO (R$)")
         self.en_preco = self.entrada("Ex.: 32,50", ini.get("preco", ""))
+        for en in (self.en_qtd, self.en_preco):
+            en.bind("<KeyRelease>", lambda e: self.atualizar_resumo(), add="+")
+        self.montar_resumo()
+        self.atualizar_resumo()
         self.rodape()
         if ini.get("ticker"):
             self.marcar_chip(ini["ticker"])
         foco = self.en_qtd if ini.get("ticker") else self.en_ticker
         self.after(150, foco.focus_set)
         self.mostrar()
+
+    def atualizar_resumo(self):
+        v = self.valores_ordem()
+        if not v or not self.data.valor:
+            return self.mostrar_resumo(None)
+        self.mostrar_resumo(nc.resumo_ordem("compra", v[0], v[1], self.data.valor),
+                            "Se vender no mesmo dia (day trade), a B3 liquida só o resultado do dia.")
 
     def mostrar_tipo(self, ticker):
         t = (ticker or "").strip().upper()
@@ -275,7 +337,7 @@ class FormVenda(FormBase):
         self.lb_info.pack(anchor="w", padx=24, pady=(6, 0))
         self.rotulo("DATA DA VENDA")
         self.data = CampoData(self.caixa, minimo=self.inicio_mes, maximo=min(self.fim_mes, date.today()),
-                              ao_mudar=lambda d: self.sugerir_preco())
+                              ao_mudar=lambda d: (self.sugerir_preco(), self.atualizar_resumo()))
         self.data.pack(fill="x", padx=24)
         self.lb_qtd = self.rotulo("QUANTIDADE")
         self.en_qtd = self.entrada()
@@ -283,6 +345,9 @@ class FormVenda(FormBase):
         self.en_preco = self.entrada("Ex.: 35,10")
         self.lb_preco = ctk.CTkLabel(self.caixa, text="", font=F(11), text_color=C["muted"])
         self.lb_preco.pack(anchor="w", padx=24, pady=(4, 0))
+        for en in (self.en_qtd, self.en_preco):
+            en.bind("<KeyRelease>", lambda e: self.atualizar_resumo(), add="+")
+        self.montar_resumo()
         self.rodape()
 
         t = lote_inicial["ticker"] if lote_inicial else ticker_inicial
@@ -295,6 +360,7 @@ class FormVenda(FormBase):
             self.en_qtd.delete(0, "end")
             self.en_qtd.insert(0, str(v["qtd"]))
             self.en_preco.insert(0, nc.fmt_num(v["preco"]))
+        self.atualizar_resumo()
         self.after(150, (self.en_preco if t else self.en_ticker).focus_set)
         self.mostrar()
 
@@ -329,6 +395,7 @@ class FormVenda(FormBase):
             self.lote = None
             self.lb_info.configure(text="")
             self.lb_qtd.configure(text="QUANTIDADE")
+            self.atualizar_resumo()
 
     def selecionar_lote(self, rotulo):
         l = self.opcoes.get(rotulo)
@@ -350,6 +417,19 @@ class FormVenda(FormBase):
         if not self.data.valor and minimo <= hoje <= maximo:
             self.data.set(hoje)
         self.sugerir_preco()
+        self.atualizar_resumo()
+
+    def atualizar_resumo(self):
+        if not hasattr(self, "rs_impacto"):
+            return
+        v = self.valores_ordem()
+        if not v or not self.data.valor or not self.lote:
+            return self.mostrar_resumo(None)
+        dt = self.data.valor.isoformat() == self.lote["data_compra"]
+        res = nc.resumo_ordem("venda", v[0], v[1], self.data.valor, preco_compra=self.lote["preco"], day_trade=dt)
+        nota = ("Day trade (compra e venda no mesmo dia): a B3 liquida só o resultado, já com o IRRF de 1% "
+                "sobre o lucro." if dt else "Swing trade: crédito do valor da venda menos as taxas da B3.")
+        self.mostrar_resumo(res, nota)
 
     def preco_manual(self):
         """True se o usuário digitou um preço diferente do sugerido."""
@@ -391,6 +471,7 @@ class FormVenda(FormBase):
                 self.en_preco.delete(0, "end")
                 self.en_preco.insert(0, self.preco_auto)
                 self.lb_preco.configure(text=f"{origem} · pode alterar")
+                self.atualizar_resumo()
             else:
                 self.pedido = None
                 self.lb_preco.configure(text="Não foi possível buscar a cotação. Informe o preço.")
@@ -415,6 +496,52 @@ class FormVenda(FormBase):
         except ValueError:
             return self.erro("Preço inválido.")
         self.resultado = {"lote_id": self.lote["id"], "data": dv.isoformat(), "qtd": q, "preco": p}
+        self.destroy()
+
+
+class FormSaldo(FormBase):
+    """Define o saldo em conta de hoje ou registra um aporte/retirada sobre o saldo disponível."""
+    MODOS = ["Definir saldo", "Aporte", "Retirada"]
+
+    def __init__(self, master, disponivel, definido):
+        sub = f"Saldo disponível hoje: {brl(disponivel)}" if definido else "Informe o saldo livre na conta da corretora hoje."
+        super().__init__(master, "Saldo em conta", sub)
+        self.rotulo("OPERAÇÃO")
+        self.seg = ctk.CTkSegmentedButton(self.caixa, values=self.MODOS if definido else self.MODOS[:1], height=36,
+                                          font=F(13), selected_color=C["accent"], selected_hover_color=C["accent_h"],
+                                          command=lambda v: self.trocar_modo())
+        self.seg.set(self.MODOS[0])
+        self.seg.pack(fill="x", padx=24)
+        self.lb_valor = self.rotulo("SALDO DISPONÍVEL HOJE (R$)")
+        self.en_valor = self.entrada("Ex.: 10.000,00", nc.preco_texto(disponivel) if definido else "")
+        self.lb_ajuda = ctk.CTkLabel(self.caixa, text="", font=F(11), text_color=C["muted"], justify="left",
+                                     wraplength=self.LARGURA)
+        self.lb_ajuda.pack(anchor="w", padx=24, pady=(6, 0))
+        self.trocar_modo()
+        self.rodape()
+        self.after(150, self.en_valor.focus_set)
+        self.mostrar()
+
+    def trocar_modo(self):
+        modo = self.seg.get()
+        if modo == "Definir saldo":
+            self.lb_valor.configure(text="SALDO DISPONÍVEL HOJE (R$)")
+            self.lb_ajuda.configure(text="Use o saldo livre que a corretora mostra hoje, já com as liquidações de hoje.")
+        else:
+            self.lb_valor.configure(text=f"VALOR DO {modo.upper()} (R$)")
+            self.lb_ajuda.configure(text="Soma ao saldo disponível." if modo == "Aporte"
+                                    else "Desconta do saldo disponível.")
+            self.en_valor.delete(0, "end")
+
+    def ok(self):
+        try:
+            valor = nc.parse_valor(self.en_valor.get())
+        except ValueError:
+            return self.erro("Valor inválido.")
+        modo = self.seg.get()
+        if modo != "Definir saldo" and valor <= 0:
+            return self.erro("Informe um valor maior que zero.")
+        self.resultado = (modo, valor)
         self.destroy()
 
 
@@ -722,12 +849,15 @@ class App(ctk.CTk):
         self.montar_kpis()
         self.montar_corpo()
         self.montar_radar()
+        self.montar_caixa()
         self.estilizar_tabelas()
         self.atualizar()
+        self.atualizar_caixa()
         self.atualizar_conta()
         self.status_sync("off")
 
         self.after(100, self.processar_fila)
+        self.after(60000, self.tick_caixa)
         self.after(60000, self.tick_sync)
         self.after(60000, self.tick_radar)
         if upd.pode_atualizar():
@@ -748,7 +878,8 @@ class App(ctk.CTk):
         self.lb_sub = ctk.CTkLabel(tit, text="", font=F(13), text_color=C["muted"])
         self.lb_sub.pack(anchor="w")
 
-        self.nav = ctk.CTkSegmentedButton(h, values=[PAGINA_APURACAO, PAGINA_RADAR], command=self.trocar_pagina,
+        self.nav = ctk.CTkSegmentedButton(h, values=[PAGINA_APURACAO, PAGINA_CAIXA, PAGINA_RADAR],
+                                          command=self.trocar_pagina,
                                           height=38, font=F(13, "bold"), corner_radius=10,
                                           fg_color=C["neutro"], selected_color=C["accent"],
                                           selected_hover_color=C["accent_h"], unselected_color=C["neutro"],
@@ -758,6 +889,8 @@ class App(ctk.CTk):
 
         conta = ctk.CTkFrame(h, fg_color="transparent")
         conta.grid(row=0, column=2, sticky="e")
+        self.bt_saldo = botao(conta, "Saldo: —", lambda: self.trocar_pagina(PAGINA_CAIXA), "neutro", width=170)
+        self.bt_saldo.pack(side="left", padx=(0, 14))
         self.lb_sync = ctk.CTkLabel(conta, text="", font=F(12, "bold"), text_color=C["muted"])
         self.lb_sync.pack(side="left", padx=(0, 14))
         self.bt_amigos = botao(conta, "Amigos", self.abrir_amigos, "neutro", width=100)
@@ -941,7 +1074,7 @@ class App(ctk.CTk):
         s.map("D.Treeview", background=[("selected", cor("selecao"))],
               foreground=[("selected", cor("texto"))])
         s.layout("D.Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
-        for t in (self.t_lotes, self.t_vendas):
+        for t in (self.t_lotes, self.t_vendas, self.t_agenda):
             t.aplicar_cores()
 
     # --- eventos
@@ -973,6 +1106,7 @@ class App(ctk.CTk):
     def gravar(self):
         salvar(self.d)
         self.atualizar()
+        self.atualizar_caixa()
         self.agendar_sync()
 
     def atualizar(self):
@@ -1181,16 +1315,125 @@ class App(ctk.CTk):
     # --- navegação
     def trocar_pagina(self, rotulo):
         self.nav.set(rotulo)
-        if rotulo == PAGINA_RADAR:
-            self.pg_apuracao.grid_remove()
-            self.pg_radar.grid(row=1, column=0, sticky="nsew")
-            self.pagina = "radar"
+        paginas = {PAGINA_APURACAO: ("apuracao", self.pg_apuracao), PAGINA_RADAR: ("radar", self.pg_radar),
+                   PAGINA_CAIXA: ("caixa", self.pg_caixa)}
+        for r, (_, pg) in paginas.items():
+            if r != rotulo:
+                pg.grid_remove()
+        self.pagina, pg = paginas.get(rotulo, paginas[PAGINA_APURACAO])
+        pg.grid(row=1, column=0, sticky="nsew")
+        if self.pagina == "radar":
             self.radar_redesenhar()
             self.atualizar_radar()
+        elif self.pagina == "caixa":
+            self.atualizar_caixa()
+
+    # --- caixa (tesouraria)
+    def montar_caixa(self):
+        pg = self.pg_caixa = ctk.CTkFrame(self, fg_color="transparent")
+        pg.grid_columnconfigure(0, weight=1)
+        pg.grid_rowconfigure(2, weight=1)
+        k = ctk.CTkFrame(pg, fg_color="transparent")
+        k.grid(row=0, column=0, sticky="ew", padx=24, pady=(0, 8))
+        for i in range(3):
+            k.grid_columnconfigure(i, weight=1, uniform="caixa")
+        self.k_disp = CardKPI(k, "Saldo disponível (D+0)")
+        self.k_trans = CardKPI(k, "Em trânsito (D+1 / D+2)")
+        self.k_proj = CardKPI(k, "Saldo projetado", destaque=True)
+        for i, c in enumerate((self.k_disp, self.k_trans, self.k_proj)):
+            c.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 8, 0 if i == 2 else 8))
+        botao(self.k_disp, "✎  Editar", self.editar_saldo, "neutro", altura=30, fonte=12, width=96).place(
+            relx=1.0, x=-14, y=12, anchor="ne")
+        self.lb_caixa_info = ctk.CTkLabel(pg, text="", font=F(12), text_color=C["muted"], anchor="w", justify="left")
+        self.lb_caixa_info.grid(row=1, column=0, sticky="ew", padx=28, pady=(0, 12))
+
+        card = self.card(pg)
+        card.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 24))
+        self.lb_qtd_agenda = self.topo_card(card, "Agenda financeira")[1]
+        self.fr_grupos = ctk.CTkFrame(card, fg_color="transparent")
+        self.fr_grupos.pack(fill="x", padx=18, pady=(0, 10))
+        self.t_agenda = Tabela(card, [
+            ("liquidacao", "LIQUIDAÇÃO (D+2)", 190, "w"), ("data", "OPERAÇÃO", 100, "center"),
+            ("ticker", "TICKER", 90, "w"), ("tipo", "TIPO", 140, "w"), ("valor", "VALOR LÍQUIDO", 150, "e"),
+            ("status", "STATUS", 110, "center")],
+            "Nenhum lançamento. Compras e vendas aparecem aqui com a data de liquidação (D+2 úteis).",
+            ordenaveis=("liquidacao", "data", "ticker", "valor"))
+        self.t_agenda.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+        self.dia_caixa = date.today()
+
+    def atualizar_caixa(self):
+        """Recalcula o caixa; chamado ao gravar, ao sincronizar e na virada do dia."""
+        hoje = date.today()
+        self.dia_caixa = hoje
+        r = nc.resumo_caixa(self.cfg, hoje)
+        self.bt_saldo.configure(text=f"Saldo: {brl(r['disponivel'])}" if r["definido"] else "Definir saldo")
+        if not hasattr(self, "k_disp"):
+            return
+        if r["definido"]:
+            self.k_disp.set(brl(r["disponivel"]), "livre para novas operações",
+                            C["danger"] if r["disponivel"] < 0 else None)
+            self.lb_caixa_info.configure(
+                text=f"Saldo informado em {r['base']:%d/%m/%Y}. As liquidações seguintes entram sozinhas no "
+                     f"saldo disponível quando a data chega.")
         else:
-            self.pg_radar.grid_remove()
-            self.pg_apuracao.grid(row=1, column=0, sticky="nsew")
-            self.pagina = "apuracao"
+            self.k_disp.set("—", "clique em Editar para informar")
+            self.lb_caixa_info.configure(text="Informe o saldo livre na conta para acompanhar o caixa.")
+        partes = []
+        if r["a_debitar"]:
+            partes.append(f"{brl(r['a_debitar'])} a debitar")
+        if r["a_receber"]:
+            partes.append(f"+{brl(r['a_receber'])} a receber")
+        self.k_trans.set(brl(r["transito"]), " · ".join(partes) or "nada pendente",
+                         C["danger"] if r["transito"] < -0.004 else (C["accent"] if r["transito"] > 0.004 else None))
+        self.k_proj.set(brl(r["projetado"]) if r["definido"] else "—", "disponível + liquidações futuras",
+                        C["danger"] if r["definido"] and r["projetado"] < 0 else None)
+
+        for w in self.fr_grupos.winfo_children():
+            w.destroy()
+        grupos = nc.agenda_caixa(r, hoje)
+        pendentes = [g for g in grupos if g[0] > hoje]
+        for d, rot, total, _ in pendentes[:6]:
+            cor_t = C["danger"] if total < -0.004 else (C["accent"] if total > 0.004 else C["texto"])
+            sinal = "+" if total > 0.004 else ""
+            pilula(self.fr_grupos, f"{rot}: {sinal}{brl(total)}", C["neutro"], cor_t, 12).pack(
+                side="left", padx=(0, 8))
+        if not pendentes:
+            ctk.CTkLabel(self.fr_grupos, text="Nenhuma liquidação pendente.", font=F(12),
+                         text_color=C["muted"]).pack(side="left")
+
+        linhas = []
+        for d, rot, _, itens in grupos:
+            for it in itens:
+                v = it["valor"]
+                linhas.append((it["id"], (nc.fmt_liquidacao(it["liquidacao"]), fmt_data(it["data"]), it["ticker"],
+                                          it["tipo"], ("+" if v > 0.004 else "") + brl(v), it["status"]),
+                               ("muted",) if it["status"] == "Liquidado" else (),
+                               {"liquidacao": it["liquidacao"].isoformat(), "data": it["data"], "ticker": it["ticker"],
+                                "valor": v,
+                                "_cores": {"valor": "accent" if v > 0.004 else "danger"} if abs(v) > 0.004 else {}}))
+        self.t_agenda.preencher(linhas)
+        self.lb_qtd_agenda.configure(text=str(len([1 for l in linhas if l[1][5] == "Pendente"])))
+
+    def editar_saldo(self):
+        r = nc.resumo_caixa(self.cfg)
+        f = FormSaldo(self, r["disponivel"], r["definido"])
+        if not f.resultado:
+            return
+        modo, valor = f.resultado
+        if modo == "Definir saldo":
+            nc.definir_saldo(self.cfg, valor)
+        else:
+            nc.ajustar_saldo(self.cfg, valor if modo == "Aporte" else -valor)
+        self.cfg["pendente"] = True
+        gravar_config(self.cfg)
+        self.atualizar_caixa()
+        self.agendar_sync()
+
+    def tick_caixa(self):
+        """Virada do dia: o que liquidou passa a Liquidado e entra no saldo disponível."""
+        if date.today() != self.dia_caixa:
+            self.atualizar_caixa()
+        self.after(60000, self.tick_caixa)
 
     def abrir_seletor_mes(self):
         com_dados = set(self.dados_amigo) if self.visao else set(listar_meses())
@@ -1563,6 +1806,7 @@ class App(ctk.CTk):
                 self.d = carregar(self.mes)
                 self.atualizar()
             self.atualizar_conta()
+            self.atualizar_caixa()
             if self.pagina == "radar":
                 self.radar_redesenhar()
         dados = montar_linhas(listar_meses(), self.cfg)

@@ -35,6 +35,7 @@ MUTED = ft.Colors.ON_SURFACE_VARIANT
 PRIMARIO = ft.Colors.ON_SURFACE        # ação primária neutra: inverte com o tema (clara no escuro, escura no claro)
 PRIMARIO_TXT = ft.Colors.SURFACE
 NOME_APK = "CalculadoraDARF.apk"
+ABA_APURACAO, ABA_CAIXA, ABA_RADAR, ABA_CONTA = range(4)
 URL_RELEASES = f"https://github.com/{upd.REPOSITORIO}/releases/latest"
 ORD_LOTES = [("cadastro", "Cadastro"), ("data", "Data da compra"), ("ticker", "Ticker"), ("qtd", "Quantidade"),
              ("preco", "Preço de compra"), ("atual", "Preço atual"), ("total", "Total"),
@@ -186,6 +187,47 @@ def erro_mercado(e):
     return f"Erro ao consultar: {str(e)[:120]}"
 
 
+class ResumoOrdem:
+    """Resumo financeiro da ordem: valor bruto, taxas, IRRF, débito/crédito na conta e data de liquidação."""
+
+    def __init__(self):
+        self.bruto, self.taxas, self.irrf = (texto("—", 13, ft.FontWeight.BOLD) for _ in range(3))
+        self.impacto = texto("", 14, ft.FontWeight.BOLD)
+        self.liq = texto("", 12, ft.FontWeight.BOLD)
+        self.nota = texto("", 11, cor=MUTED)
+
+        def linha(t, v):
+            return ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[texto(t, 12, cor=MUTED), v])
+
+        self.controle = ft.Container(
+            padding=ft.Padding.all(12), border_radius=ft.BorderRadius.all(12),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, content=ft.Column(spacing=4, controls=[
+                rotulo("Resumo financeiro da ordem"), linha("Valor bruto", self.bruto),
+                linha("Taxas B3 (estimadas)", self.taxas), linha("IRRF retido", self.irrf),
+                self.impacto, self.liq, self.nota]))
+
+    def mostrar(self, res, nota=""):
+        self.nota.value = nota
+        if res is None:
+            self.bruto.value = self.taxas.value = self.irrf.value = "—"
+            self.impacto.value, self.impacto.color = "Preencha quantidade, preço e data.", MUTED
+            self.liq.value = ""
+            return
+        self.bruto.value, self.taxas.value, self.irrf.value = brl(res["bruto"]), brl(res["taxas"]), brl(res["irrf"])
+        if res["liquido"] < 0:
+            self.impacto.value, self.impacto.color = f"Será debitado da conta: {brl(-res['liquido'])}", VERMELHO
+        else:
+            self.impacto.value, self.impacto.color = f"Será creditado na conta: {brl(res['liquido'])}", VERDE
+        self.liq.value = f"📅 Liquidação financeira: {nc.fmt_liquidacao(res['liquidacao'])}"
+
+
+def numeros_ordem(qtd, preco):
+    try:
+        return nc.parse_qtd(qtd or ""), nc.parse_num(preco or "")
+    except ValueError:
+        return None
+
+
 class CampoData:
     """Campo de data que abre o calendário do Material; não aceita digitação."""
 
@@ -287,14 +329,15 @@ class App:
         page.theme_mode = ft.ThemeMode.LIGHT if self.cfg.get("tema") == "Light" else ft.ThemeMode.DARK
         page.padding = 0
         self.bt_sync = ft.IconButton(icon=ft.Icons.CLOUD_OFF, tooltip="Sincronização",
-                                     on_click=lambda e: self.ir_para(2))
+                                     on_click=lambda e: self.ir_para(ABA_CONTA))
         page.appbar = ft.AppBar(title=texto("Calculadora DARF", 20, ft.FontWeight.BOLD), actions=[self.bt_sync])
         page.navigation_bar = ft.NavigationBar(selected_index=0, on_change=self.trocar_aba, destinations=[
             ft.NavigationBarDestination(icon=ft.Icons.RECEIPT_LONG, label="Apuração"),
+            ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET, label="Caixa"),
             ft.NavigationBarDestination(icon=ft.Icons.INSIGHTS, label="Radar"),
             ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_CIRCLE, label="Conta")])
         # as três telas ficam lado a lado: dá para trocar arrastando para os lados
-        self.paginas = [ft.Container(expand=True) for _ in range(3)]
+        self.paginas = [ft.Container(expand=True) for _ in range(4)]
         self.pv = ft.PageView(controls=self.paginas, selected_index=0, expand=True, on_change=self.pagina_arrastada)
         page.add(self.pv)
         self.render(todas=True)
@@ -333,7 +376,7 @@ class App:
         if animar and aba != anterior:
             self.navegando = (aba, time.time())
             self.page.run_task(self.pv.go_to_page, aba, ft.Duration(milliseconds=280))
-        if aba == 1:
+        if aba == ABA_RADAR:
             self.atualizar_radar()
 
     def trocar_aba(self, e):
@@ -355,12 +398,12 @@ class App:
             self.ir_para(idx, animar=False)
 
     def render(self, todas=False):
-        telas = (self.tela_apuracao, self.tela_radar, self.tela_conta)
+        telas = (self.tela_apuracao, self.tela_caixa, self.tela_radar, self.tela_conta)
         try:
             for i, tela in enumerate(telas):
                 if todas or i == self.aba:
                     self.paginas[i].content = tela()
-            editavel = self.aba == 0 and not self.visao and not self.d["fechado"]
+            editavel = self.aba == ABA_APURACAO and not self.visao and not self.d["fechado"]
             self.page.floating_action_button = ft.FloatingActionButton(
                 icon=ft.Icons.ADD, tooltip="Nova compra", bgcolor=PRIMARIO, foreground_color=PRIMARIO_TXT,
                 on_click=lambda e: self.form_compra()) if editavel else None
@@ -401,6 +444,18 @@ class App:
             ft.Container(expand=True),
             ft.PopupMenuButton(icon=ft.Icons.MORE_VERT, items=mais) if mais else ft.Container()])
         itens = [topo]
+        if not self.visao:
+            cx = nc.resumo_caixa(self.cfg)
+            if cx["definido"]:
+                txt = f"Saldo disponível {brl(cx['disponivel'])} · projetado {brl(cx['projetado'])}"
+            else:
+                txt = "Definir saldo em conta"
+            itens.append(ft.Container(
+                on_click=lambda e: self.ir_para(ABA_CAIXA), padding=ft.Padding.symmetric(horizontal=14, vertical=10),
+                border_radius=ft.BorderRadius.all(12), bgcolor=ft.Colors.SURFACE_CONTAINER,
+                content=ft.Row(spacing=8, controls=[ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET, size=18, color=MUTED),
+                                                    texto(txt, 13, ft.FontWeight.BOLD, expand=True),
+                                                    ft.Icon(ft.Icons.CHEVRON_RIGHT, size=18, color=MUTED)])))
 
         if self.g.email and self.cfg["amigos"]:
             opcoes = [ft.DropdownOption(key="", text="Meus dados")] + [
@@ -813,16 +868,28 @@ class App:
 
         mostrar_tipo((ini.get("ticker") or "").upper())
         data = CampoData(self, "Data da compra *", valor=date.fromisoformat(editar["data_compra"]) if editar
-                         else date.today(), maximo=maximo)
+                         else date.today(), maximo=maximo, ao_mudar=lambda d: calcular_total())
         qtd = ft.TextField(label="Quantidade *", keyboard_type=ft.KeyboardType.NUMBER, value=ini.get("qtd", ""))
         preco = ft.TextField(label="Preço unitário (R$) *", keyboard_type=ft.KeyboardType.NUMBER,
                              value=ini.get("preco", ""), hint_text="Ex.: 32,50")
         erro = texto("", 12, cor=VERMELHO)
-        total_lb = texto(valor_total(qtd.value, preco.value), 13, ft.FontWeight.BOLD)
+        resumo = ResumoOrdem()
+
+        def calcular_resumo():
+            v = numeros_ordem(qtd.value, preco.value)
+            if not v or not data.valor:
+                return resumo.mostrar(None)
+            resumo.mostrar(nc.resumo_ordem("compra", v[0], v[1], data.valor),
+                           "Se vender no mesmo dia (day trade), a B3 liquida só o resultado do dia.")
+
+        calcular_resumo()
 
         def calcular_total(e=None):
-            total_lb.value = valor_total(qtd.value, preco.value)
-            dlg.update()
+            calcular_resumo()
+            try:
+                dlg.update()
+            except Exception:
+                pass
 
         qtd.on_change = calcular_total
         preco.on_change = calcular_total
@@ -897,7 +964,7 @@ class App:
         conteudo = [tk]
         if sugestoes:
             conteudo += [texto("Frequentes", 11, cor=MUTED), chips]
-        conteudo += [tipo, data.controle, qtd, preco, total_lb, erro]
+        conteudo += [tipo, data.controle, qtd, preco, resumo.controle, erro]
         if editar and editar["vendas"]:
             conteudo.insert(0, texto(f"Já vendidas: {nc.vendido(editar)}", 12, cor=MUTED))
         dlg = ft.AlertDialog(title=ft.Text("Editar compra" if editar else "Novo ativo"), scrollable=True,
@@ -931,7 +998,7 @@ class App:
         preco = ft.TextField(label="Preço unitário (R$) *", keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ex.: 35,10")
         preco_info = texto("", 11, cor=MUTED)
         erro = texto("", 12, cor=VERMELHO)
-        total_lb = texto("", 13, ft.FontWeight.BOLD)
+        resumo = ResumoOrdem()
         auto = {"preco": "", "pedido": None}  # último preço sugerido e a busca em andamento
 
         def atualizar_dlg():
@@ -940,8 +1007,18 @@ class App:
             except Exception:  # diálogo ainda não exibido ou já fechado
                 pass
 
+        def calcular_resumo():
+            l = estado["lote"]
+            v = numeros_ordem(qtd.value, preco.value)
+            if not v or not l or not data.valor:
+                return resumo.mostrar(None)
+            dt = data.valor.isoformat() == l["data_compra"]
+            resumo.mostrar(nc.resumo_ordem("venda", v[0], v[1], data.valor, preco_compra=l["preco"], day_trade=dt),
+                           "Day trade (compra e venda no mesmo dia): a B3 liquida só o resultado, já com o IRRF "
+                           "de 1% sobre o lucro." if dt else "Swing trade: crédito do valor da venda menos as taxas.")
+
         def calcular_total(e=None):
-            total_lb.value = valor_total(qtd.value, preco.value)
+            calcular_resumo()
             atualizar_dlg()
 
         qtd.on_change = calcular_total
@@ -974,13 +1051,14 @@ class App:
                     auto["preco"] = nc.preco_texto(valor)
                     preco.value = auto["preco"]
                     preco_info.value = f"{origem} · pode alterar"
-                    total_lb.value = valor_total(qtd.value, preco.value)
+                    calcular_resumo()
                 atualizar_dlg()
 
             self.page.run_thread(trabalho)
 
         def mudou_data(d):
             sugerir_preco()
+            calcular_resumo()
             atualizar_dlg()
 
         data = CampoData(self, "Data da venda *", minimo=inicio_mes, maximo=min(fim_mes, date.today()),
@@ -1006,6 +1084,7 @@ class App:
                 data.valor = hoje
                 data.valor_txt.value = hoje.strftime("%d/%m/%Y")
             sugerir_preco()
+            calcular_resumo()
 
         def selecionar_ticker(t, lote_inicial=None):
             t = (t or "").strip().upper()
@@ -1028,6 +1107,7 @@ class App:
                 estado["lote"] = None
                 info.value = "Nenhuma compra em aberto desse ticker" if t else "Escolha um ticker"
                 qtd.label = "Quantidade *"
+                calcular_resumo()
 
         def escolher(t):
             tk.value = t
@@ -1061,6 +1141,7 @@ class App:
             data.valor_txt.value = data.valor.strftime("%d/%m/%Y")
             qtd.value = str(v0["qtd"])
             preco.value = nc.fmt_num(v0["preco"])
+            calcular_resumo()
 
         def salvar(e):
             l = estado["lote"]
@@ -1113,10 +1194,137 @@ class App:
         conteudo = [tk]
         if sugestoes:
             conteudo += [texto("Em carteira", 11, cor=MUTED), chips]
-        conteudo += [compra, info, data.controle, qtd, preco, preco_info, total_lb, erro]
+        conteudo += [compra, info, data.controle, qtd, preco, preco_info, resumo.controle, erro]
         dlg = ft.AlertDialog(title=ft.Text("Editar venda" if editar else "Registrar venda"), scrollable=True,
                              content=ft.Container(width=380, content=ft.Column(tight=True, spacing=12,
                                                                                controls=conteudo)),
+                             actions=[ft.TextButton("Cancelar", on_click=lambda e: self.page.pop_dialog()),
+                                      ft.FilledButton("Salvar", on_click=salvar)])
+        self.page.show_dialog(dlg)
+
+    # ------------------------------------------------------------ caixa (tesouraria)
+    def tela_caixa(self):
+        hoje = date.today()
+        self.dia_caixa = hoje
+        r = nc.resumo_caixa(self.cfg, hoje)
+        itens = []
+
+        if r["definido"]:
+            disp = texto(brl(r["disponivel"]), 32, ft.FontWeight.BOLD, VERMELHO if r["disponivel"] < 0 else None)
+            info = texto(f"Saldo informado em {r['base']:%d/%m/%Y}. As liquidações seguintes entram sozinhas "
+                         "quando a data chega.", 12, cor=MUTED)
+        else:
+            disp = texto("—", 32, ft.FontWeight.BOLD)
+            info = texto("Informe o saldo livre na conta da corretora para acompanhar o caixa.", 12, cor=MUTED)
+        itens.append(bloco(ft.Column(spacing=6, controls=[
+            ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                rotulo("Saldo disponível (D+0)"), ft.Container(expand=True),
+                ft.FilledButton("Editar", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e: self.editar_saldo(),
+                                style=ft.ButtonStyle(bgcolor=PRIMARIO, color=PRIMARIO_TXT))]),
+            disp, info]), padding=20))
+
+        def card(titulo, valor, sub, cor=None):
+            return ft.Container(expand=True, padding=ft.Padding.all(14), border_radius=ft.BorderRadius.all(16),
+                                bgcolor=ft.Colors.SURFACE_CONTAINER, content=ft.Column(spacing=4, controls=[
+                                    rotulo(titulo), texto(valor, 17, ft.FontWeight.BOLD, cor), texto(sub, 11, cor=MUTED)]))
+
+        partes = []
+        if r["a_debitar"]:
+            partes.append(f"{brl(r['a_debitar'])} a debitar")
+        if r["a_receber"]:
+            partes.append(f"+{brl(r['a_receber'])} a receber")
+        t = r["transito"]
+        itens.append(ft.Row(spacing=10, vertical_alignment=ft.CrossAxisAlignment.START, controls=[
+            card("Em trânsito (D+1/D+2)", brl(t), "\n".join(partes) or "Nada pendente", cor_resultado(round(t, 2))),
+            card("Saldo projetado", brl(r["projetado"]) if r["definido"] else "—", "Disponível + liquidações futuras",
+                 VERMELHO if r["definido"] and r["projetado"] < 0 else None)]))
+
+        itens.append(texto("Agenda financeira", 17, ft.FontWeight.BOLD))
+        grupos = nc.agenda_caixa(r, hoje)
+        pendentes = [g for g in grupos if g[0] > hoje]
+        liquidados = [g for g in grupos if g[0] <= hoje][::-1]
+        if not grupos:
+            itens.append(ft.Column(horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8, controls=[
+                ft.Icon(ft.Icons.EVENT_AVAILABLE, size=40, color=MUTED),
+                texto("Nenhum lançamento", 14, ft.FontWeight.BOLD),
+                texto("Compras e vendas aparecem aqui com a data de liquidação (D+2 úteis).", 12, cor=MUTED)]))
+        elif not pendentes:
+            itens.append(texto("Nenhuma liquidação pendente.", 13, cor=MUTED))
+
+        def grupo(rot, total, lancs):
+            sinal = "+" if total > 0.004 else ""
+            linhas = []
+            for it in lancs:
+                v = it["valor"]
+                linhas.append(ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                    ft.Column(spacing=0, expand=True, controls=[
+                        texto(f"{it['ticker']} · {it['tipo']}", 14, ft.FontWeight.BOLD),
+                        texto(f"Operação {fmt_data(it['data'])} · {it['status']}", 12, cor=MUTED)]),
+                    texto(("+" if v > 0.004 else "") + brl(v), 14, ft.FontWeight.BOLD, cor_resultado(round(v, 2)))]))
+            return bloco(ft.Column(spacing=10, controls=[
+                ft.Row(controls=[texto(rot, 14, ft.FontWeight.BOLD), ft.Container(expand=True),
+                                 texto(f"{sinal}{brl(total)}", 14, ft.FontWeight.BOLD, cor_resultado(round(total, 2)))]),
+                ft.Divider(height=1), *linhas]), padding=14)
+
+        for d, rot, total, lancs in pendentes:
+            itens.append(grupo(rot, total, lancs))
+        if liquidados:
+            itens.append(rotulo("Liquidados recentemente"))
+            for d, rot, total, lancs in liquidados:
+                itens.append(grupo(rot, total, lancs))
+        itens.append(ft.Container(height=24))
+        return ft.ListView(controls=itens, padding=ft.Padding.all(16), spacing=12, expand=True)
+
+    def editar_saldo(self):
+        r = nc.resumo_caixa(self.cfg)
+        modos = ["Definir saldo", "Aporte", "Retirada"] if r["definido"] else ["Definir saldo"]
+        modo = ft.SegmentedButton(selected=[modos[0]], show_selected_icon=False,
+                                  segments=[ft.Segment(value=m, label=ft.Text(m)) for m in modos])
+        campo = ft.TextField(label="Saldo disponível hoje (R$) *", keyboard_type=ft.KeyboardType.NUMBER,
+                             value=nc.preco_texto(r["disponivel"]) if r["definido"] else "", hint_text="Ex.: 10.000,00")
+        ajuda = texto("Use o saldo livre que a corretora mostra hoje, já com as liquidações de hoje.", 12, cor=MUTED)
+        erro = texto("", 12, cor=VERMELHO)
+
+        def trocou(e):
+            m = modo.selected[0] if modo.selected else modos[0]
+            if m == "Definir saldo":
+                campo.label = "Saldo disponível hoje (R$) *"
+                ajuda.value = "Use o saldo livre que a corretora mostra hoje, já com as liquidações de hoje."
+            else:
+                campo.label = f"Valor do {m.lower()} (R$) *"
+                campo.value = ""
+                ajuda.value = "Soma ao saldo disponível." if m == "Aporte" else "Desconta do saldo disponível."
+            dlg.update()
+
+        modo.on_change = trocou
+
+        def salvar(e):
+            m = modo.selected[0] if modo.selected else modos[0]
+            try:
+                valor = nc.parse_valor(campo.value)
+            except ValueError:
+                erro.value = "Valor inválido."
+                dlg.update()
+                return
+            if m != "Definir saldo" and valor <= 0:
+                erro.value = "Informe um valor maior que zero."
+                dlg.update()
+                return
+            self.page.pop_dialog()
+            with nc.TRAVA:
+                if m == "Definir saldo":
+                    nc.definir_saldo(self.cfg, valor)
+                else:
+                    nc.ajustar_saldo(self.cfg, valor if m == "Aporte" else -valor)
+                self.cfg["pendente"] = True
+                nc.gravar_config(self.cfg)
+            self.agendar_sync()
+            self.render()
+
+        sub = [texto(f"Saldo disponível hoje: {brl(r['disponivel'])}", 13, cor=MUTED)] if r["definido"] else []
+        dlg = ft.AlertDialog(title=ft.Text("Saldo em conta"), scrollable=True,
+                             content=ft.Container(width=380, content=ft.Column(tight=True, spacing=12, controls=[
+                                 *sub, modo, campo, ajuda, erro])),
                              actions=[ft.TextButton("Cancelar", on_click=lambda e: self.page.pop_dialog()),
                                       ft.FilledButton("Salvar", on_click=salvar)])
         self.page.show_dialog(dlg)
@@ -1223,7 +1431,7 @@ class App:
                 if forcar:
                     self.mercado.limpar()
                 self.radar_msg = "Atualizando cotações…"
-                if self.aba == 1:
+                if self.aba == ABA_RADAR:
                     self.render()
                 nomes = {r["ticker"]: r.get("nome", "") for r in self.cfg["radar"]}
                 for t in tickers:
@@ -1239,13 +1447,13 @@ class App:
                                 item["nome"] = res["nome"]
                                 nc.gravar_config(self.cfg)
                                 self.cfg["pendente"] = True
-                    if self.aba == 1:
+                    if self.aba == ABA_RADAR:
                         self.render()
                 self.radar_hora = time.time()
                 self.radar_msg = f"Atualizado às {datetime.now():%H:%M} · Yahoo Finance (atraso de até 15 min)"
             finally:
                 self.radar_rodando = False
-                if self.aba == 1:
+                if self.aba == ABA_RADAR:
                     self.render()
 
         self.page.run_thread(trabalho)
@@ -1444,7 +1652,7 @@ class App:
     def definir_status(self, s):
         self.status = s
         self.atualizar_icone_sync()
-        if self.aba == 2:
+        if self.aba == ABA_CONTA:
             self.render()
         else:
             try:
@@ -1582,8 +1790,10 @@ class App:
                         self.sincronizar()
                 elif self.g.tem_token() and self.status in ("offline",):
                     self.conectar_token()
-                if self.aba == 1 and time.time() - self.radar_hora > 60:
+                if self.aba == ABA_RADAR and time.time() - self.radar_hora > 60:
                     self.atualizar_radar()
+                if date.today() != getattr(self, "dia_caixa", date.today()):  # virada do dia: liquidações
+                    self.render(todas=True)
                 if self.aba == 0:
                     em_carteira = {l["ticker"] for l in self.d["lotes"] if nc.restante(l) > 0}
                     self.cotacoes.atualizar(em_carteira, self.cotacoes_chegaram)
