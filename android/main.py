@@ -127,12 +127,14 @@ def pilula(valor, fundo, cor="#ffffff", tam=11):
                         padding=ft.Padding.symmetric(horizontal=10, vertical=3), border_radius=ft.BorderRadius.all(12))
 
 
-def menu_inferior(titulo, subtitulo, opcoes):
-    """BottomSheet que cresce com o conteúdo e não fica atrás da barra de navegação do sistema."""
-    return ft.BottomSheet(show_drag_handle=True, scrollable=True, content=ft.SafeArea(
-        avoid_intrusions_top=False, minimum_padding=ft.Padding.only(bottom=12),
-        content=ft.Column(tight=True, scroll=ft.ScrollMode.AUTO, controls=[
-            ft.ListTile(title=texto(titulo, 16, ft.FontWeight.BOLD), subtitle=ft.Text(subtitulo)), *opcoes])))
+def item_popup(rotulo, icone, ao_clicar, cor=None):
+    return ft.PopupMenuItem(on_click=ao_clicar, content=ft.Row(spacing=12, tight=True, controls=[
+        ft.Icon(icone, size=20, color=cor), ft.Text(rotulo, color=cor)]))
+
+
+def menu_popup(conteudo, itens):
+    """Toca no conteúdo e abre um menu flutuante ancorado nele, como o botão direito do Windows."""
+    return ft.PopupMenuButton(content=conteudo, items=itens, tooltip="", menu_position=ft.PopupMenuPosition.UNDER)
 
 
 def chip(conteudo, ativo=False, icone=None):
@@ -631,9 +633,8 @@ class App:
             else:
                 linha_atual = texto("Atual: carregando…" if l["ticker"] not in self.cotacoes.precos
                                     else "Atual: sem cotação", 12, cor=MUTED)
-        return ft.Container(
+        card = ft.Container(
             padding=ft.Padding.all(14), border_radius=ft.BorderRadius.all(14), bgcolor=ft.Colors.SURFACE_CONTAINER,
-            on_click=(lambda e, l=l: self.acoes_lote(l)) if editavel else None,
             content=ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
                 ft.Column(expand=True, spacing=2, controls=[
                     ft.Row(spacing=8, controls=[texto(l["ticker"], 16, ft.FontWeight.BOLD),
@@ -644,13 +645,12 @@ class App:
                 ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.END, controls=[
                     texto(brl(l["qtd"] * l["preco"]), 15, ft.FontWeight.BOLD),
                     texto(f"Restante: {nc.restante(l)}", 12, cor=MUTED)]),
-                ft.IconButton(ft.Icons.MORE_VERT, icon_color=MUTED, tooltip="Opções",
-                              on_click=lambda e, l=l: self.acoes_lote(l)) if editavel else ft.Container()]))
+                ft.Icon(ft.Icons.MORE_VERT, color=MUTED) if editavel else ft.Container()]))
+        return menu_popup(card, self.itens_lote(l)) if editavel else card
 
     def item_venda(self, o, editavel):
-        return ft.Container(
+        card = ft.Container(
             padding=ft.Padding.all(14), border_radius=ft.BorderRadius.all(14), bgcolor=ft.Colors.SURFACE_CONTAINER,
-            on_click=(lambda e, o=o: self.acoes_venda(o)) if editavel else None,
             content=ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
                 ft.Column(expand=True, spacing=2, controls=[
                     ft.Row(spacing=8, controls=[texto(o["ticker"], 16, ft.FontWeight.BOLD),
@@ -660,47 +660,31 @@ class App:
                 ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.END, controls=[
                     texto(brl(o["liquido"]), 15, ft.FontWeight.BOLD, cor_resultado(o["liquido"])),
                     texto(f"Imposto: {brl(o['imposto'])}", 12, cor=MUTED)]),
-                ft.IconButton(ft.Icons.MORE_VERT, icon_color=MUTED, tooltip="Opções",
-                              on_click=lambda e, o=o: self.acoes_venda(o)) if editavel else ft.Container()]))
+                ft.Icon(ft.Icons.MORE_VERT, color=MUTED) if editavel else ft.Container()]))
+        return menu_popup(card, self.itens_venda(o)) if editavel else card
 
-    def acoes_lote(self, l):
-        def fechar_e(f):
-            def h(e):
-                self.page.pop_dialog()
-                f()
-            return h
-
-        opcoes = []
+    def itens_lote(self, l):
+        itens = []
         if nc.restante(l) > 0:
-            opcoes.append(ft.ListTile(leading=ft.Icon(ft.Icons.SELL), title=ft.Text("Registrar venda"),
-                                      on_click=fechar_e(lambda: self.form_venda(lote_id=l["id"]))))
-        opcoes.append(ft.ListTile(leading=ft.Icon(ft.Icons.EDIT_OUTLINED), title=ft.Text("Editar compra"),
-                                  on_click=fechar_e(lambda: self.form_compra(editar=l))))
-        opcoes.append(ft.ListTile(leading=ft.Icon(ft.Icons.DELETE_OUTLINE, color=VERMELHO),
-                                  title=ft.Text("Excluir compra", color=VERMELHO),
-                                  on_click=fechar_e(lambda: self.excluir_lote(l))))
-        self.page.show_dialog(menu_inferior(
-            l["ticker"], f"{fmt_data(l['data_compra'])} · {l['qtd']} × {brl(l['preco'])}", opcoes))
+            itens.append(item_popup("Registrar venda", ft.Icons.SELL, lambda e: self.form_venda(lote_id=l["id"])))
+        itens.append(item_popup("Editar compra", ft.Icons.EDIT_OUTLINED, lambda e: self.form_compra(editar=l)))
+        itens.append(item_popup("Excluir compra", ft.Icons.DELETE_OUTLINE, lambda e: self.excluir_lote(l), VERMELHO))
+        return itens
 
-    def acoes_venda(self, o):
+    def itens_venda(self, o):
         def excluir(e):
-            self.page.pop_dialog()
             self.perguntar("Excluir venda", "Excluir esta venda?", "Excluir", perigo=True,
                            ao_sim=lambda: self.mutar(lambda d: [l.update(vendas=[v for v in l["vendas"]
                                                                                 if v["id"] != o["venda_id"]])
                                                                 for l in d["lotes"]]))
 
         def editar(e):
-            self.page.pop_dialog()
             par = next(((l, v) for l in self.d["lotes"] for v in l["vendas"] if v["id"] == o["venda_id"]), None)
             if par:
                 self.form_venda(editar=par)
 
-        self.page.show_dialog(menu_inferior(
-            f"Venda de {o['ticker']}", f"{fmt_data(o['data'])} · {o['qtd']} × {brl(o['preco'])}", [
-                ft.ListTile(leading=ft.Icon(ft.Icons.EDIT_OUTLINED), title=ft.Text("Editar venda"), on_click=editar),
-                ft.ListTile(leading=ft.Icon(ft.Icons.DELETE_OUTLINE, color=VERMELHO),
-                            title=ft.Text("Excluir venda", color=VERMELHO), on_click=excluir)]))
+        return [item_popup("Editar venda", ft.Icons.EDIT_OUTLINED, editar),
+                item_popup("Excluir venda", ft.Icons.DELETE_OUTLINE, excluir, VERMELHO)]
 
     def excluir_lote(self, l):
         msg = f"Excluir {l['ticker']}" + (" e todas as vendas dele?" if l["vendas"] else "?")
