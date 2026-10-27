@@ -709,23 +709,41 @@ def pilula(pai, texto, fundo, cor_texto, fonte=11):
                         corner_radius=10, height=24)
 
 
-COLUNAS_RADAR = [  # título, largura mínima, peso, alinhamento
-    ("ATIVO", 230, 3, "w"), ("COTAÇÃO", 100, 1, "e"), ("MÉDIA 6 MESES", 110, 1, "e"), ("ATR (14)", 90, 1, "e"),
-    ("ATR%", 70, 1, "e"), ("RISCO", 180, 1, "center"), ("", 240, 0, "e")]
-ALINHAR = {"w": "w", "e": "e", "center": ""}
+COLUNAS_RADAR = [  # título, largura fixa da célula, peso (sobra de espaço), alinhamento
+    ("ATIVO", 290, 3, "w"), ("COTAÇÃO", 105, 1, "e"), ("MÉDIA 6 MESES", 115, 1, "e"), ("ATR (14)", 90, 1, "e"),
+    ("ATR%", 75, 1, "e"), ("RISCO", 185, 1, "center"), ("", 250, 0, "e")]
+ANCORA = {"w": dict(relx=0, anchor="w"), "e": dict(relx=1, anchor="e"), "center": dict(relx=0.5, anchor="center")}
+ALTURA_LINHA_RADAR = 58
 
 
 def colunas_radar(frame):
-    for i, (_, minimo, peso, _) in enumerate(COLUNAS_RADAR):
-        frame.grid_columnconfigure(i, minsize=minimo, weight=peso)
+    for i, (_, _, peso, _) in enumerate(COLUNAS_RADAR):
+        frame.grid_columnconfigure(i, weight=peso)
+
+
+def celulas_radar(linha, altura):
+    """Uma célula de tamanho fixo por coluna: o conteúdo (logo, nome, botões) não muda a largura das colunas,
+    então cabeçalho e linhas ficam sempre alinhados."""
+    colunas_radar(linha)
+    celulas = []
+    for i, (_, largura, _, alinhar) in enumerate(COLUNAS_RADAR):
+        c = ctk.CTkFrame(linha, fg_color="transparent", width=largura, height=altura)
+        c.grid(row=0, column=i, sticky="ew", padx=4)
+        c.grid_propagate(False)
+        c.pack_propagate(False)
+        celulas.append((c, alinhar))
+    return celulas
+
+
+def por_na_celula(celula, w):
+    c, alinhar = celula
+    w.place(rely=0.5, **ANCORA[alinhar])
 
 
 def cabecalho_radar(pai):
     f = ctk.CTkFrame(pai, fg_color=C["card2"], corner_radius=8)
-    colunas_radar(f)
-    for i, (titulo, _, _, alinhar) in enumerate(COLUNAS_RADAR):
-        ctk.CTkLabel(f, text=titulo, font=F(11, "bold"), text_color=C["muted"]).grid(
-            row=0, column=i, sticky=ALINHAR[alinhar], padx=12, pady=8)
+    for cel, (titulo, _, _, _) in zip(celulas_radar(f, 34), COLUNAS_RADAR):
+        por_na_celula(cel, ctk.CTkLabel(cel[0], text=titulo, font=F(11, "bold"), text_color=C["muted"]))
     return f
 
 
@@ -734,9 +752,9 @@ class LinhaRadar(ctk.CTkFrame):
         super().__init__(pai, fg_color=C["card"], corner_radius=8)
         self.ticker = ticker
         self.amigo = ao_importar is not None
-        colunas_radar(self)
-        ativo = ctk.CTkFrame(self, fg_color="transparent")
-        ativo.grid(row=0, column=0, sticky="w", padx=(4 if ao_arrastar else 12, 12), pady=8)
+        cel = celulas_radar(self, ALTURA_LINHA_RADAR)
+        ativo = ctk.CTkFrame(cel[0][0], fg_color="transparent")
+        por_na_celula(cel[0], ativo)
         if ao_arrastar:  # alça para arrastar e mudar a posição do ativo no radar
             alca = ctk.CTkLabel(ativo, text="⠿", width=22, font=F(18, "bold"), text_color=C["muted"], cursor="fleur")
             alca.pack(side="left", padx=(0, 6))
@@ -746,20 +764,21 @@ class LinhaRadar(ctk.CTkFrame):
         self.lb_logo.pack(side="left", padx=(0, 10))
         txt = ctk.CTkFrame(ativo, fg_color="transparent")
         txt.pack(side="left")
-        ctk.CTkLabel(txt, text=ticker, font=F(14, "bold"), text_color=C["texto"], anchor="w").pack(anchor="w")
+        ctk.CTkLabel(txt, text=ticker, font=F(14, "bold"), text_color=C["texto"], anchor="w", height=20).pack(
+            anchor="w")
         self.lb_nome = ctk.CTkLabel(txt, text="", font=F(11), text_color=C["muted"], anchor="w", justify="left",
-                                    wraplength=180)
+                                    wraplength=200, height=16)
         self.lb_nome.pack(anchor="w")
         self.vals = {}
         for i, k in enumerate(("preco", "media6m", "atr", "atr_pct"), start=1):
-            v = ctk.CTkLabel(self, text="—", font=F(14 if k == "preco" else 13, "bold"), text_color=C["texto"])
-            v.grid(row=0, column=i, sticky="e", padx=12)
+            v = ctk.CTkLabel(cel[i][0], text="—", font=F(14 if k == "preco" else 13, "bold"), text_color=C["texto"])
+            por_na_celula(cel[i], v)
             self.vals[k] = v
-        self.badge = ctk.CTkLabel(self, text="", font=F(11, "bold"), corner_radius=10, height=24,
+        self.badge = ctk.CTkLabel(cel[5][0], text="", font=F(11, "bold"), corner_radius=10, height=24,
                                   fg_color="transparent")
-        self.badge.grid(row=0, column=5, padx=12)
-        acoes = ctk.CTkFrame(self, fg_color="transparent")
-        acoes.grid(row=0, column=6, sticky="e", padx=12)
+        por_na_celula(cel[5], self.badge)
+        acoes = ctk.CTkFrame(cel[6][0], fg_color="transparent")
+        por_na_celula(cel[6], acoes)
         self.bt_vender = self.bt_importar = None
         if self.amigo:
             self.bt_importar = botao(acoes, "+  Meu radar", lambda: ao_importar(ticker), "accent", altura=30,
@@ -770,6 +789,10 @@ class LinhaRadar(ctk.CTkFrame):
         self.bt_vender = botao(acoes, "Vender", lambda: ao_vender(ticker), "neutro", altura=30, fonte=12, width=74)
         self.bt_vender.pack(side="left", padx=6)
         botao(acoes, "Remover", lambda: ao_remover(ticker), "perigo", altura=30, fonte=12, width=74).pack(side="left")
+
+    def nome(self, texto, cor_):
+        """Nome da empresa (ou erro) em no máximo duas linhas, para não estourar a altura da linha."""
+        self.lb_nome.configure(text=cortar(texto, 56), text_color=cor_)
 
     def limpar(self):
         for v in self.vals.values():
@@ -783,14 +806,14 @@ class LinhaRadar(ctk.CTkFrame):
             self.bt_importar.configure(text="✓  No meu radar" if ja_tenho else "+  Meu radar",
                                        state="disabled" if ja_tenho else "normal")
         if dados is None:
-            self.lb_nome.configure(text=nome or "Carregando…", text_color=C["muted"])
+            self.nome(nome or "Carregando…", C["muted"])
             self.limpar()
             return
         if dados.get("erro"):
-            self.lb_nome.configure(text=dados["erro"], text_color=C["danger"])
+            self.nome(dados["erro"], C["danger"])
             self.limpar()
             return
-        self.lb_nome.configure(text=dados.get("nome") or nome or "", text_color=C["muted"])
+        self.nome(dados.get("nome") or nome or "", C["muted"])
         self.vals["preco"].configure(text=brl(dados["preco"]))
         self.vals["media6m"].configure(text=brl(dados["media6m"]))
         self.vals["atr"].configure(text=brl(dados["atr"]) if dados.get("atr") else "—")
@@ -804,6 +827,26 @@ class LinhaRadar(ctk.CTkFrame):
 
 
 TAM_LOGO = 36
+
+
+def imagem_quadrada(dados, tam):
+    """Logo/ícone sempre com tam x tam (proporção mantida, sobra transparente), para todas as linhas ficarem iguais."""
+    try:
+        import io
+        from PIL import Image
+        im = Image.open(io.BytesIO(dados)).convert("RGBA")
+        im.thumbnail((tam * 2, tam * 2), Image.LANCZOS)
+        quadro = Image.new("RGBA", (tam * 2, tam * 2), (0, 0, 0, 0))
+        quadro.paste(im, ((tam * 2 - im.width) // 2, (tam * 2 - im.height) // 2), im)
+        return ctk.CTkImage(light_image=quadro, dark_image=quadro, size=(tam, tam))
+    except Exception:
+        pass
+    try:  # sem Pillow: reduz pelo fator inteiro mais próximo
+        img = tk.PhotoImage(data=base64.b64encode(dados).decode())
+        passo = max(1, -(-img.width() // tam))
+        return img.subsample(passo) if passo > 1 else img
+    except Exception:
+        return None
 
 
 def selo_logo(pai, ticker, tam=TAM_LOGO):
@@ -1022,7 +1065,7 @@ class App(ctk.CTk):
         super().__init__()
         self.title(f"Calculadora DARF {VERSAO}")
         self.geometry("1360x860")
-        self.minsize(1150, 720)
+        self.minsize(1250, 720)
         self.configure(fg_color=C["bg"])
         icone = recurso("assets/icone.ico")
         if sys.platform == "win32" and icone.exists():
@@ -1762,15 +1805,7 @@ class App(ctk.CTk):
         self.esperando[chave] = [ao_carregar]
 
         def pronto(b):
-            img = None
-            if b:
-                try:
-                    img = tk.PhotoImage(data=base64.b64encode(b).decode())
-                    passo = max(1, round(img.width() / tam))
-                    if passo > 1:
-                        img = img.subsample(passo)
-                except Exception:
-                    img = None
+            img = imagem_quadrada(b, tam) if b else None
             self.imagens[chave] = img
             for cb in self.esperando.pop(chave, []):
                 if img is not None:
