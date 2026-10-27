@@ -23,6 +23,7 @@ min_sdk_version = 24
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true
 "android.permission.REQUEST_INSTALL_PACKAGES" = true
+"android.permission.POST_NOTIFICATIONS" = true
 
 [tool.flet.android.signing]
 key_alias = "calculadoradarf"

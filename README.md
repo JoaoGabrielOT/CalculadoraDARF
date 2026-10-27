@@ -7,7 +7,8 @@ App para Windows e Android que registra operações com ações e BDRs e calcula
 - Caixa: saldo em conta, impacto de cada ordem e agenda de liquidações (D+2 em dias úteis da B3)
 - Sincronização com uma planilha no Google Drive, compartilhada entre o computador e o celular
 - Compartilhamento com amigos (somente leitura)
-- Radar de ações com cotação, média de 6 meses, ATR e classificação de risco
+- Radar de ações com logo da empresa, cotação, média de 6 meses, ATR e classificação de risco
+- Notícias dos ativos do radar (Google Notícias), com notificação das relevantes enquanto o app está aberto ou em segundo plano
 - Atualização automática pelas releases deste repositório
 
 ## Download
@@ -24,6 +25,7 @@ Na [última release](../../releases/latest):
 | `nucleo.py` | Cálculo, armazenamento local, planilha e mesclagem entre aparelhos (compartilhado) |
 | `google_sync.py` | Login Google, Sheets e Drive (compartilhado) |
 | `mercado.py` | Cotações e indicadores do radar (compartilhado) |
+| `noticias.py` | Notícias do radar, relevância e logos (compartilhado) |
 | `atualizador.py` | Verificação e download de novas versões (compartilhado) |
 | `calculadora_darf.py`, `tema.py`, `componentes.py` | App Windows (CustomTkinter) |
 | `android/main.py` | App Android (Flet) |

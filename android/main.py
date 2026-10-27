@@ -22,6 +22,7 @@ for _p in (AQUI, AQUI.parent):
 import atualizador as upd  # noqa: E402
 import google_sync as gs  # noqa: E402
 import mercado as mk  # noqa: E402
+import noticias as nt  # noqa: E402
 import nucleo as nc  # noqa: E402
 from nucleo import brl, fmt_data, fmt_mes  # noqa: E402
 from versao import VERSAO  # noqa: E402
@@ -35,7 +36,8 @@ MUTED = ft.Colors.ON_SURFACE_VARIANT
 PRIMARIO = ft.Colors.ON_SURFACE        # ação primária neutra: inverte com o tema (clara no escuro, escura no claro)
 PRIMARIO_TXT = ft.Colors.SURFACE
 NOME_APK = "CalculadoraDARF.apk"
-ABA_APURACAO, ABA_CAIXA, ABA_RADAR, ABA_CONTA = range(4)
+ABA_APURACAO, ABA_CAIXA, ABA_RADAR, ABA_NOTICIAS, ABA_CONTA = range(5)
+CANAL_NOTICIAS = "noticias_radar"
 URL_RELEASES = f"https://github.com/{upd.REPOSITORIO}/releases/latest"
 ORD_LOTES = [("cadastro", "Cadastro"), ("data", "Data da compra"), ("ticker", "Ticker"), ("qtd", "Quantidade"),
              ("preco", "Preço de compra"), ("atual", "Preço atual"), ("total", "Total"),
@@ -86,7 +88,63 @@ def instalar_apk(caminho):
     ctx.startActivity(intent)
 
 
+def permitir_notificacoes():
+    """Android 13+: pede a permissão de notificações (o sistema só mostra o pedido enquanto ela não foi negada)."""
+    from jnius import autoclass
+    if autoclass("android.os.Build$VERSION").SDK_INT < 33:
+        return True
+    ctx = atividade()
+    perm = "android.permission.POST_NOTIFICATIONS"
+    if ctx.checkSelfPermission(perm) == autoclass("android.content.pm.PackageManager").PERMISSION_GRANTED:
+        return True
+    ctx.requestPermissions([perm], 7101)
+    return False
+
+
+def notificar_android(numero, titulo, corpo, link=""):
+    """Notificação do sistema; tocar nela abre o link da notícia (ou o app, no resumo)."""
+    from jnius import autoclass
+    ctx = atividade()
+    Context = autoclass("android.content.Context")
+    Builder = autoclass("android.app.Notification$Builder")
+    Intent = autoclass("android.content.Intent")
+    PendingIntent = autoclass("android.app.PendingIntent")
+    gerente = ctx.getSystemService(Context.NOTIFICATION_SERVICE)
+    if autoclass("android.os.Build$VERSION").SDK_INT >= 26:
+        Canal = autoclass("android.app.NotificationChannel")
+        importancia = autoclass("android.app.NotificationManager").IMPORTANCE_DEFAULT
+        gerente.createNotificationChannel(Canal(CANAL_NOTICIAS, "Notícias do radar", importancia))
+        b = Builder(ctx, CANAL_NOTICIAS)
+    else:
+        b = Builder(ctx)
+    if link:
+        intent = Intent(Intent.ACTION_VIEW, autoclass("android.net.Uri").parse(link))
+    else:
+        intent = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName())
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    pi = PendingIntent.getActivity(ctx, numero, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT)
+    b.setSmallIcon(autoclass("android.R$drawable").ic_dialog_info)
+    b.setContentTitle(titulo)
+    b.setContentText(corpo)
+    b.setStyle(autoclass("android.app.Notification$BigTextStyle")().bigText(corpo))
+    b.setAutoCancel(True)
+    b.setContentIntent(pi)
+    gerente.notify(numero, b.build())
+
+
 # ---------------------------------------------------------------- componentes visuais
+
+def logo_ativo(ticker, tam=40):
+    """Logo da empresa (PNG; se faltar, SVG); sem nenhuma, as iniciais do ticker."""
+    pngs, svg = nt.urls_logo(ticker)
+    reserva = ft.Container(width=tam, height=tam, alignment=ft.Alignment.CENTER, bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                           content=texto(nt.iniciais(ticker), 10, ft.FontWeight.BOLD, MUTED))
+    img = ft.Image(src=svg, width=tam, height=tam, fit=ft.BoxFit.CONTAIN, error_content=reserva)
+    for url in reversed(pngs):
+        img = ft.Image(src=url, width=tam, height=tam, fit=ft.BoxFit.CONTAIN, error_content=img)
+    return ft.Container(width=tam, height=tam, border_radius=ft.BorderRadius.all(tam * 0.22),
+                        clip_behavior=ft.ClipBehavior.ANTI_ALIAS, content=img)
+
 
 def texto(valor, tam=14, peso=None, cor=None, **kw):
     return ft.Text(valor, size=tam, weight=peso, color=cor, **kw)
@@ -322,6 +380,10 @@ class App:
         self.ultimo_erro = ""
         self.trava_sync = threading.Lock()
         self.launcher = ft.UrlLauncher()
+        self.noticias_rodando = False
+        self.noticias_msg = ""
+        self.f_noticias = {"tema": "Todas", "ticker": "Todos"}
+        self.cfg.setdefault("noticias_notificar", True)
 
         page.title = "Calculadora DARF"
         page.theme = ft.Theme(color_scheme_seed=VERDE)
@@ -335,16 +397,20 @@ class App:
             ft.NavigationBarDestination(icon=ft.Icons.RECEIPT_LONG, label="Apuração"),
             ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET, label="Caixa"),
             ft.NavigationBarDestination(icon=ft.Icons.INSIGHTS, label="Radar"),
+            ft.NavigationBarDestination(icon=ft.Icons.NEWSPAPER, label="Notícias"),
             ft.NavigationBarDestination(icon=ft.Icons.ACCOUNT_CIRCLE, label="Conta")])
-        # as três telas ficam lado a lado: dá para trocar arrastando para os lados
-        self.paginas = [ft.Container(expand=True) for _ in range(4)]
+        # as telas ficam lado a lado: dá para trocar arrastando para os lados
+        self.paginas = [ft.Container(expand=True) for _ in range(5)]
         self.pv = ft.PageView(controls=self.paginas, selected_index=0, expand=True, on_change=self.pagina_arrastada)
         page.add(self.pv)
         self.render(todas=True)
+        self.marcar_badge()
 
         if self.g.tem_token():
             page.run_thread(self.conectar_token)
         page.run_thread(self.verificar_atualizacao)
+        if self.cfg.get("noticias_notificar", True) and no_android():
+            page.run_thread(self.pedir_permissao_notificacao)
         threading.Thread(target=self.laco, daemon=True).start()
 
     # ------------------------------------------------------------ utilidades
@@ -378,6 +444,12 @@ class App:
             self.page.run_task(self.pv.go_to_page, aba, ft.Duration(milliseconds=280))
         if aba == ABA_RADAR:
             self.atualizar_radar()
+        if aba == ABA_NOTICIAS:
+            nt.marcar_lidas()
+            self.marcar_badge()
+            self.atualizar_noticias()
+        elif anterior == ABA_NOTICIAS:
+            self.render(todas=False, indice=ABA_NOTICIAS)  # some o selo "Nova" das já vistas
 
     def trocar_aba(self, e):
         self.ir_para(e.control.selected_index)
@@ -397,11 +469,12 @@ class App:
         if idx != self.aba:
             self.ir_para(idx, animar=False)
 
-    def render(self, todas=False):
-        telas = (self.tela_apuracao, self.tela_caixa, self.tela_radar, self.tela_conta)
+    def render(self, todas=False, indice=None):
+        telas = (self.tela_apuracao, self.tela_caixa, self.tela_radar, self.tela_noticias, self.tela_conta)
+        alvo = self.aba if indice is None else indice
         try:
             for i, tela in enumerate(telas):
-                if todas or i == self.aba:
+                if todas or i == alvo:
                     self.paginas[i].content = tela()
             editavel = self.aba == ABA_APURACAO and not self.visao and not self.d["fechado"]
             self.page.floating_action_button = ft.FloatingActionButton(
@@ -1351,6 +1424,7 @@ class App:
             self.agendar_sync()
             self.render()
             self.atualizar_radar(apenas=[t])
+            self.atualizar_noticias()
 
         campo.on_submit = adicionar
         legenda = ft.Row(wrap=True, spacing=6, run_spacing=6, controls=[
@@ -1397,7 +1471,7 @@ class App:
         else:
             corpo = [texto(erro or "Carregando cotação…", 13, cor=VERMELHO if erro else MUTED)]
         return bloco(ft.Column(spacing=10, controls=[
-            ft.Row(controls=[ft.Column(spacing=0, expand=True, controls=[
+            ft.Row(spacing=12, controls=[logo_ativo(t), ft.Column(spacing=0, expand=True, controls=[
                 texto(t, 16, ft.FontWeight.BOLD), texto(nome, 12, cor=MUTED, max_lines=1,
                                                         overflow=ft.TextOverflow.ELLIPSIS)])]),
             *corpo,
@@ -1409,6 +1483,137 @@ class App:
                 ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=VERMELHO, tooltip="Remover do radar",
                               on_click=lambda e: self.remover_radar(t))])]), padding=14)
 
+    # ------------------------------------------------------------ notícias
+    def tela_noticias(self):
+        d = nt.ler_estado()
+        radar = [r["ticker"] for r in self.cfg["radar"]]
+        f = self.f_noticias
+        if f["ticker"] not in radar:
+            f["ticker"] = "Todos"
+
+        def definir(chave, valor):
+            f[chave] = valor
+            self.render()
+
+        def notificar(e):
+            self.cfg["noticias_notificar"] = bool(e.control.value)
+            nc.gravar_config(self.cfg)
+            if e.control.value and no_android():
+                self.page.run_thread(self.pedir_permissao_notificacao)
+
+        if self.noticias_rodando:
+            status = "Buscando notícias…"
+        elif self.noticias_msg:
+            status = self.noticias_msg
+        elif d["hora"]:
+            status = f"Atualizado às {datetime.fromtimestamp(d['hora']):%H:%M} · Google Notícias, últimos 7 dias"
+            if d.get("erros"):
+                status += f" · falha em {', '.join(sorted(d['erros']))}"
+        else:
+            status = "Google Notícias · ativos do Radar de Ações"
+        cabecalho = bloco(ft.Column(spacing=8, controls=[
+            ft.Row(controls=[texto("Notícias do radar", 18, ft.FontWeight.BOLD), ft.Container(expand=True),
+                             ft.IconButton(ft.Icons.REFRESH, tooltip="Atualizar",
+                                           on_click=lambda e: self.atualizar_noticias(forcar=True))]),
+            texto(status, 12, cor=VERMELHO if d.get("erros") and not self.noticias_rodando else MUTED),
+            ft.Row(spacing=8, wrap=True, run_spacing=8, controls=[
+                chip_menu("Mostrar", f["tema"], [("Todas", "Todas"), ("Relevantes", "Relevantes")],
+                          lambda k: definir("tema", k), "Todas", sempre_valor=True),
+                chip_menu("Ativo", f["ticker"], [("Todos", "Todos")] + [(t, t) for t in radar],
+                          lambda k: definir("ticker", k), "Todos")]),
+            ft.Row(controls=[ft.Column(spacing=0, expand=True, controls=[
+                texto("Notificar notícias relevantes", 14),
+                texto("Com o app aberto ou em segundo plano", 11, cor=MUTED)]),
+                ft.Switch(value=self.cfg.get("noticias_notificar", True), on_change=notificar)])]))
+        itens = [cabecalho]
+        lista = [i for i in d["itens"] if set(i["tickers"]) & set(radar)
+                 and (f["tema"] == "Todas" or i["temas"]) and (f["ticker"] == "Todos" or f["ticker"] in i["tickers"])]
+        if not radar:
+            vazio = "Adicione ativos no Radar para ver as notícias deles aqui."
+        elif not d["hora"]:
+            vazio = "Buscando notícias…" if self.noticias_rodando else "Nenhuma busca feita ainda."
+        else:
+            vazio = "Nenhuma notícia nos últimos 7 dias com esse filtro."
+        if not lista:
+            itens.append(texto(vazio, 13, cor=MUTED))
+        for it in lista[:60]:
+            itens.append(self.card_noticia(it, nt.eh_nova(d, it)))
+        itens.append(ft.Container(height=24))
+        return ft.ListView(controls=itens, padding=ft.Padding.all(16), spacing=10, expand=True)
+
+    def card_noticia(self, it, nova):
+        tags = [pilula("Nova", VERDE, "#ffffff", 10)] if nova else []
+        tags += [pilula(t, ft.Colors.with_opacity(0.15, VERDE), VERDE, 10) for t in it["temas"][:2]]
+        fav = nt.url_favicon(it)
+        meta = [ft.Image(src=fav, width=14, height=14, error_content=ft.Container(width=0))] if fav else []
+        meta.append(texto(" · ".join(x for x in (it["fonte"], nt.tempo_relativo(it["data"]),
+                                                 ", ".join(it["tickers"])) if x), 11, cor=MUTED,
+                          max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True))
+        corpo = [texto(it["titulo"], 14, ft.FontWeight.BOLD, max_lines=4, overflow=ft.TextOverflow.ELLIPSIS),
+                 ft.Row(spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=meta)]
+        if tags:
+            corpo.append(ft.Row(spacing=6, wrap=True, run_spacing=6, controls=tags))
+        return ft.Container(
+            padding=ft.Padding.all(12), border_radius=ft.BorderRadius.all(16), bgcolor=ft.Colors.SURFACE_CONTAINER,
+            ink=True, on_click=lambda e, u=it["link"]: self.abrir_url(u),
+            content=ft.Row(spacing=12, vertical_alignment=ft.CrossAxisAlignment.START, controls=[
+                logo_ativo(it["tickers"][0], 40), ft.Column(spacing=6, expand=True, controls=corpo)]))
+
+    def marcar_badge(self):
+        n = 0 if self.aba == ABA_NOTICIAS else nt.nao_lidas(nt.ler_estado())
+        destino = self.page.navigation_bar.destinations[ABA_NOTICIAS]
+        destino.icon = ft.Icon(ft.Icons.NEWSPAPER, badge=str(n) if n else None)
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
+    def atualizar_noticias(self, forcar=False):
+        if self.noticias_rodando or not self.cfg["radar"]:
+            return
+        d = nt.ler_estado()
+        estreia = any(r["ticker"] not in d["conhecidos"] for r in self.cfg["radar"])
+        if not forcar and not estreia and not nt.precisa_atualizar(d):
+            return
+        self.noticias_rodando = True
+        radar = [dict(r) for r in self.cfg["radar"]]
+
+        def trabalho():
+            novas = []
+            try:
+                if self.aba == ABA_NOTICIAS:
+                    self.render()
+                _, novas = nt.atualizar(radar)
+                self.noticias_msg = ""
+            except Exception as e:
+                self.noticias_msg = f"Não foi possível buscar notícias: {str(e)[:120]}"
+            finally:
+                self.noticias_rodando = False
+            if self.aba == ABA_NOTICIAS:
+                nt.marcar_lidas()
+            self.marcar_badge()
+            self.render(indice=ABA_NOTICIAS)
+            if novas and self.cfg.get("noticias_notificar", True):
+                self.notificar(novas)
+
+        self.page.run_thread(trabalho)
+
+    def notificar(self, novas):
+        for titulo, corpo, link in nt.textos_notificacao(novas):
+            if no_android():
+                try:
+                    notificar_android(abs(hash(link or titulo)) % 2_000_000_000, titulo, corpo, link)
+                    continue
+                except Exception:
+                    traceback.print_exc()
+            self.aviso(f"{titulo}: {corpo}")
+
+    def pedir_permissao_notificacao(self):
+        try:
+            permitir_notificacoes()
+        except Exception:
+            traceback.print_exc()
+
     def remover_radar(self, t):
         def remover():
             with nc.TRAVA:
@@ -1416,7 +1621,7 @@ class App:
                 nc.gravar_config(self.cfg)
             self.radar_dados.pop(t, None)
             self.agendar_sync()
-            self.render()
+            self.render(todas=True)
 
         self.perguntar("Remover do radar", f"Remover {t} do radar?", "Remover", remover, perigo=True)
 
@@ -1792,6 +1997,7 @@ class App:
                     self.conectar_token()
                 if self.aba == ABA_RADAR and time.time() - self.radar_hora > 60:
                     self.atualizar_radar()
+                self.atualizar_noticias()
                 if date.today() != getattr(self, "dia_caixa", date.today()):  # virada do dia: liquidações
                     self.render(todas=True)
                 if self.aba == 0:

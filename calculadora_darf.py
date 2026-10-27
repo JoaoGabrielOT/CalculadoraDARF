@@ -1,7 +1,9 @@
+import base64
 import calendar
 import json
 import queue
 import re
+import subprocess
 import sys
 import threading
 import uuid
@@ -18,6 +20,7 @@ import atualizador as upd
 import google_sync as gs
 import nucleo as nc
 import mercado as mk
+import noticias as nt
 from componentes import CampoData, SeletorMes
 from tema import C, F, FONTE, botao, cor, estilo_botao
 from nucleo import (DARF_MINIMO, LIMITE_ISENCAO, apurar, brl, carregar, fmt_data, fmt_mes, gravar_config,
@@ -29,6 +32,8 @@ from versao import VERSAO
 PAGINA_APURACAO = "Apuração / DARF"
 PAGINA_RADAR = "Radar de Ações"
 PAGINA_CAIXA = "Caixa"
+PAGINA_NOTICIAS = "Notícias"
+AUMID = "JoaoGabrielOT.CalculadoraDARF"  # identificação do app nas notificações do Windows
 
 BASE = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
 DADOS = BASE / "dados"
@@ -730,9 +735,13 @@ class LinhaRadar(ctk.CTkFrame):
         colunas_radar(self)
         ativo = ctk.CTkFrame(self, fg_color="transparent")
         ativo.grid(row=0, column=0, sticky="w", padx=12, pady=8)
-        ctk.CTkLabel(ativo, text=ticker, font=F(14, "bold"), text_color=C["texto"], anchor="w").pack(anchor="w")
-        self.lb_nome = ctk.CTkLabel(ativo, text="", font=F(11), text_color=C["muted"], anchor="w", justify="left",
-                                    wraplength=220)
+        self.lb_logo = selo_logo(ativo, ticker)
+        self.lb_logo.pack(side="left", padx=(0, 10))
+        txt = ctk.CTkFrame(ativo, fg_color="transparent")
+        txt.pack(side="left")
+        ctk.CTkLabel(txt, text=ticker, font=F(14, "bold"), text_color=C["texto"], anchor="w").pack(anchor="w")
+        self.lb_nome = ctk.CTkLabel(txt, text="", font=F(11), text_color=C["muted"], anchor="w", justify="left",
+                                    wraplength=180)
         self.lb_nome.pack(anchor="w")
         self.vals = {}
         for i, k in enumerate(("preco", "media6m", "atr", "atr_pct"), start=1):
@@ -775,6 +784,105 @@ class LinhaRadar(ctk.CTkFrame):
             self.badge.configure(text=f"  {rotulo}  ", fg_color=fundo, text_color=txt)
         else:
             self.badge.configure(text="", fg_color="transparent")
+
+
+TAM_LOGO = 36
+
+
+def selo_logo(pai, ticker, tam=TAM_LOGO):
+    """Quadrado com as iniciais do ativo; recebe a logo quando ela chega (ver App.imagem)."""
+    return ctk.CTkLabel(pai, text=nt.iniciais(ticker), width=tam, height=tam, corner_radius=8, fg_color=C["neutro"],
+                        text_color=C["muted"], font=F(10, "bold"))
+
+
+def por_logo(rotulo, img):
+    try:
+        if rotulo.winfo_exists():
+            rotulo.configure(image=img, text="", fg_color="transparent")
+    except Exception:
+        pass
+
+
+def ligar_clique(w, acao):
+    """Clique em qualquer parte do cartão (inclusive nos rótulos internos) executa a ação."""
+    try:
+        w.bind("<Button-1>", lambda e: acao(), add="+")
+        w.configure(cursor="hand2")
+    except Exception:
+        pass
+    for filho in w.winfo_children():
+        ligar_clique(filho, acao)
+
+
+class CardNoticia(ctk.CTkFrame):
+    def __init__(self, pai, app, item, nova):
+        super().__init__(pai, fg_color=C["card2"], corner_radius=10)
+        self.grid_columnconfigure(1, weight=1)
+        logo = selo_logo(self, item["tickers"][0], 40)
+        logo.grid(row=0, column=0, rowspan=2, sticky="n", padx=(14, 12), pady=14)
+        app.imagem("t:" + item["tickers"][0], lambda t=item["tickers"][0]: nt.logo_png(t), 40,
+                   lambda img: por_logo(logo, img))
+        ctk.CTkLabel(self, text=item["titulo"], font=F(14, "bold"), text_color=C["texto"], anchor="w",
+                     justify="left", wraplength=900).grid(row=0, column=1, sticky="ew", pady=(12, 2))
+        meta = ctk.CTkFrame(self, fg_color="transparent")
+        meta.grid(row=1, column=1, sticky="w", pady=(0, 12))
+        fav = ctk.CTkLabel(meta, text="", width=16, height=16)
+        fav.pack(side="left", padx=(0, 6))
+        app.imagem("f:" + nt.dominio(item.get("fonte_url", "")), lambda: nt.favicon_png(item), 16,
+                   lambda img: por_logo(fav, img))
+        ctk.CTkLabel(meta, text=" · ".join(x for x in (item["fonte"], nt.tempo_relativo(item["data"]),
+                                                       ", ".join(item["tickers"])) if x),
+                     font=F(12), text_color=C["muted"]).pack(side="left")
+        tags = ctk.CTkFrame(self, fg_color="transparent")
+        tags.grid(row=0, column=2, rowspan=2, sticky="ne", padx=14, pady=14)
+        if nova:
+            pilula(tags, "Nova", C["accent"], "#ffffff").pack(side="left", padx=(0, 6))
+        for t in item["temas"][:2]:
+            pilula(tags, t, C["accent_bg"], C["accent"]).pack(side="left", padx=(0, 6))
+        ligar_clique(self, lambda: webbrowser.open(item["link"]))
+
+
+def registrar_notificacoes(icone):
+    """Registra o nome e o ícone do app para as notificações do Windows (apenas no usuário atual)."""
+    if sys.platform != "win32":
+        return
+    try:
+        import winreg
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\AppUserModelId\{AUMID}") as k:
+            winreg.SetValueEx(k, "DisplayName", 0, winreg.REG_SZ, "Calculadora DARF")
+            if icone:
+                winreg.SetValueEx(k, "IconUri", 0, winreg.REG_SZ, str(icone))
+    except Exception:
+        pass
+
+
+def xml_attr(v):
+    return (v.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+            .replace("'", "&apos;"))
+
+
+def notificar_windows(titulo, corpo, link=""):
+    """Notificação nativa do Windows 10/11; clicar abre o link da notícia no navegador."""
+    if sys.platform != "win32":
+        return
+    abrir = f' activationType="protocol" launch="{xml_attr(link)}"' if link else ""
+    xml = (f'<toast{abrir}><visual><binding template="ToastGeneric"><text>{xml_attr(titulo)}</text>'
+           f'<text>{xml_attr(corpo)}</text></binding></visual></toast>')
+    script = (
+        "[void][Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
+        "ContentType = WindowsRuntime];"
+        "[void][Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime];"
+        "$x = New-Object Windows.Data.Xml.Dom.XmlDocument;"
+        f"$x.LoadXml('{xml.replace(chr(39), chr(39) * 2)}');"
+        f"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{AUMID}')"
+        ".Show([Windows.UI.Notifications.ToastNotification]::new($x))")
+    try:
+        subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+                          "-EncodedCommand", base64.b64encode(script.encode("utf-16-le")).decode()],
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 
 def erro_mercado(e):
@@ -837,6 +945,11 @@ class App(ctk.CTk):
         self.radar_cards = {}
         self.radar_rodando = False
         self.radar_espera = set()
+        self.imagens = {}       # "t:TICKER" / "f:dominio" -> PhotoImage (None = sem imagem)
+        self.esperando = {}
+        self.noticias_rodando = False
+        self.noticias_filtro = {"tema": "Todas", "ticker": "Todos os ativos"}
+        self.cfg.setdefault("noticias_notificar", True)
         self.pagina = "apuracao"
 
         self.grid_columnconfigure(0, weight=1)
@@ -850,6 +963,7 @@ class App(ctk.CTk):
         self.montar_corpo()
         self.montar_radar()
         self.montar_caixa()
+        self.montar_noticias()
         self.estilizar_tabelas()
         self.atualizar()
         self.atualizar_caixa()
@@ -860,6 +974,8 @@ class App(ctk.CTk):
         self.after(60000, self.tick_caixa)
         self.after(60000, self.tick_sync)
         self.after(60000, self.tick_radar)
+        self.after(8000, self.tick_noticias)
+        self.after(1500, self.preparar_notificacoes)
         if upd.pode_atualizar():
             upd.limpar_sobras()
             self.after(3000, self.verificar_atualizacao)
@@ -878,7 +994,7 @@ class App(ctk.CTk):
         self.lb_sub = ctk.CTkLabel(tit, text="", font=F(13), text_color=C["muted"])
         self.lb_sub.pack(anchor="w")
 
-        self.nav = ctk.CTkSegmentedButton(h, values=[PAGINA_APURACAO, PAGINA_CAIXA, PAGINA_RADAR],
+        self.nav = ctk.CTkSegmentedButton(h, values=[PAGINA_APURACAO, PAGINA_CAIXA, PAGINA_RADAR, PAGINA_NOTICIAS],
                                           command=self.trocar_pagina,
                                           height=38, font=F(13, "bold"), corner_radius=10,
                                           fg_color=C["neutro"], selected_color=C["accent"],
@@ -1314,9 +1430,10 @@ class App(ctk.CTk):
 
     # --- navegação
     def trocar_pagina(self, rotulo):
-        self.nav.set(rotulo)
+        if rotulo.startswith(PAGINA_NOTICIAS):  # o rótulo pode trazer a contagem: "Notícias (3)"
+            rotulo = PAGINA_NOTICIAS
         paginas = {PAGINA_APURACAO: ("apuracao", self.pg_apuracao), PAGINA_RADAR: ("radar", self.pg_radar),
-                   PAGINA_CAIXA: ("caixa", self.pg_caixa)}
+                   PAGINA_CAIXA: ("caixa", self.pg_caixa), PAGINA_NOTICIAS: ("noticias", self.pg_noticias)}
         for r, (_, pg) in paginas.items():
             if r != rotulo:
                 pg.grid_remove()
@@ -1327,6 +1444,13 @@ class App(ctk.CTk):
             self.atualizar_radar()
         elif self.pagina == "caixa":
             self.atualizar_caixa()
+        elif self.pagina == "noticias":
+            self.desenhar_noticias()
+            nt.marcar_lidas()
+            if nt.precisa_atualizar(nt.ler_estado()):
+                self.atualizar_noticias()
+        self.rotular_noticias()
+        self.nav.set(next(v for v in self.nav.cget("values") if v.startswith(rotulo)))
 
     # --- caixa (tesouraria)
     def montar_caixa(self):
@@ -1482,6 +1606,198 @@ class App(ctk.CTk):
         self.lb_radar_vazio = ctk.CTkLabel(self.lista_radar, text="Nenhum ativo no radar. Adicione um ticker acima.",
                                            font=F(13), text_color=C["muted"])
 
+    # --- imagens (logos e ícones das fontes)
+    def imagem(self, chave, baixar, tam, ao_carregar):
+        """Baixa a imagem uma vez (fora da interface) e entrega reduzida para cerca de tam px."""
+        img = self.imagens.get(chave, False)
+        if img is None:
+            return
+        if img is not False:
+            if img == "carregando":
+                self.esperando[chave].append(ao_carregar)
+            else:
+                ao_carregar(img)
+            return
+        self.imagens[chave] = "carregando"
+        self.esperando[chave] = [ao_carregar]
+
+        def pronto(b):
+            img = None
+            if b:
+                try:
+                    img = tk.PhotoImage(data=base64.b64encode(b).decode())
+                    passo = max(1, round(img.width() / tam))
+                    if passo > 1:
+                        img = img.subsample(passo)
+                except Exception:
+                    img = None
+            self.imagens[chave] = img
+            for cb in self.esperando.pop(chave, []):
+                if img is not None:
+                    cb(img)
+
+        def falhou(_):
+            self.imagens.pop(chave, None)
+            self.esperando.pop(chave, None)
+
+        self.bg(baixar, ok=pronto, erro=falhou)
+
+    # --- notícias
+    def montar_noticias(self):
+        pg = self.pg_noticias = ctk.CTkFrame(self, fg_color="transparent")
+        pg.grid_columnconfigure(0, weight=1)
+        pg.grid_rowconfigure(1, weight=1)
+        topo = self.card(pg)
+        topo.grid(row=0, column=0, sticky="ew", padx=24, pady=(0, 16))
+        linha1 = ctk.CTkFrame(topo, fg_color="transparent")
+        linha1.pack(fill="x", padx=20, pady=(16, 0))
+        esq = ctk.CTkFrame(linha1, fg_color="transparent")
+        esq.pack(side="left")
+        ctk.CTkLabel(esq, text="Notícias do radar", font=F(18, "bold"), text_color=C["texto"]).pack(anchor="w")
+        self.lb_noticias_status = ctk.CTkLabel(esq, text="Google Notícias · ativos do Radar de Ações", font=F(12),
+                                               text_color=C["muted"])
+        self.lb_noticias_status.pack(anchor="w")
+        dir_ = ctk.CTkFrame(linha1, fg_color="transparent")
+        dir_.pack(side="right")
+        self.sb_noticias = ctk.CTkSegmentedButton(
+            dir_, values=["Todas", "Relevantes"], command=lambda v: self.filtrar_noticias(tema=v), height=36,
+            font=F(12, "bold"), fg_color=C["neutro"], selected_color=C["accent"], selected_hover_color=C["accent_h"],
+            unselected_color=C["neutro"], unselected_hover_color=C["neutro_h"], text_color=C["texto"])
+        self.sb_noticias.set("Todas")
+        self.sb_noticias.pack(side="left")
+        self.om_noticias = ctk.CTkOptionMenu(
+            dir_, values=["Todos os ativos"], command=lambda v: self.filtrar_noticias(ticker=v), width=170, height=36,
+            font=F(12, "bold"), dropdown_font=F(12), corner_radius=8, fg_color=C["neutro"],
+            button_color=C["neutro_h"], button_hover_color=C["borda"], text_color=C["texto"])
+        self.om_noticias.pack(side="left", padx=8)
+        botao(dir_, "Atualizar", lambda: self.atualizar_noticias(forcar=True), "neutro", width=100).pack(side="left")
+        linha2 = ctk.CTkFrame(topo, fg_color="transparent")
+        linha2.pack(fill="x", padx=20, pady=(12, 16))
+        self.sw_notificar = ctk.CTkSwitch(linha2, text="Notificar notícias relevantes", font=F(12),
+                                          text_color=C["texto"], command=self.trocar_notificar,
+                                          progress_color=C["accent"])
+        if self.cfg.get("noticias_notificar", True):
+            self.sw_notificar.select()
+        self.sw_notificar.pack(side="left")
+        ctk.CTkLabel(linha2, text="Relevantes: fato relevante, resultado, proventos, recomendação, fusão/aquisição, "
+                                  "recompra, desdobramento, governança, jurídico e fortes oscilações. Clique na "
+                                  "notícia para abrir.", font=F(11), text_color=C["muted"]).pack(side="left", padx=16)
+        lista = self.card(pg)
+        lista.grid(row=1, column=0, sticky="nsew", padx=24, pady=(0, 24))
+        self.lista_noticias = ctk.CTkScrollableFrame(lista, fg_color="transparent")
+        self.lista_noticias.pack(fill="both", expand=True, padx=10, pady=12)
+        self.lista_noticias.grid_columnconfigure(0, weight=1)
+
+    def filtrar_noticias(self, tema=None, ticker=None):
+        if tema:
+            self.noticias_filtro["tema"] = tema
+        if ticker:
+            self.noticias_filtro["ticker"] = ticker
+        self.desenhar_noticias()
+
+    def trocar_notificar(self):
+        self.cfg["noticias_notificar"] = bool(self.sw_notificar.get())
+        gravar_config(self.cfg)
+
+    def desenhar_noticias(self):
+        if not hasattr(self, "lista_noticias"):
+            return
+        d = nt.ler_estado()
+        radar = [r["ticker"] for r in self.cfg["radar"]]
+        opcoes = ["Todos os ativos"] + radar
+        if self.noticias_filtro["ticker"] not in opcoes:
+            self.noticias_filtro["ticker"] = "Todos os ativos"
+        self.om_noticias.configure(values=opcoes)
+        self.om_noticias.set(self.noticias_filtro["ticker"])
+        f = self.noticias_filtro
+        itens = [i for i in d["itens"] if set(i["tickers"]) & set(radar)
+                 and (f["tema"] == "Todas" or i["temas"])
+                 and (f["ticker"] == "Todos os ativos" or f["ticker"] in i["tickers"])]
+        for w in self.lista_noticias.winfo_children():
+            w.destroy()
+        if not radar:
+            vazio = "Adicione ativos no Radar de Ações para ver as notícias deles aqui."
+        elif not d["hora"]:
+            vazio = "Buscando notícias…" if self.noticias_rodando else "Nenhuma busca feita ainda. Clique em Atualizar."
+        else:
+            vazio = "Nenhuma notícia nos últimos 7 dias com esse filtro."
+        if not itens:
+            ctk.CTkLabel(self.lista_noticias, text=vazio, font=F(13), text_color=C["muted"]).grid(row=0, column=0,
+                                                                                                pady=60)
+        for n, it in enumerate(itens[:80]):
+            CardNoticia(self.lista_noticias, self, it, nt.eh_nova(d, it)).grid(row=n, column=0, sticky="ew", pady=4,
+                                                                             padx=4)
+        self.status_noticias(d)
+
+    def status_noticias(self, d):
+        if not d["hora"] or self.noticias_rodando:
+            return
+        erros = d.get("erros") or {}
+        txt = f"Atualizado às {datetime.fromtimestamp(d['hora']):%H:%M} · Google Notícias, últimos 7 dias"
+        if erros:
+            txt += f" · falha em {', '.join(sorted(erros))}"
+        self.lb_noticias_status.configure(text=txt, text_color=C["danger"] if erros else C["muted"])
+
+    def rotular_noticias(self):
+        n = 0 if self.pagina == "noticias" else nt.nao_lidas(nt.ler_estado())
+        rotulo = f"{PAGINA_NOTICIAS} ({n})" if n else PAGINA_NOTICIAS
+        valores = [PAGINA_APURACAO, PAGINA_CAIXA, PAGINA_RADAR, rotulo]
+        if list(self.nav.cget("values")) != valores:
+            atual = self.nav.get()
+            self.nav.configure(values=valores)
+            self.nav.set(rotulo if atual.startswith(PAGINA_NOTICIAS) else atual)
+
+    def atualizar_noticias(self, forcar=False):
+        if self.noticias_rodando or not self.cfg["radar"]:
+            return
+        if not forcar and not nt.precisa_atualizar(nt.ler_estado()) and not self._radar_sem_noticias():
+            return
+        self.noticias_rodando = True
+        self.lb_noticias_status.configure(text="Buscando notícias…", text_color=C["muted"])
+        radar = [dict(r) for r in self.cfg["radar"]]
+        self.bg(lambda: nt.atualizar(radar), ok=self.noticias_chegaram, erro=self.noticias_erro)
+
+    def _radar_sem_noticias(self):
+        conhecidos = set(nt.ler_estado()["conhecidos"])
+        return any(r["ticker"] not in conhecidos for r in self.cfg["radar"])
+
+    def noticias_chegaram(self, res):
+        self.noticias_rodando = False
+        _, novas = res
+        if self.pagina == "noticias":
+            self.desenhar_noticias()
+            nt.marcar_lidas()
+        else:
+            self.status_noticias(nt.ler_estado())
+        self.rotular_noticias()
+        if novas and self.cfg.get("noticias_notificar", True):
+            for titulo, corpo, link in nt.textos_notificacao(novas):
+                notificar_windows(titulo, corpo, link)
+
+    def noticias_erro(self, e):
+        self.noticias_rodando = False
+        self.lb_noticias_status.configure(text=f"Não foi possível buscar notícias: {str(e)[:120]}",
+                                          text_color=C["danger"])
+
+    def tick_noticias(self):
+        try:
+            self.atualizar_noticias()
+        finally:
+            self.after(60000, self.tick_noticias)
+
+    def preparar_notificacoes(self):
+        """Ícone estável (fora da pasta temporária do .exe) para as notificações."""
+        icone = None
+        try:
+            origem = recurso("assets/icone_janela.png")
+            if origem.exists():
+                icone = DADOS / "icone_notificacao.png"
+                if not icone.exists() or icone.stat().st_size != origem.stat().st_size:
+                    icone.write_bytes(origem.read_bytes())
+        except OSError:
+            icone = None
+        registrar_notificacoes(icone)
+
     def custodia(self):
         return {l["ticker"] for l in carregar(mes_inicial())["lotes"] if restante(l) > 0}
 
@@ -1497,6 +1813,8 @@ class App(ctk.CTk):
             if card is None:
                 card = self.radar_cards[t] = LinhaRadar(self.lista_radar, t, self.radar_comprar, self.radar_vender,
                                                         self.remover_radar)
+                self.imagem("t:" + t, lambda t=t: nt.logo_png(t), TAM_LOGO,
+                            lambda img, c=card: por_logo(c.lb_logo, img))
             card.configure(fg_color=C["card"] if i % 2 == 0 else C["zebra"])
             card.grid(row=i, column=0, sticky="ew", pady=1)
             card.set(self.radar_dados.get(t), t in custodia, nomes.get(t, ""))
@@ -1520,6 +1838,7 @@ class App(ctk.CTk):
         self.agendar_sync()
         self.radar_redesenhar()
         self.atualizar_radar(apenas=[t])
+        self.atualizar_noticias()
 
     def remover_radar(self, t):
         if not confirmar(self, "Remover do radar", f"Remover {t} do radar?", sim="Remover", perigo=True):
@@ -1528,6 +1847,7 @@ class App(ctk.CTk):
         self.radar_dados.pop(t, None)
         self.agendar_sync()
         self.radar_redesenhar()
+        self.desenhar_noticias()
 
     def atualizar_radar(self, forcar=False, apenas=None):
         tickers = apenas or [r["ticker"] for r in self.cfg["radar"]]
