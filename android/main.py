@@ -127,14 +127,17 @@ def pilula(valor, fundo, cor="#ffffff", tam=11):
                         padding=ft.Padding.symmetric(horizontal=10, vertical=3), border_radius=ft.BorderRadius.all(12))
 
 
-def item_popup(rotulo, icone, ao_clicar, cor=None):
-    return ft.PopupMenuItem(on_click=ao_clicar, content=ft.Row(spacing=12, tight=True, controls=[
-        ft.Icon(icone, size=20, color=cor), ft.Text(rotulo, color=cor)]))
+def menu_cabecalho(titulo, subtitulo):
+    """Primeira linha do menu de contexto: identifica o item e não pode ser clicada."""
+    return ft.PopupMenuItem(disabled=True, content=ft.Column(spacing=0, tight=True, controls=[
+        texto(titulo, 14, ft.FontWeight.BOLD), texto(subtitulo, 12, cor=MUTED)]))
 
 
-def menu_popup(conteudo, itens):
-    """Toca no conteúdo e abre um menu flutuante ancorado nele, como o botão direito do Windows."""
-    return ft.PopupMenuButton(content=conteudo, items=itens, tooltip="", menu_position=ft.PopupMenuPosition.UNDER)
+def menu_contexto(conteudo, itens):
+    """Item que abre um menu flutuante sobre ele ao ser tocado, como o menu do botão direito do Windows."""
+    return ft.PopupMenuButton(content=conteudo, items=itens, expand=True, padding=0, tooltip="",
+                              menu_position=ft.PopupMenuPosition.UNDER, elevation=8,
+                              shape=ft.RoundedRectangleBorder(radius=12))
 
 
 def chip(conteudo, ativo=False, icone=None):
@@ -186,8 +189,9 @@ def erro_mercado(e):
 class CampoData:
     """Campo de data que abre o calendário do Material; não aceita digitação."""
 
-    def __init__(self, app, rotulo_txt, valor=None, minimo=None, maximo=None):
+    def __init__(self, app, rotulo_txt, valor=None, minimo=None, maximo=None, ao_mudar=None):
         self.app, self.valor, self.minimo, self.maximo = app, valor, minimo, maximo
+        self.ao_mudar = ao_mudar
         # campo "falso" (toque abre o calendário); um TextField somente leitura reabriria ao recuperar o foco
         self.valor_txt = texto(self._txt() or "Selecione a data", 15)
         self.campo = ft.Container(
@@ -215,6 +219,8 @@ class CampoData:
         self.valor = d
         self.valor_txt.value = self._txt()
         self.valor_txt.update()
+        if self.ao_mudar:
+            self.ao_mudar(d)
 
     def set_limites(self, minimo, maximo):
         self.minimo, self.maximo = minimo, maximo
@@ -246,6 +252,9 @@ class App:
     def __init__(self, page: ft.Page):
         self.page = page
         self.cfg = nc.ler_config()
+        if nc.corrigir_tipos():  # registros antigos com Ação/BDR errado
+            self.cfg["pendente"] = True
+            nc.gravar_config(self.cfg)
         self.mes = nc.mes_inicial()
         self.d = nc.carregar(self.mes)
         self.visao = None
@@ -633,7 +642,7 @@ class App:
             else:
                 linha_atual = texto("Atual: carregando…" if l["ticker"] not in self.cotacoes.precos
                                     else "Atual: sem cotação", 12, cor=MUTED)
-        card = ft.Container(
+        tile = ft.Container(
             padding=ft.Padding.all(14), border_radius=ft.BorderRadius.all(14), bgcolor=ft.Colors.SURFACE_CONTAINER,
             content=ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
                 ft.Column(expand=True, spacing=2, controls=[
@@ -644,12 +653,26 @@ class App:
                     texto(st, 12, ft.FontWeight.BOLD, cor_st)]),
                 ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.END, controls=[
                     texto(brl(l["qtd"] * l["preco"]), 15, ft.FontWeight.BOLD),
-                    texto(f"Restante: {nc.restante(l)}", 12, cor=MUTED)]),
-                ft.Icon(ft.Icons.MORE_VERT, color=MUTED) if editavel else ft.Container()]))
-        return menu_popup(card, self.itens_lote(l)) if editavel else card
+                    texto(f"Restante: {nc.restante(l)}", 12, cor=MUTED)])]))
+        if not editavel:
+            return tile
+        return menu_contexto(tile, self.menu_lote(l))
+
+    def menu_lote(self, l):
+        opcoes = [menu_cabecalho(l["ticker"], f"{fmt_data(l['data_compra'])} · {l['qtd']} × {brl(l['preco'])}")]
+        if nc.restante(l) > 0:
+            opcoes.append(ft.PopupMenuItem(content=ft.Text("Registrar venda"), icon=ft.Icon(ft.Icons.SELL),
+                                           on_click=lambda e: self.form_venda(lote_id=l["id"])))
+        opcoes.append(ft.PopupMenuItem(content=ft.Text("Editar compra"), icon=ft.Icon(ft.Icons.EDIT_OUTLINED),
+                                       on_click=lambda e: self.form_compra(editar=l)))
+        opcoes.append(ft.PopupMenuItem())  # separador
+        opcoes.append(ft.PopupMenuItem(content=ft.Text("Excluir compra", color=VERMELHO),
+                                       icon=ft.Icon(ft.Icons.DELETE_OUTLINE, color=VERMELHO),
+                                       on_click=lambda e: self.excluir_lote(l)))
+        return opcoes
 
     def item_venda(self, o, editavel):
-        card = ft.Container(
+        tile = ft.Container(
             padding=ft.Padding.all(14), border_radius=ft.BorderRadius.all(14), bgcolor=ft.Colors.SURFACE_CONTAINER,
             content=ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
                 ft.Column(expand=True, spacing=2, controls=[
@@ -659,19 +682,12 @@ class App:
                     texto(f"Taxas B3: {brl(o['taxas'] + o['corretagem'])}", 12, cor=MUTED)]),
                 ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.END, controls=[
                     texto(brl(o["liquido"]), 15, ft.FontWeight.BOLD, cor_resultado(o["liquido"])),
-                    texto(f"Imposto: {brl(o['imposto'])}", 12, cor=MUTED)]),
-                ft.Icon(ft.Icons.MORE_VERT, color=MUTED) if editavel else ft.Container()]))
-        return menu_popup(card, self.itens_venda(o)) if editavel else card
+                    texto(f"Imposto: {brl(o['imposto'])}", 12, cor=MUTED)])]))
+        if not editavel:
+            return tile
+        return menu_contexto(tile, self.menu_venda(o))
 
-    def itens_lote(self, l):
-        itens = []
-        if nc.restante(l) > 0:
-            itens.append(item_popup("Registrar venda", ft.Icons.SELL, lambda e: self.form_venda(lote_id=l["id"])))
-        itens.append(item_popup("Editar compra", ft.Icons.EDIT_OUTLINED, lambda e: self.form_compra(editar=l)))
-        itens.append(item_popup("Excluir compra", ft.Icons.DELETE_OUTLINE, lambda e: self.excluir_lote(l), VERMELHO))
-        return itens
-
-    def itens_venda(self, o):
+    def menu_venda(self, o):
         def excluir(e):
             self.perguntar("Excluir venda", "Excluir esta venda?", "Excluir", perigo=True,
                            ao_sim=lambda: self.mutar(lambda d: [l.update(vendas=[v for v in l["vendas"]
@@ -683,8 +699,11 @@ class App:
             if par:
                 self.form_venda(editar=par)
 
-        return [item_popup("Editar venda", ft.Icons.EDIT_OUTLINED, editar),
-                item_popup("Excluir venda", ft.Icons.DELETE_OUTLINE, excluir, VERMELHO)]
+        return [menu_cabecalho(f"Venda de {o['ticker']}", f"{fmt_data(o['data'])} · {o['qtd']} × {brl(o['preco'])}"),
+                ft.PopupMenuItem(content=ft.Text("Editar venda"), icon=ft.Icon(ft.Icons.EDIT_OUTLINED), on_click=editar),
+                ft.PopupMenuItem(),  # separador
+                ft.PopupMenuItem(content=ft.Text("Excluir venda", color=VERMELHO),
+                                 icon=ft.Icon(ft.Icons.DELETE_OUTLINE, color=VERMELHO), on_click=excluir)]
 
     def excluir_lote(self, l):
         msg = f"Excluir {l['ticker']}" + (" e todas as vendas dele?" if l["vendas"] else "?")
@@ -787,9 +806,12 @@ class App:
         sugestoes, tipos = nc.sugestoes(self.d)
         tk = ft.TextField(label="Ticker *", value=ini.get("ticker", ""), hint_text="Ex.: PETR4",
                           capitalization=ft.TextCapitalization.CHARACTERS)
-        tipo = ft.SegmentedButton(selected=[ini.get("tipo") or "Ação"], show_selected_icon=False,
-                                  segments=[ft.Segment(value="Ação", label=ft.Text("Ação")),
-                                            ft.Segment(value="BDR", label=ft.Text("BDR"))])
+        tipo = texto("", 12, ft.FontWeight.BOLD, MUTED)
+
+        def mostrar_tipo(t):
+            tipo.value = f"Tipo: {nc.tipo_por_ticker(t)} (identificado pelo ticker)" if len(t) >= 5 else ""
+
+        mostrar_tipo((ini.get("ticker") or "").upper())
         data = CampoData(self, "Data da compra *", valor=date.fromisoformat(editar["data_compra"]) if editar
                          else date.today(), maximo=maximo)
         qtd = ft.TextField(label="Quantidade *", keyboard_type=ft.KeyboardType.NUMBER, value=ini.get("qtd", ""))
@@ -807,7 +829,7 @@ class App:
 
         def escolher(t):
             tk.value = t
-            tipo.selected = [nc.inferir_tipo(t, tipos)]
+            mostrar_tipo(t)
             self._marcar(chips, t)
             dlg.update()
 
@@ -818,8 +840,7 @@ class App:
         def digitou(e):
             t = (tk.value or "").strip().upper()
             self._marcar(chips, t)
-            if len(t) >= 5:
-                tipo.selected = [nc.inferir_tipo(t, tipos)]
+            mostrar_tipo(t)
             dlg.update()
 
         tk.on_change = digitou
@@ -843,7 +864,7 @@ class App:
                 erro.value = str(ex)
                 dlg.update()
                 return
-            novo = {"ticker": t, "tipo": tipo.selected[0], "data_compra": data.valor.isoformat(), "qtd": q, "preco": p}
+            novo = {"ticker": t, "tipo": nc.tipo_por_ticker(t), "data_compra": data.valor.isoformat(), "qtd": q, "preco": p}
             if editar:
                 lid = editar["id"]
 
@@ -876,7 +897,7 @@ class App:
         conteudo = [tk]
         if sugestoes:
             conteudo += [texto("Frequentes", 11, cor=MUTED), chips]
-        conteudo += [rotulo("Tipo"), tipo, data.controle, qtd, preco, total_lb, erro]
+        conteudo += [tipo, data.controle, qtd, preco, total_lb, erro]
         if editar and editar["vendas"]:
             conteudo.insert(0, texto(f"Já vendidas: {nc.vendido(editar)}", 12, cor=MUTED))
         dlg = ft.AlertDialog(title=ft.Text("Editar compra" if editar else "Novo ativo"), scrollable=True,
@@ -906,18 +927,64 @@ class App:
         tk = ft.TextField(label="Ticker *", hint_text="Ex.: PETR4", capitalization=ft.TextCapitalization.CHARACTERS)
         compra = ft.Dropdown(label="Compra *", options=[], expand=True)
         info = texto("", 12, cor=MUTED)
-        data = CampoData(self, "Data da venda *", minimo=inicio_mes, maximo=min(fim_mes, date.today()))
         qtd = ft.TextField(label="Quantidade *", keyboard_type=ft.KeyboardType.NUMBER)
         preco = ft.TextField(label="Preço unitário (R$) *", keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ex.: 35,10")
+        preco_info = texto("", 11, cor=MUTED)
         erro = texto("", 12, cor=VERMELHO)
         total_lb = texto("", 13, ft.FontWeight.BOLD)
+        auto = {"preco": "", "pedido": None}  # último preço sugerido e a busca em andamento
+
+        def atualizar_dlg():
+            try:
+                dlg.update()
+            except Exception:  # diálogo ainda não exibido ou já fechado
+                pass
 
         def calcular_total(e=None):
             total_lb.value = valor_total(qtd.value, preco.value)
-            dlg.update()
+            atualizar_dlg()
 
         qtd.on_change = calcular_total
         preco.on_change = calcular_total
+
+        def preco_digitado():
+            return (preco.value or "").strip() not in ("", auto["preco"])
+
+        def sugerir_preco():
+            """Cotação atual (venda hoje) ou fechamento da data escolhida; não sobrescreve o que foi digitado."""
+            l = estado["lote"]
+            if editar or not l or not data.valor or preco_digitado():
+                return
+            pedido = (l["ticker"], data.valor)
+            if pedido == auto["pedido"]:
+                return
+            auto["pedido"] = pedido
+            preco_info.value = "Buscando cotação…"
+
+            def trabalho():
+                try:
+                    valor, origem = self.mercado.preco_venda(*pedido)
+                except Exception:
+                    if auto["pedido"] == pedido:
+                        auto["pedido"] = None
+                        preco_info.value = "Não foi possível buscar a cotação. Informe o preço."
+                else:
+                    if auto["pedido"] != pedido or preco_digitado():
+                        return
+                    auto["preco"] = nc.preco_texto(valor)
+                    preco.value = auto["preco"]
+                    preco_info.value = f"{origem} · pode alterar"
+                    total_lb.value = valor_total(qtd.value, preco.value)
+                atualizar_dlg()
+
+            self.page.run_thread(trabalho)
+
+        def mudou_data(d):
+            sugerir_preco()
+            atualizar_dlg()
+
+        data = CampoData(self, "Data da venda *", minimo=inicio_mes, maximo=min(fim_mes, date.today()),
+                         ao_mudar=mudou_data)
 
         def selecionar_lote(lid):
             l = next((x for x in abertos if x["id"] == lid), None)
@@ -938,6 +1005,7 @@ class App:
             if not data.valor and minimo <= hoje <= maximo:
                 data.valor = hoje
                 data.valor_txt.value = hoje.strftime("%d/%m/%Y")
+            sugerir_preco()
 
         def selecionar_ticker(t, lote_inicial=None):
             t = (t or "").strip().upper()
@@ -1045,7 +1113,7 @@ class App:
         conteudo = [tk]
         if sugestoes:
             conteudo += [texto("Em carteira", 11, cor=MUTED), chips]
-        conteudo += [compra, info, data.controle, qtd, preco, total_lb, erro]
+        conteudo += [compra, info, data.controle, qtd, preco, preco_info, total_lb, erro]
         dlg = ft.AlertDialog(title=ft.Text("Editar venda" if editar else "Registrar venda"), scrollable=True,
                              content=ft.Container(width=380, content=ft.Column(tight=True, spacing=12,
                                                                                controls=conteudo)),

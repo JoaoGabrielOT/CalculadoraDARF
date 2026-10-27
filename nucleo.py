@@ -364,11 +364,45 @@ def novo_id():
     return uuid.uuid4().hex
 
 
+SUFIXOS_BDR = ("31", "32", "33", "34", "35", "39")
+
+
+def tipo_por_ticker(ticker):
+    """Ação ou BDR pelo código de negociação da B3: BDRs terminam em 31, 32, 33, 34, 35 ou 39
+    (ex.: AAPL34, T1TW34); o resto é ação ou unit (PETR4, TAEE11). O "F" do fracionário é ignorado."""
+    t = (ticker or "").strip().upper()
+    if t.endswith("F") and len(t) > 5:
+        t = t[:-1]
+    m = re.fullmatch(r"[A-Z0-9]{4}(\d{2})", t)
+    return "BDR" if m and m.group(1) in SUFIXOS_BDR else "Ação"
+
+
 def inferir_tipo(ticker, conhecidos=None):
-    if conhecidos and ticker in conhecidos:
-        return conhecidos[ticker]
-    m = re.fullmatch(r"[A-Z]{4}(\d{2})", ticker)
-    return "BDR" if m and m.group(1) in ("31", "32", "33", "34", "35", "39") else "Ação"
+    """Mantido por compatibilidade: o tipo vem sempre do ticker."""
+    return tipo_por_ticker(ticker)
+
+
+def corrigir_tipos_mes(d):
+    """Ajusta o tipo (Ação/BDR) das compras do mês pelo ticker. Retorna True se algo mudou."""
+    mudou = False
+    for l in d.get("lotes", []):
+        certo = tipo_por_ticker(l["ticker"])
+        if l.get("tipo") != certo:
+            l["tipo"] = certo
+            mudou = True
+    return mudou
+
+
+def corrigir_tipos():
+    """Corrige os registros já gravados; as compras alteradas recebem nova hora e vencem na sincronização."""
+    mudou = False
+    with TRAVA:
+        for mes in listar_meses():
+            d = carregar(mes)
+            if corrigir_tipos_mes(d):
+                salvar(d)
+                mudou = True
+    return mudou
 
 
 def historico_tickers(meses_recentes=6):
@@ -540,6 +574,8 @@ def reconstruir(abas):
             except (ValueError, TypeError):
                 desde = date.today().isoformat()
             radar.append({"ticker": ticker, "nome": str(row[1] or ""), "desde": desde, "mod": _num(row[3])})
+    for d in meses.values():
+        corrigir_tipos_mes(d)
     return meses, amigos, radar, excl_cfg
 
 
@@ -622,4 +658,6 @@ def mesclar_tudo(remoto, cfg):
         if json.dumps([amigos, radar, excl], sort_keys=True) != antes:
             mudou = True
         gravar_config(cfg, carimbar=False)
+        if corrigir_tipos():
+            mudou = True
     return mudou

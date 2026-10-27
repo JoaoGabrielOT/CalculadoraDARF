@@ -180,11 +180,9 @@ class FormCompra(FormBase):
         self.en_ticker = self.entrada("Ex.: PETR4", ini.get("ticker", ""))
         self.en_ticker.bind("<KeyRelease>", lambda e: self.ticker_digitado())
         self.chips(sugestoes, self.escolher)
-        self.rotulo("TIPO")
-        self.seg_tipo = ctk.CTkSegmentedButton(self.caixa, values=["Ação", "BDR"], height=36, font=F(13),
-                                               selected_color=C["accent"], selected_hover_color=C["accent_h"])
-        self.seg_tipo.set(ini.get("tipo") or "Ação")
-        self.seg_tipo.pack(fill="x", padx=24)
+        self.lb_tipo = ctk.CTkLabel(self.caixa, text="", font=F(12, "bold"), text_color=C["muted"])
+        self.lb_tipo.pack(anchor="w", padx=24, pady=(6, 0))
+        self.mostrar_tipo(ini.get("ticker", ""))
         self.rotulo("DATA DA COMPRA")
         inicial = date.fromisoformat(editar["data_compra"]) if editar else date.today()
         self.data = CampoData(self.caixa, valor=inicial, maximo=maximo)
@@ -200,18 +198,21 @@ class FormCompra(FormBase):
         self.after(150, foco.focus_set)
         self.mostrar()
 
+    def mostrar_tipo(self, ticker):
+        t = (ticker or "").strip().upper()
+        self.lb_tipo.configure(text=f"Tipo: {nc.tipo_por_ticker(t)} (identificado pelo ticker)" if len(t) >= 5 else "")
+
     def escolher(self, t):
         self.en_ticker.delete(0, "end")
         self.en_ticker.insert(0, t)
-        self.seg_tipo.set(inferir_tipo(t, self.tipos))
+        self.mostrar_tipo(t)
         self.marcar_chip(t)
         self.en_qtd.focus_set()
 
     def ticker_digitado(self):
         t = self.en_ticker.get().strip().upper()
         self.marcar_chip(t)
-        if len(t) >= 5:
-            self.seg_tipo.set(inferir_tipo(t, self.tipos))
+        self.mostrar_tipo(t)
 
     def ok(self):
         ticker = self.en_ticker.get().strip().upper()
@@ -230,7 +231,7 @@ class FormCompra(FormBase):
             p = parse_num(self.en_preco.get())
         except ValueError:
             return self.erro("Preço inválido.")
-        novo = {"ticker": ticker, "tipo": self.seg_tipo.get(), "data_compra": dc.isoformat(), "qtd": q, "preco": p}
+        novo = {"ticker": ticker, "tipo": nc.tipo_por_ticker(ticker), "data_compra": dc.isoformat(), "qtd": q, "preco": p}
         if self.editar:
             msg = nc.erro_edicao_lote(self.editar, novo)
             if msg:
@@ -253,6 +254,10 @@ class FormVenda(FormBase):
         self.opcoes = {}
         self.lote = None
         self.ticker_atual = None
+        self.editar = editar
+        self.mercado = getattr(master, "mercado", None)
+        self.preco_auto = ""     # último preço preenchido automaticamente
+        self.pedido = None       # (ticker, data) da busca de preço em andamento
 
         self.rotulo("TICKER")
         self.en_ticker = self.entrada("Ex.: PETR4")
@@ -269,12 +274,15 @@ class FormVenda(FormBase):
                                     wraplength=self.LARGURA)
         self.lb_info.pack(anchor="w", padx=24, pady=(6, 0))
         self.rotulo("DATA DA VENDA")
-        self.data = CampoData(self.caixa, minimo=self.inicio_mes, maximo=min(self.fim_mes, date.today()))
+        self.data = CampoData(self.caixa, minimo=self.inicio_mes, maximo=min(self.fim_mes, date.today()),
+                              ao_mudar=lambda d: self.sugerir_preco())
         self.data.pack(fill="x", padx=24)
         self.lb_qtd = self.rotulo("QUANTIDADE")
         self.en_qtd = self.entrada()
         self.rotulo("PREÇO UNITÁRIO (R$)")
         self.en_preco = self.entrada("Ex.: 35,10")
+        self.lb_preco = ctk.CTkLabel(self.caixa, text="", font=F(11), text_color=C["muted"])
+        self.lb_preco.pack(anchor="w", padx=24, pady=(4, 0))
         self.rodape()
 
         t = lote_inicial["ticker"] if lote_inicial else ticker_inicial
@@ -341,6 +349,53 @@ class FormVenda(FormBase):
         hoje = date.today()
         if not self.data.valor and minimo <= hoje <= maximo:
             self.data.set(hoje)
+        self.sugerir_preco()
+
+    def preco_manual(self):
+        """True se o usuário digitou um preço diferente do sugerido."""
+        return self.en_preco.get().strip() not in ("", self.preco_auto)
+
+    def sugerir_preco(self):
+        """Preenche o preço com a cotação atual (venda hoje) ou o fechamento da data escolhida."""
+        if self.editar or not self.lote or not self.data.valor or not self.mercado or self.preco_manual():
+            return
+        pedido = (self.lote["ticker"], self.data.valor)
+        if pedido == self.pedido:
+            return
+        self.pedido = pedido
+        self.lb_preco.configure(text="Buscando cotação…")
+        res = {}
+
+        def trabalho():
+            try:
+                res["ok"] = self.mercado.preco_venda(*pedido)
+            except Exception as e:
+                res["erro"] = e
+
+        threading.Thread(target=trabalho, daemon=True).start()
+
+        def esperar():
+            try:
+                if not self.winfo_exists():
+                    return
+            except Exception:
+                return
+            if not res:
+                self.after(150, esperar)
+                return
+            if self.pedido != pedido or self.preco_manual():
+                return
+            if "ok" in res:
+                valor, origem = res["ok"]
+                self.preco_auto = preco_texto(valor)
+                self.en_preco.delete(0, "end")
+                self.en_preco.insert(0, self.preco_auto)
+                self.lb_preco.configure(text=f"{origem} · pode alterar")
+            else:
+                self.pedido = None
+                self.lb_preco.configure(text="Não foi possível buscar a cotação. Informe o preço.")
+
+        self.after(150, esperar)
 
     def ok(self):
         if not self.lote:
@@ -613,6 +668,9 @@ def erro_mercado(e):
 class App(ctk.CTk):
     def __init__(self):
         self.cfg = ler_config()
+        if nc.corrigir_tipos():  # registros antigos com Ação/BDR errado
+            self.cfg["pendente"] = True
+            gravar_config(self.cfg)
         ctk.set_appearance_mode(self.cfg.get("tema", "Dark"))
         ctk.set_default_color_theme("green")
         super().__init__()

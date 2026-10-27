@@ -91,6 +91,50 @@ class Mercado:
         return float(preco)
 
 
+    def preco_venda(self, ticker, dia):
+        """Preço sugerido para uma venda: a cotação atual quando a data é hoje; senão, o fechamento do dia
+        (ou do último pregão antes dele). Executar fora da thread da interface."""
+        if dia >= date.today():
+            return self.cotacao(ticker), "Cotação atual"
+        preco, dia_real = self.fechamento(ticker, dia)
+        return preco, f"Fechamento de {dia_real:%d/%m/%Y}"
+
+    def fechamento(self, ticker, dia):
+        inicio, fim = dia - timedelta(days=10), dia + timedelta(days=1)
+        try:
+            import yfinance as yf
+        except ImportError:
+            yf = None
+        if yf is not None:
+            df = yf.Ticker(f"{ticker}.SA").history(start=inicio.isoformat(), end=fim.isoformat(), interval="1d",
+                                                   auto_adjust=False)
+            pares = [] if df is None or df.empty else [
+                (idx.date(), float(c)) for idx, c in df["Close"].dropna().items()]
+        else:
+            import requests
+            from datetime import datetime, timezone
+            p1 = int(datetime(inicio.year, inicio.month, inicio.day, tzinfo=timezone.utc).timestamp())
+            p2 = int(datetime(fim.year, fim.month, fim.day, tzinfo=timezone.utc).timestamp()) + 86400
+            r = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}.SA",
+                             params={"period1": p1, "period2": p2, "interval": "1d"},
+                             headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
+            if r.status_code == 429:
+                raise RuntimeError("Too Many Requests")
+            if r.status_code == 404:
+                raise SemDados(f"Sem cotação para {ticker}.")
+            r.raise_for_status()
+            res = (r.json().get("chart") or {}).get("result") or []
+            if not res:
+                raise SemDados(f"Sem cotação para {ticker}.")
+            desvio = (res[0].get("meta") or {}).get("gmtoffset") or 0
+            fech = (((res[0].get("indicators") or {}).get("quote") or [{}])[0].get("close")) or []
+            pares = [(datetime.fromtimestamp(ts + desvio, timezone.utc).date(), float(c))
+                     for ts, c in zip(res[0].get("timestamp") or [], fech) if _valido(c)]
+        validos = [(d, c) for d, c in sorted(pares) if d <= dia]
+        if not validos:
+            raise SemDados(f"Sem fechamento de {ticker} até {dia:%d/%m/%Y}.")
+        return validos[-1][1], validos[-1][0]
+
     def dados(self, ticker, nome_conhecido=""):
         """Executar fora da thread da interface. Usa o yfinance quando instalado (Windows) e a API
         de gráficos do Yahoo diretamente quando não (Android)."""
