@@ -19,6 +19,11 @@ URL_LOGO_PNG = "https://raw.githubusercontent.com/thefintz/icones-b3/main/icones
 URL_LOGO_SVG = "https://icons.brapi.dev/icons/{t}.svg"
 URL_FAVICON = "https://www.google.com/s2/favicons?domain={d}&sz=64"
 UA = {"User-Agent": "Mozilla/5.0 (CalculadoraDARF)"}
+UA_NAVEGADOR = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                              "Chrome/130.0 Safari/537.36", "Accept-Language": "pt-BR,pt;q=0.9"}
+URL_DECODIFICAR = "https://news.google.com/_/DotsSplashUi/data/batchexecute"
+MAX_DETALHES = 40            # matérias mais recentes que ganham prévia (imagem e resumo)
+TENTAR_DETALHE_DE_NOVO = 6 * 3600
 INTERVALO = 10 * 60          # segundos entre buscas automáticas
 JANELA_NOTIFICACAO = 24 * 3600  # só notifica o que foi publicado nas últimas 24 h
 MAX_ITENS = 150
@@ -229,7 +234,7 @@ def gravar_estado(d):
         tmp.replace(_arquivo())
 
 
-def atualizar(radar, agora=None):
+def atualizar(radar, agora=None, detalhes=False):
     """Busca as notícias de todos os ativos do radar e grava o estado.
 
     Devolve (itens, novas_relevantes). Uma notícia relevante é nova quando ainda não foi vista, tem
@@ -264,6 +269,11 @@ def atualizar(radar, agora=None):
         if not d["lidas_ate"]:
             d["lidas_ate"] = agora
         gravar_estado(d)
+    if detalhes:
+        try:
+            enriquecer(itens)
+        except Exception:
+            pass
     return itens, novas
 
 
@@ -302,6 +312,147 @@ def textos_notificacao(novas):
         tickers += [t for t in i["tickers"] if t not in tickers]
     return [(f"{len(novas)} notícias relevantes", "Sobre " + ", ".join(tickers[:6]) + (
         "…" if len(tickers) > 6 else ""), "")]
+
+
+# ---------------------------------------------------------------- prévia da matéria original
+
+def _arquivo_detalhes():
+    return nc.DADOS / "noticias_detalhes.json"
+
+
+def ler_detalhes():
+    with TRAVA:
+        try:
+            return json.loads(_arquivo_detalhes().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+
+def gravar_detalhes(det, manter=None):
+    with TRAVA:
+        if manter is not None:
+            det = {k: v for k, v in det.items() if k in manter}
+        tmp = _arquivo_detalhes().with_suffix(".tmp")
+        tmp.write_text(json.dumps(det, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(_arquivo_detalhes())
+
+
+def decodificar_link(link):
+    """Endereço real da matéria a partir do link do Google Notícias (o RSS só traz o redirecionamento)."""
+    import requests
+    m = re.search(r"/articles/([^?/#]+)", link)
+    if not m or "news.google.com" not in link:
+        return link
+    gid = m.group(1)
+    pg = requests.get(f"https://news.google.com/rss/articles/{gid}", headers=UA_NAVEGADOR, timeout=20).text
+    sg = re.search(r'data-n-a-sg="([^"]+)"', pg)
+    ts = re.search(r'data-n-a-ts="([^"]+)"', pg)
+    if not sg or not ts:
+        return None
+    interno = ('["garturlreq",[["X","X",["X","X"],null,null,1,1,"US:en",null,1,null,null,null,null,null,0,1],'
+               f'"X","X",1,[1,1,1],1,1,null,0,0,null,0],"{gid}",{ts.group(1)},"{sg.group(1)}"]')
+    r = requests.post(URL_DECODIFICAR, data={"f.req": json.dumps([[["Fbv4je", interno]]])},
+                      headers=dict(UA_NAVEGADOR, **{"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"}),
+                      timeout=20)
+    r.raise_for_status()
+    resp = json.loads(r.text.split("\n\n")[1])[:-2]
+    url = json.loads(resp[0][2])[1]
+    return url if isinstance(url, str) and url.startswith("http") else None
+
+
+def _meta(html, *nomes):
+    metas = {}
+    for tag in re.findall(r"<meta\b[^>]*>", html, re.I):
+        attrs = {k.lower(): (a if a is not None and q == '"' else b)
+                 for k, q, a, b in re.findall(r'([\w:-]+)\s*=\s*(["\'])(?:([^"]*)"|([^\']*)\')', tag)}
+        chave = (attrs.get("property") or attrs.get("name") or "").lower()
+        if chave and chave not in metas and (attrs.get("content") or "").strip():
+            metas[chave] = unescape(attrs["content"]).strip()
+    return next((metas[n] for n in nomes if n in metas), "")
+
+
+def ler_previa(html, url):
+    """Imagem e resumo que o próprio site publica para prévias (Open Graph / Twitter)."""
+    from urllib.parse import urljoin
+    cabeca = html.split("</head>", 1)[0]
+    img = _meta(cabeca, "og:image:secure_url", "og:image", "twitter:image", "twitter:image:src")
+    desc = _meta(cabeca, "og:description", "twitter:description", "description")
+    desc = re.sub(r"\s+", " ", desc).strip()
+    return {"img": urljoin(url, img) if img else "", "resumo": desc[:600]}
+
+
+def baixar_pagina(url, limite=600_000):
+    """Lê só o começo da página (até o fim do <head>), suficiente para a prévia."""
+    import requests
+    with requests.get(url, headers=UA_NAVEGADOR, timeout=20, stream=True) as r:
+        r.raise_for_status()
+        if "html" not in r.headers.get("Content-Type", "html"):
+            return "", r.url
+        partes, total = [], 0
+        for bloco in r.iter_content(32768):
+            partes.append(bloco)
+            total += len(bloco)
+            if total >= limite or b"</head>" in bloco:
+                break
+        return b"".join(partes).decode(r.encoding or "utf-8", "replace"), r.url
+
+
+def detalhar(item):
+    """{'url', 'img', 'resumo', 'hora'} da matéria; em falha, guarda o erro para tentar de novo depois."""
+    det = {"url": "", "img": "", "resumo": "", "hora": time.time()}
+    try:
+        url = decodificar_link(item["link"])
+        if not url:
+            det["erro"] = "link"
+            return det
+        det["url"] = url
+        html, final = baixar_pagina(url)
+        det["url"] = final or url
+        det.update(ler_previa(html, det["url"]))
+    except Exception as e:
+        det["erro"] = str(e)[:120]
+    return det
+
+
+def enriquecer(itens, limite=MAX_DETALHES, paralelo=4):
+    """Busca a prévia das matérias mais recentes que ainda não têm. Devolve True se algo mudou."""
+    from concurrent.futures import ThreadPoolExecutor
+    det = ler_detalhes()
+    agora = time.time()
+    faltam = [i for i in itens[:limite]
+              if i["id"] not in det or (det[i["id"]].get("erro") and agora - det[i["id"]]["hora"] > TENTAR_DETALHE_DE_NOVO)]
+    if not faltam:
+        return False
+    with ThreadPoolExecutor(max_workers=paralelo) as ex:
+        for it, d in zip(faltam, ex.map(detalhar, faltam)):
+            det[it["id"]] = d
+    gravar_detalhes(det, manter={i["id"] for i in itens})
+    return True
+
+
+def baixar_imagem_noticia(url, destino, largura=900, limite=6_000_000):
+    """Imagem da matéria reduzida e gravada como JPEG (cache); devolve o caminho ou None. Requer Pillow."""
+    if destino.exists():
+        return destino
+    import io
+    import requests
+    from PIL import Image
+    with requests.get(url, headers=UA_NAVEGADOR, timeout=20, stream=True) as r:
+        r.raise_for_status()
+        dados = b""
+        for bloco in r.iter_content(65536):
+            dados += bloco
+            if len(dados) > limite:
+                return None
+    img = Image.open(io.BytesIO(dados))
+    img = img.convert("RGB")
+    if img.width < 120 or img.height < 80:
+        return None
+    if img.width > largura:
+        img = img.resize((largura, round(img.height * largura / img.width)), Image.LANCZOS)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    img.save(destino, "JPEG", quality=85)
+    return destino
 
 
 # ---------------------------------------------------------------- logos

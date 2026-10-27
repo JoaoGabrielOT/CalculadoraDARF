@@ -33,7 +33,7 @@ ABAS = {
         ("E-mail", "texto", 300), ("Adicionado em", "data", 130), ("Modificado", "id", 80)]},
     "Radar": {"cor": "#0891b2", "colunas": [
         ("Ticker", "negrito", 100), ("Empresa", "texto", 300), ("Adicionado em", "data", 130),
-        ("Modificado", "id", 80)]},
+        ("Modificado", "id", 80), ("Posição", "id", 80)]},
     "Caixa": {"cor": "#0f766e", "colunas": [
         ("Saldo informado", "moeda", 150), ("Data do saldo", "data", 130), ("Modificado", "id", 80)]},
     "Exclusões": {"cor": "#6b7280", "oculta": True, "colunas": [

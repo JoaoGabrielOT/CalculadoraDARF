@@ -359,6 +359,7 @@ class App:
         self.d = nc.carregar(self.mes)
         self.visao = None
         self.dados_amigo = {}
+        self.amigo_radar, self.amigo_caixa = [], None
         self.f_lotes = dict(FILTRO_LOTES)
         self.f_vendas = dict(FILTRO_VENDAS)
         self.col_lotes = self.col_vendas = self.cont_lotes = self.cont_vendas = None
@@ -530,13 +531,7 @@ class App:
                                                     texto(txt, 13, ft.FontWeight.BOLD, expand=True),
                                                     ft.Icon(ft.Icons.CHEVRON_RIGHT, size=18, color=MUTED)])))
 
-        if self.g.email and self.cfg["amigos"]:
-            opcoes = [ft.DropdownOption(key="", text="Meus dados")] + [
-                ft.DropdownOption(key=a["email"], text=a["email"]) for a in self.cfg["amigos"]]
-            itens.append(ft.Dropdown(label="Visualizando", value=self.visao or "", options=opcoes,
-                                     on_select=self.trocar_visao, dense=True, expand=True))
-        if self.visao:
-            itens.append(texto(f"Dados de {self.visao} · somente leitura", 12, cor=AMARELO))
+        itens += self.seletor_visao("Dados")
 
         n = len(r["ops"])
         v = r["vendas_acoes_st"]
@@ -1279,8 +1274,12 @@ class App:
     def tela_caixa(self):
         hoje = date.today()
         self.dia_caixa = hoje
-        r = nc.resumo_caixa(self.cfg, hoje)
-        itens = []
+        amigo = self.visao
+        if amigo:
+            r = nc.resumo_caixa({"caixa": self.amigo_caixa or {}}, hoje, meses=self.dados_amigo)
+        else:
+            r = nc.resumo_caixa(self.cfg, hoje)
+        itens = self.seletor_visao("Caixa")
 
         if r["definido"]:
             disp = texto(brl(r["disponivel"]), 32, ft.FontWeight.BOLD, VERMELHO if r["disponivel"] < 0 else None)
@@ -1288,12 +1287,14 @@ class App:
                          "quando a data chega.", 12, cor=MUTED)
         else:
             disp = texto("—", 32, ft.FontWeight.BOLD)
-            info = texto("Informe o saldo livre na conta da corretora para acompanhar o caixa.", 12, cor=MUTED)
+            info = texto(f"{amigo} ainda não informou o saldo da conta." if amigo else
+                         "Informe o saldo livre na conta da corretora para acompanhar o caixa.", 12, cor=MUTED)
+        editar = [] if amigo else [
+            ft.FilledButton("Editar", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e: self.editar_saldo(),
+                            style=ft.ButtonStyle(bgcolor=PRIMARIO, color=PRIMARIO_TXT))]
         itens.append(bloco(ft.Column(spacing=6, controls=[
             ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
-                rotulo("Saldo disponível (D+0)"), ft.Container(expand=True),
-                ft.FilledButton("Editar", icon=ft.Icons.EDIT_OUTLINED, on_click=lambda e: self.editar_saldo(),
-                                style=ft.ButtonStyle(bgcolor=PRIMARIO, color=PRIMARIO_TXT))]),
+                rotulo("Saldo disponível (D+0)"), ft.Container(expand=True), *editar]),
             disp, info]), padding=20))
 
         def card(titulo, valor, sub, cor=None):
@@ -1404,50 +1405,110 @@ class App:
 
     # ------------------------------------------------------------ radar
     def tela_radar(self):
-        campo = ft.TextField(label="Adicionar ticker", hint_text="Ex.: VALE3", expand=True, dense=True,
-                             capitalization=ft.TextCapitalization.CHARACTERS)
-
-        def adicionar(e=None):
-            t = (campo.value or "").strip().upper()
-            if t.endswith(".SA"):
-                t = t[:-3]
-            import re
-            if not re.fullmatch(r"[A-Z0-9]{4,7}", t):
-                self.aviso("Ticker inválido.")
-                return
-            with nc.TRAVA:
-                if any(r["ticker"] == t for r in self.cfg["radar"]):
-                    self.aviso(f"{t} já está no radar.")
-                    return
-                self.cfg["radar"].append({"ticker": t, "nome": "", "desde": date.today().isoformat()})
-                nc.gravar_config(self.cfg)
-            self.agendar_sync()
-            self.render()
-            self.atualizar_radar(apenas=[t])
-            self.atualizar_noticias()
-
-        campo.on_submit = adicionar
+        amigo = self.visao
         legenda = ft.Row(wrap=True, spacing=6, run_spacing=6, controls=[
             pilula(f"{rot} · {faixa}", fundo, txt, 10) for (lim, rot, fundo, txt), faixa in
             zip(mk.FAIXAS_RISCO, ("< 2,2%", "2,2% a 3,0%", "3,0% a 4,5%", "> 4,5%"))])
-        itens = [
-            bloco(ft.Column(spacing=10, controls=[
-                ft.Row(controls=[texto("Radar de Ações", 18, ft.FontWeight.BOLD), ft.Container(expand=True),
+        topo = [ft.Row(controls=[texto(f"Radar de {amigo}" if amigo else "Radar de Ações", 18, ft.FontWeight.BOLD,
+                                       expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                                  ft.IconButton(ft.Icons.REFRESH, tooltip="Atualizar",
                                                on_click=lambda e: self.atualizar_radar(forcar=True))]),
-                texto(self.radar_msg, 12, cor=MUTED),
-                ft.Row(controls=[campo, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=VERDE, icon_size=32,
-                                                      on_click=adicionar)]),
-                rotulo("Risco pelo ATR%"), legenda]))]
-        custodia = nc.custodia_atual()
-        if not self.cfg["radar"]:
-            itens.append(texto("Nenhum ativo no radar. Adicione um ticker acima.", 13, cor=MUTED))
-        for item in self.cfg["radar"]:
-            itens.append(self.card_radar(item, item["ticker"] in custodia))
-        itens.append(ft.Container(height=24))
-        return ft.ListView(controls=itens, padding=ft.Padding.all(16), spacing=12, expand=True)
+                texto(self.radar_msg, 12, cor=MUTED)]
+        if amigo:
+            faltam = [r for r in self.amigo_radar if all(m["ticker"] != r["ticker"] for m in self.cfg["radar"])]
+            topo.append(ft.FilledButton(f"Importar {len(faltam)} para o meu radar" if faltam else
+                                        "Todos já estão no seu radar", icon=ft.Icons.PLAYLIST_ADD,
+                                        disabled=not faltam, on_click=lambda e: self.importar_todos_radar()))
+        else:
+            campo = ft.TextField(label="Adicionar ticker", hint_text="Ex.: VALE3", expand=True, dense=True,
+                                 capitalization=ft.TextCapitalization.CHARACTERS)
 
-    def card_radar(self, item, pode_vender):
+            def adicionar(e=None):
+                t = (campo.value or "").strip().upper()
+                if t.endswith(".SA"):
+                    t = t[:-3]
+                import re
+                if not re.fullmatch(r"[A-Z0-9]{4,7}", t):
+                    self.aviso("Ticker inválido.")
+                    return
+                with nc.TRAVA:
+                    if nc.adicionar_radar(self.cfg, t) is None:
+                        self.aviso(f"{t} já está no radar.")
+                        return
+                    nc.gravar_config(self.cfg)
+                self.agendar_sync()
+                self.render()
+                self.atualizar_radar(apenas=[t])
+                self.atualizar_noticias()
+
+            campo.on_submit = adicionar
+            topo.append(ft.Row(controls=[campo, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=VERDE, icon_size=32,
+                                                              on_click=adicionar)]))
+        topo += [rotulo("Risco pelo ATR%"), legenda]
+        lista = self.radar_lista()
+        cabecalho = self.seletor_visao("Radar") + [bloco(ft.Column(spacing=10, controls=topo))]
+        if not lista:
+            cabecalho.append(texto(f"{amigo} não tem ativos no radar." if amigo else
+                                   "Nenhum ativo no radar. Adicione um ticker acima.", 13, cor=MUTED))
+        elif not amigo and len(lista) > 1:
+            cabecalho.append(texto("Toque e segure um ativo e arraste para mudar a ordem.", 12, cor=MUTED))
+        meus = {r["ticker"] for r in self.cfg["radar"]}
+        custodia = set() if amigo else nc.custodia_atual()
+        cards = [self.card_radar(item, item["ticker"] in custodia, amigo=bool(amigo), ja_tenho=item["ticker"] in meus)
+                 for item in lista]
+        if amigo:
+            return ft.ListView(controls=cabecalho + cards + [ft.Container(height=24)], padding=ft.Padding.all(16),
+                               spacing=12, expand=True)
+        return ft.ReorderableListView(
+            header=ft.Container(padding=ft.Padding.only(bottom=12),
+                                content=ft.Column(spacing=12, controls=cabecalho)),
+            footer=ft.Container(height=24), padding=ft.Padding.all(16), expand=True, on_reorder=self.reordenar_radar,
+            controls=[ft.Container(key=item["ticker"], padding=ft.Padding.only(bottom=12), content=c)
+                      for item, c in zip(lista, cards)])
+
+    def reordenar_radar(self, e):
+        """Soltou o card em outra posição: grava a nova ordem (sincronizada pela planilha)."""
+        ordem = [r["ticker"] for r in nc.ordenar_radar(self.cfg["radar"])]
+        if e.old_index is None or e.new_index is None or not 0 <= e.old_index < len(ordem):
+            return
+        t = ordem.pop(e.old_index)
+        ordem.insert(max(0, min(e.new_index, len(ordem))), t)
+        with nc.TRAVA:
+            nc.reordenar_radar(self.cfg, ordem)
+            nc.gravar_config(self.cfg)
+        self.agendar_sync()
+        self.render()
+
+    def importar_radar(self, t):
+        item = next((r for r in self.amigo_radar if r["ticker"] == t), {"nome": ""})
+        with nc.TRAVA:
+            if nc.adicionar_radar(self.cfg, t, item.get("nome", "")) is None:
+                return
+            nc.gravar_config(self.cfg)
+        self.agendar_sync()
+        self.aviso(f"{t} adicionado ao seu radar.")
+        self.render(todas=True)
+        self.atualizar_noticias()
+
+    def importar_todos_radar(self):
+        novos = [r for r in self.amigo_radar if all(m["ticker"] != r["ticker"] for m in self.cfg["radar"])]
+        if not novos:
+            return
+
+        def importar():
+            with nc.TRAVA:
+                for r in novos:
+                    nc.adicionar_radar(self.cfg, r["ticker"], r.get("nome", ""))
+                nc.gravar_config(self.cfg)
+            self.agendar_sync()
+            self.aviso(f"{len(novos)} ativo(s) adicionados ao seu radar.")
+            self.render(todas=True)
+            self.atualizar_noticias()
+
+        self.perguntar("Importar radar", f"Adicionar ao seu radar: {', '.join(r['ticker'] for r in novos)}?",
+                       "Importar", importar)
+
+    def card_radar(self, item, pode_vender, amigo=False, ja_tenho=False):
         t = item["ticker"]
         dados = self.radar_dados.get(t)
         nome = (dados or {}).get("nome") or item.get("nome") or ("Carregando…" if dados is None else "")
@@ -1470,23 +1531,29 @@ class App:
                     mini("ATR%", f"{pct:.2f}%".replace(".", ",") if pct is not None else "—")])]
         else:
             corpo = [texto(erro or "Carregando cotação…", 13, cor=VERMELHO if erro else MUTED)]
-        return bloco(ft.Column(spacing=10, controls=[
-            ft.Row(spacing=12, controls=[logo_ativo(t), ft.Column(spacing=0, expand=True, controls=[
-                texto(t, 16, ft.FontWeight.BOLD), texto(nome, 12, cor=MUTED, max_lines=1,
-                                                        overflow=ft.TextOverflow.ELLIPSIS)])]),
-            *corpo,
-            ft.Row(spacing=8, controls=[
+        if amigo:
+            acoes = [ft.OutlinedButton("Já está no seu radar", icon=ft.Icons.CHECK, disabled=True) if ja_tenho else
+                     botao_primario("Adicionar ao meu radar", ft.Icons.PLAYLIST_ADD, lambda e: self.importar_radar(t))]
+        else:
+            acoes = [
                 botao_primario("Comprar", ft.Icons.ADD_SHOPPING_CART, lambda e: self.radar_comprar(t)),
                 ft.OutlinedButton("Vender", icon=ft.Icons.SELL, disabled=not pode_vender,
                                   on_click=lambda e: self.radar_vender(t)),
                 ft.Container(expand=True),
                 ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=VERMELHO, tooltip="Remover do radar",
-                              on_click=lambda e: self.remover_radar(t))])]), padding=14)
+                              on_click=lambda e: self.remover_radar(t))]
+        cab = [logo_ativo(t), ft.Column(spacing=0, expand=True, controls=[
+            texto(t, 16, ft.FontWeight.BOLD), texto(nome, 12, cor=MUTED, max_lines=1,
+                                                    overflow=ft.TextOverflow.ELLIPSIS)])]
+        if not amigo:
+            cab.append(ft.Icon(ft.Icons.DRAG_INDICATOR, color=MUTED, size=20))
+        return bloco(ft.Column(spacing=10, controls=[
+            ft.Row(spacing=12, controls=cab), *corpo, ft.Row(spacing=8, controls=acoes)]), padding=14)
 
     # ------------------------------------------------------------ notícias
     def tela_noticias(self):
         d = nt.ler_estado()
-        radar = [r["ticker"] for r in self.cfg["radar"]]
+        radar = [r["ticker"] for r in nc.ordenar_radar(self.cfg["radar"])]
         f = self.f_noticias
         if f["ticker"] not in radar:
             f["ticker"] = "Todos"
@@ -1626,7 +1693,7 @@ class App:
         self.perguntar("Remover do radar", f"Remover {t} do radar?", "Remover", remover, perigo=True)
 
     def atualizar_radar(self, forcar=False, apenas=None):
-        tickers = apenas or [r["ticker"] for r in self.cfg["radar"]]
+        tickers = apenas or [r["ticker"] for r in self.radar_lista()]
         if not tickers or self.radar_rodando:
             return
         self.radar_rodando = True
@@ -1638,7 +1705,7 @@ class App:
                 self.radar_msg = "Atualizando cotações…"
                 if self.aba == ABA_RADAR:
                     self.render()
-                nomes = {r["ticker"]: r.get("nome", "") for r in self.cfg["radar"]}
+                nomes = {r["ticker"]: r.get("nome", "") for r in self.cfg["radar"] + list(self.amigo_radar)}
                 for t in tickers:
                     try:
                         res = self.mercado.dados(t, nomes.get(t, ""))
@@ -1805,6 +1872,21 @@ class App:
         self.perguntar("Remover amigo", f"{email} deixará de ter acesso à sua planilha.", "Remover",
                        lambda: self.page.run_thread(remover), perigo=True)
 
+    def seletor_visao(self, o_que):
+        """'Visualizando' (meus dados ou de um amigo), igual nas abas Apuração, Caixa e Radar."""
+        itens = []
+        if self.g.email and self.cfg["amigos"]:
+            opcoes = [ft.DropdownOption(key="", text="Meus dados")] + [
+                ft.DropdownOption(key=a["email"], text=a["email"]) for a in self.cfg["amigos"]]
+            itens.append(ft.Dropdown(label="Visualizando", value=self.visao or "", options=opcoes,
+                                     on_select=self.trocar_visao, dense=True, expand=True))
+        if self.visao:
+            itens.append(texto(f"{o_que} de {self.visao} · somente leitura", 12, cor=AMARELO))
+        return itens
+
+    def radar_lista(self):
+        return self.amigo_radar if self.visao else nc.ordenar_radar(self.cfg["radar"])
+
     def ver_amigo(self, email):
         self.aba = 0
         self.page.navigation_bar.selected_index = 0
@@ -1815,9 +1897,10 @@ class App:
         if not email:
             self.visao = None
             self.dados_amigo = {}
+            self.amigo_radar, self.amigo_caixa = [], None
             self.mes = nc.mes_inicial()
             self.d = nc.carregar(self.mes)
-            self.render()
+            self.render(todas=True)
             return
         self.page.run_thread(self.carregar_amigo, email)
 
@@ -1828,7 +1911,7 @@ class App:
             if not sid:
                 raise gs.ErroGoogle(f"{email} ainda não compartilhou a planilha com você. "
                                     f"Peça para ele adicionar {self.g.email} em Amigos.")
-            meses = nc.reconstruir(self.g.ler(sid))[0]
+            meses, _, radar, _, caixa = nc.reconstruir(self.g.ler(sid))
         except gs.Offline:
             self.aviso("Sem conexão com a internet.")
             self.render()
@@ -1840,11 +1923,14 @@ class App:
         trocou = self.visao != email
         self.visao = email
         self.dados_amigo = meses
+        self.amigo_radar, self.amigo_caixa = nc.ordenar_radar(radar), caixa
         if trocou or self.mes not in meses:
             abertos = sorted(m for m, d in meses.items() if not d["fechado"])
             self.mes = abertos[0] if abertos else (max(meses) if meses else date.today().strftime("%Y-%m"))
         self.d = meses.get(self.mes) or nc.mes_vazio(self.mes)
-        self.render()
+        self.render(todas=True)
+        if self.aba == ABA_RADAR:
+            self.atualizar_radar()
 
     def trocar_tema(self, e):
         escuro = bool(e.control.value)

@@ -219,6 +219,34 @@ def gravar_config(cfg, carimbar=True):
         CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+# ---------------------------------------------------------------- radar
+
+def ordenar_radar(radar):
+    """Radar na ordem escolhida pelo usuário (campo pos); itens sem pos mantêm a posição relativa."""
+    return [r for _, r in sorted(enumerate(radar), key=lambda e: (e[1].get("pos", e[0]), e[0]))]
+
+
+def adicionar_radar(cfg, ticker, nome=""):
+    """Inclui o ativo no fim do radar (não grava)."""
+    radar = cfg.setdefault("radar", [])
+    if any(r["ticker"] == ticker for r in radar):
+        return None
+    pos = max((r.get("pos", i) for i, r in enumerate(radar)), default=-1) + 1
+    item = {"ticker": ticker, "nome": nome or "", "desde": date.today().isoformat(), "pos": pos}
+    radar.append(item)
+    return item
+
+
+def reordenar_radar(cfg, tickers):
+    """Aplica a nova ordem (lista de tickers); a posição vai para a planilha e sincroniza entre aparelhos."""
+    por_ticker = {r["ticker"]: r for r in cfg.get("radar", [])}
+    novos = [por_ticker[t] for t in tickers if t in por_ticker]
+    novos += [r for r in ordenar_radar(cfg.get("radar", [])) if r["ticker"] not in tickers]
+    for i, r in enumerate(novos):
+        r["pos"] = i
+    cfg["radar"] = novos
+
+
 # ---------------------------------------------------------------- regras
 
 def vendido(lote):
@@ -555,16 +583,18 @@ def resumo_ordem(lado, qtd, preco, data_operacao, preco_compra=None, day_trade=F
             "liquidacao": calcular_data_liquidacao(data_operacao)}
 
 
-def lancamentos_caixa():
+def lancamentos_caixa(meses=None):
     """Movimentos financeiros de todas as operações gravadas, com data de liquidação (D+2).
 
     Compra (parte que não virou day trade): -(valor + taxas B3). Venda swing: +(valor - taxas B3).
     Day trade: só o resultado do dia (venda - compra - taxas). IRRF retido entra como débito no dia.
-    Compras levadas de um mês para o outro (origem) não geram novo débito."""
+    Compras levadas de um mês para o outro (origem) não geram novo débito.
+    meses: dados de outra pessoa ({mês: dados}); por padrão, os meses gravados neste aparelho."""
     itens = []
     irrf_st_dia, res_dt_dia = defaultdict(float), defaultdict(float)
-    for mes in listar_meses():
-        for l in carregar(mes)["lotes"]:
+    fontes = (meses[m] for m in sorted(meses)) if meses is not None else (carregar(m) for m in listar_meses())
+    for dados_mes in fontes:
+        for l in dados_mes["lotes"]:
             if not l.get("origem"):
                 q = l["qtd"] - sum(v["qtd"] for v in l["vendas"] if v["data"] == l["data_compra"])
                 if q > 0:
@@ -595,7 +625,7 @@ def lancamentos_caixa():
     return itens
 
 
-def resumo_caixa(cfg, hoje=None):
+def resumo_caixa(cfg, hoje=None, meses=None):
     """Saldo disponível (D+0), em trânsito e projetado, a partir do saldo informado pelo usuário.
 
     O saldo informado vale para o dia em que foi definido e já inclui o que liquidou até esse dia.
@@ -604,7 +634,7 @@ def resumo_caixa(cfg, hoje=None):
     caixa = cfg.get("caixa") or {}
     base = date.fromisoformat(caixa["data"]) if caixa.get("data") else None
     saldo = float(caixa.get("saldo") or 0.0)
-    itens = lancamentos_caixa()
+    itens = lancamentos_caixa(meses)
     entrou = 0.0
     for it in itens:
         it["status"] = "Liquidado" if it["liquidacao"] <= hoje else "Pendente"
@@ -709,7 +739,8 @@ def montar_linhas(meses, cfg):
         tipo, valor = chave.split(":", 1)
         excl.append([tipo, "", valor, t])
     lista_amigos = [[a["email"], serial(a["desde"]), a.get("mod", 0)] for a in cfg.get("amigos", [])]
-    lista_radar = [[r["ticker"], r.get("nome", ""), serial(r["desde"]), r.get("mod", 0)] for r in cfg.get("radar", [])]
+    lista_radar = [[r["ticker"], r.get("nome", ""), serial(r["desde"]), r.get("mod", 0), r.get("pos", i)]
+                   for i, r in enumerate(ordenar_radar(cfg.get("radar", [])))]
     caixa = cfg.get("caixa") or {}
     lista_caixa = [[round(float(caixa.get("saldo") or 0), 2), serial(caixa["data"]), caixa.get("mod", 0)]] \
         if caixa.get("data") else []
@@ -719,7 +750,7 @@ def montar_linhas(meses, cfg):
 
 def reconstruir(abas):
     """Converte as linhas da planilha em (meses, amigos, radar, exclusões da configuração, caixa)."""
-    larguras = {"Resumo": 13, "Compras": 13, "Vendas": 17, "Amigos": 3, "Radar": 4, "Exclusões": 4, "Caixa": 3}
+    larguras = {"Resumo": 13, "Compras": 13, "Vendas": 17, "Amigos": 3, "Radar": 5, "Exclusões": 4, "Caixa": 3}
     abas = {k: [(list(r) + [""] * larguras.get(k, 0))[:max(larguras.get(k, 0), len(r))] for r in v]
             for k, v in abas.items()}
     meses, lotes = {}, {}
@@ -779,7 +810,10 @@ def reconstruir(abas):
                 desde = de_serial(row[2])
             except (ValueError, TypeError):
                 desde = date.today().isoformat()
-            radar.append({"ticker": ticker, "nome": str(row[1] or ""), "desde": desde, "mod": _num(row[3])})
+            item = {"ticker": ticker, "nome": str(row[1] or ""), "desde": desde, "mod": _num(row[3])}
+            if str(row[4]).strip() != "":  # planilhas antigas não têm a coluna Posição
+                item["pos"] = int(_num(row[4]))
+            radar.append(item)
     caixa = None
     for row in abas.get("Caixa", [])[:1]:
         try:
@@ -865,7 +899,7 @@ def mesclar_tudo(remoto, cfg):
         for k, t in cfg.get("excluidos", {}).items():
             excl[k] = max(t, excl.get(k, 0))
         amigos = mesclar_lista(cfg.get("amigos", []), amigos_r, "email", excl, "amigos")
-        radar = mesclar_lista(cfg.get("radar", []), radar_r, "ticker", excl, "radar")
+        radar = ordenar_radar(mesclar_lista(cfg.get("radar", []), radar_r, "ticker", excl, "radar"))
         antes = json.dumps([cfg.get("amigos"), cfg.get("radar"), cfg.get("excluidos")], sort_keys=True)
         cfg["amigos"], cfg["radar"], cfg["excluidos"] = amigos, radar, excl
         if json.dumps([amigos, radar, excl], sort_keys=True) != antes:

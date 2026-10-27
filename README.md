@@ -6,8 +6,8 @@ App para Windows e Android que registra operações com ações e BDRs e calcula
 - Taxas da B3 e IRRF (dedo-duro)
 - Caixa: saldo em conta, impacto de cada ordem e agenda de liquidações (D+2 em dias úteis da B3)
 - Sincronização com uma planilha no Google Drive, compartilhada entre o computador e o celular
-- Compartilhamento com amigos (somente leitura)
-- Radar de ações com logo da empresa, cotação, média de 6 meses, ATR e classificação de risco
+- Compartilhamento com amigos (somente leitura): apuração, caixa e radar, com importação de ativos do radar do amigo
+- Radar de ações com logo da empresa, cotação, média de 6 meses, ATR e classificação de risco; ordem definida arrastando os ativos
 - Notícias dos ativos do radar (Google Notícias), com notificação das relevantes enquanto o app está aberto ou em segundo plano
 - Atualização automática pelas releases deste repositório
 

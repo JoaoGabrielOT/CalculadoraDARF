@@ -1,5 +1,6 @@
 import base64
 import calendar
+import hashlib
 import json
 import queue
 import re
@@ -729,12 +730,18 @@ def cabecalho_radar(pai):
 
 
 class LinhaRadar(ctk.CTkFrame):
-    def __init__(self, pai, ticker, ao_comprar, ao_vender, ao_remover):
+    def __init__(self, pai, ticker, ao_comprar, ao_vender, ao_remover, ao_arrastar=None, ao_importar=None):
         super().__init__(pai, fg_color=C["card"], corner_radius=8)
         self.ticker = ticker
+        self.amigo = ao_importar is not None
         colunas_radar(self)
         ativo = ctk.CTkFrame(self, fg_color="transparent")
-        ativo.grid(row=0, column=0, sticky="w", padx=12, pady=8)
+        ativo.grid(row=0, column=0, sticky="w", padx=(4 if ao_arrastar else 12, 12), pady=8)
+        if ao_arrastar:  # alça para arrastar e mudar a posição do ativo no radar
+            alca = ctk.CTkLabel(ativo, text="⠿", width=22, font=F(18, "bold"), text_color=C["muted"], cursor="fleur")
+            alca.pack(side="left", padx=(0, 6))
+            for evento, fase in (("<ButtonPress-1>", "ini"), ("<B1-Motion>", "mov"), ("<ButtonRelease-1>", "fim")):
+                alca.bind(evento, lambda e, f=fase: ao_arrastar(f, ticker, e))
         self.lb_logo = selo_logo(ativo, ticker)
         self.lb_logo.pack(side="left", padx=(0, 10))
         txt = ctk.CTkFrame(ativo, fg_color="transparent")
@@ -753,6 +760,12 @@ class LinhaRadar(ctk.CTkFrame):
         self.badge.grid(row=0, column=5, padx=12)
         acoes = ctk.CTkFrame(self, fg_color="transparent")
         acoes.grid(row=0, column=6, sticky="e", padx=12)
+        self.bt_vender = self.bt_importar = None
+        if self.amigo:
+            self.bt_importar = botao(acoes, "+  Meu radar", lambda: ao_importar(ticker), "accent", altura=30,
+                                     fonte=12, width=234)
+            self.bt_importar.pack(side="left")
+            return
         botao(acoes, "Comprar", lambda: ao_comprar(ticker), "accent", altura=30, fonte=12, width=74).pack(side="left")
         self.bt_vender = botao(acoes, "Vender", lambda: ao_vender(ticker), "neutro", altura=30, fonte=12, width=74)
         self.bt_vender.pack(side="left", padx=6)
@@ -763,8 +776,12 @@ class LinhaRadar(ctk.CTkFrame):
             v.configure(text="—")
         self.badge.configure(text="", fg_color="transparent")
 
-    def set(self, dados, pode_vender, nome=""):
-        self.bt_vender.configure(state="normal" if pode_vender else "disabled")
+    def set(self, dados, pode_vender, nome="", ja_tenho=False):
+        if self.bt_vender is not None:
+            self.bt_vender.configure(state="normal" if pode_vender else "disabled")
+        if self.bt_importar is not None:
+            self.bt_importar.configure(text="✓  No meu radar" if ja_tenho else "+  Meu radar",
+                                       state="disabled" if ja_tenho else "normal")
         if dados is None:
             self.lb_nome.configure(text=nome or "Carregando…", text_color=C["muted"])
             self.limpar()
@@ -814,32 +831,126 @@ def ligar_clique(w, acao):
         ligar_clique(filho, acao)
 
 
+def cortar(texto, n):
+    texto = (texto or "").strip()
+    if len(texto) <= n:
+        return texto
+    return texto[:n].rsplit(" ", 1)[0].rstrip(",.;:–-") + "…"
+
+
+def linhas(texto, largura, px_letra):
+    """Estimativa de quantas linhas o texto ocupa (para equilibrar as colunas do mural)."""
+    por_linha = max(10, int(largura / px_letra))
+    return max(1, -(-len(texto or "") // por_linha)) if texto else 0
+
+
+ESTILOS_NOTICIA = {  # proporção da imagem (altura/largura), fonte do título, limite do resumo
+    "destaque": (0.0, 22, 420),
+    "grande": (0.6, 17, 260),
+    "medio": (0.45, 15, 170),
+    "texto": (0.0, 16, 320),
+}
+
+
+def estilo_noticia(item, det, indice):
+    if not (det or {}).get("img"):
+        return "texto"
+    return "grande" if item["temas"] or indice < 2 else "medio"
+
+
+def altura_noticia(item, det, estilo, largura):
+    prop, fonte, limite = ESTILOS_NOTICIA[estilo]
+    resumo = cortar((det or {}).get("resumo", ""), limite)
+    interna = largura - 36
+    return (largura * prop + 16 + linhas(item["titulo"], interna, fonte * 0.55) * fonte * 1.45
+            + linhas(resumo, interna, 6.6) * 18 + 96)
+
+
 class CardNoticia(ctk.CTkFrame):
-    def __init__(self, pai, app, item, nova):
-        super().__init__(pai, fg_color=C["card2"], corner_radius=10)
-        self.grid_columnconfigure(1, weight=1)
-        logo = selo_logo(self, item["tickers"][0], 40)
-        logo.grid(row=0, column=0, rowspan=2, sticky="n", padx=(14, 12), pady=14)
-        app.imagem("t:" + item["tickers"][0], lambda t=item["tickers"][0]: nt.logo_png(t), 40,
-                   lambda img: por_logo(logo, img))
-        ctk.CTkLabel(self, text=item["titulo"], font=F(14, "bold"), text_color=C["texto"], anchor="w",
-                     justify="left", wraplength=900).grid(row=0, column=1, sticky="ew", pady=(12, 2))
-        meta = ctk.CTkFrame(self, fg_color="transparent")
-        meta.grid(row=1, column=1, sticky="w", pady=(0, 12))
-        fav = ctk.CTkLabel(meta, text="", width=16, height=16)
+    """Mini página da matéria original: imagem, fonte, título, resumo, ativos e temas."""
+
+    def __init__(self, pai, app, item, det, nova, largura, estilo):
+        super().__init__(pai, fg_color=C["card2"], corner_radius=16, border_width=1, border_color=C["borda"])
+        det = det or {}
+        self.link = det.get("url") or item["link"]
+        prop, fonte, limite = ESTILOS_NOTICIA[estilo]
+        if estilo == "destaque":
+            larg_img = int(largura * 0.48) if det.get("img") else 0
+            larg_txt = largura - larg_img - 56
+            self.grid_columnconfigure(1, weight=1)
+            if larg_img:
+                alt = max(260, min(360, int(larg_img * 0.56)))
+                self.foto(app, det["img"], larg_img, alt).grid(row=0, column=0, padx=(10, 0), pady=10, sticky="nw")
+            corpo = ctk.CTkFrame(self, fg_color="transparent")
+            corpo.grid(row=0, column=1, sticky="nsew", padx=24, pady=22)
+            self.conteudo(corpo, app, item, det, nova, larg_txt, fonte, limite, destaque=True)
+        else:
+            larg_txt = largura - 36
+            if prop:
+                self.foto(app, det["img"], largura - 16, int((largura - 16) * prop)).pack(padx=8, pady=(8, 0))
+            corpo = ctk.CTkFrame(self, fg_color="transparent")
+            corpo.pack(fill="x", padx=18, pady=(14, 16))
+            self.conteudo(corpo, app, item, det, nova, larg_txt, fonte, limite)
+        ligar_clique(self, lambda: webbrowser.open(self.link))
+        self.ligar_realce(self)
+
+    def foto(self, app, url, larg, alt):
+        rot = ctk.CTkLabel(self, text="", width=larg, height=alt, fg_color=C["neutro"], corner_radius=12)
+        app.imagem_noticia(url, larg, alt, lambda img: por_logo(rot, img))
+        return rot
+
+    def conteudo(self, corpo, app, item, det, nova, larg, fonte, limite, destaque=False):
+        topo = ctk.CTkFrame(corpo, fg_color="transparent")
+        topo.pack(fill="x")
+        fav = ctk.CTkLabel(topo, text="", width=16, height=16)
         fav.pack(side="left", padx=(0, 6))
         app.imagem("f:" + nt.dominio(item.get("fonte_url", "")), lambda: nt.favicon_png(item), 16,
                    lambda img: por_logo(fav, img))
-        ctk.CTkLabel(meta, text=" · ".join(x for x in (item["fonte"], nt.tempo_relativo(item["data"]),
-                                                       ", ".join(item["tickers"])) if x),
-                     font=F(12), text_color=C["muted"]).pack(side="left")
-        tags = ctk.CTkFrame(self, fg_color="transparent")
-        tags.grid(row=0, column=2, rowspan=2, sticky="ne", padx=14, pady=14)
+        ctk.CTkLabel(topo, text=item["fonte"] or nt.dominio(self.link), font=F(12, "bold"),
+                     text_color=C["texto"]).pack(side="left")
+        ctk.CTkLabel(topo, text=f"  ·  {nt.tempo_relativo(item['data'])}", font=F(12),
+                     text_color=C["muted"]).pack(side="left")
         if nova:
-            pilula(tags, "Nova", C["accent"], "#ffffff").pack(side="left", padx=(0, 6))
+            pilula(topo, "Nova", C["accent"], "#ffffff", 10).pack(side="right")
+        ctk.CTkLabel(corpo, text=item["titulo"], font=F(fonte, "bold"), text_color=C["texto"], anchor="w",
+                     justify="left", wraplength=larg).pack(fill="x", pady=(10 if destaque else 8, 0))
+        resumo = cortar(det.get("resumo", ""), limite)
+        if resumo and nt.chave_titulo(resumo) != nt.chave_titulo(item["titulo"]):
+            ctk.CTkLabel(corpo, text=resumo, font=F(13 if destaque else 12), text_color=C["muted"], anchor="w",
+                         justify="left", wraplength=larg).pack(fill="x", pady=(8, 0))
+        rodape = ctk.CTkFrame(corpo, fg_color="transparent")
+        rodape.pack(fill="x", pady=(14 if destaque else 12, 0))
+        for t in item["tickers"][:4]:
+            chip = ctk.CTkFrame(rodape, fg_color=C["neutro"], corner_radius=12)
+            chip.pack(side="left", padx=(0, 6))
+            logo = selo_logo(chip, t, 20)
+            logo.configure(font=F(7, "bold"), corner_radius=6)
+            logo.pack(side="left", padx=(3, 4), pady=3)
+            app.imagem("t:" + t, lambda t=t: nt.logo_png(t), 20, lambda img, l=logo: por_logo(l, img))
+            ctk.CTkLabel(chip, text=t, font=F(11, "bold"), text_color=C["texto"]).pack(side="left", padx=(0, 9))
         for t in item["temas"][:2]:
-            pilula(tags, t, C["accent_bg"], C["accent"]).pack(side="left", padx=(0, 6))
-        ligar_clique(self, lambda: webbrowser.open(item["link"]))
+            pilula(rodape, t, C["accent_bg"], C["accent"], 10).pack(side="left", padx=(0, 6))
+
+    def ligar_realce(self, w):
+        """Borda verde enquanto o mouse está sobre o cartão (efeito de cartão flutuante)."""
+        try:
+            w.bind("<Enter>", lambda e: self.configure(border_color=C["accent"]), add="+")
+            w.bind("<Leave>", lambda e: self.after(30, self.conferir_saida), add="+")
+        except Exception:
+            pass
+        for f in w.winfo_children():
+            self.ligar_realce(f)
+
+    def conferir_saida(self):
+        try:
+            x, y = self.winfo_pointerxy()
+            dentro = self.winfo_containing(x, y)
+            while dentro is not None and dentro is not self:
+                dentro = dentro.master
+            if dentro is None:
+                self.configure(border_color=C["borda"])
+        except Exception:
+            pass
 
 
 def registrar_notificacoes(icone):
@@ -932,6 +1043,10 @@ class App(ctk.CTk):
         self.fila = queue.Queue()
         self.visao = None
         self.dados_amigo = {}
+        self.amigo_radar, self.amigo_caixa = [], None
+        self.lista_seletores = []
+        self.radar_modo = None
+        self.arraste = None
         self.sync_rodando = False
         self.resync = False
         self.sync_job = None
@@ -949,6 +1064,11 @@ class App(ctk.CTk):
         self.esperando = {}
         self.noticias_rodando = False
         self.noticias_filtro = {"tema": "Todas", "ticker": "Todos os ativos"}
+        self.det_noticias = nt.ler_detalhes()
+        self.detalhando = False
+        self.fotos = {}
+        self.mural_largura = 0
+        self.redim_job = None
         self.cfg.setdefault("noticias_notificar", True)
         self.pagina = "apuracao"
 
@@ -1023,10 +1143,7 @@ class App(ctk.CTk):
         barra.grid(row=0, column=0, sticky="ew", padx=24, pady=(0, 16))
         ctk.CTkLabel(barra, text="Visualizando", font=F(12, "bold"), text_color=C["muted"]).pack(
             side="left", padx=(0, 8))
-        self.om_visao = ctk.CTkOptionMenu(barra, values=["Meus dados"], command=self.trocar_visao, width=280,
-                                          height=36, font=F(13, "bold"), dropdown_font=F(13), corner_radius=8,
-                                          fg_color=C["neutro"], button_color=C["neutro_h"],
-                                          button_hover_color=C["borda"], text_color=C["texto"])
+        self.om_visao = self.seletor_visao(barra)
         self.om_visao.pack(side="left")
         self.bt_recarregar = botao(barra, "Atualizar", self.recarregar_amigo, "neutro", width=100)
         self.bt_recarregar.pack(side="left", padx=8)
@@ -1231,7 +1348,7 @@ class App(ctk.CTk):
         else:
             self.lb_sub.configure(text="Ações e BDRs · apuração mensal de IR", text_color=C["muted"])
         self.bt_mes.configure(text=f"{fmt_mes(self.mes)}  ▾")
-        self.om_visao.set(self.visao or "Meus dados")
+        self.seletores("set", self.visao or "Meus dados")
         self.bt_recarregar.configure(state="normal" if self.visao else "disabled")
 
         fechado = self.d["fechado"]
@@ -1456,9 +1573,16 @@ class App(ctk.CTk):
     def montar_caixa(self):
         pg = self.pg_caixa = ctk.CTkFrame(self, fg_color="transparent")
         pg.grid_columnconfigure(0, weight=1)
-        pg.grid_rowconfigure(2, weight=1)
+        pg.grid_rowconfigure(3, weight=1)
+        barra = ctk.CTkFrame(pg, fg_color="transparent")
+        barra.grid(row=0, column=0, sticky="ew", padx=24, pady=(0, 12))
+        ctk.CTkLabel(barra, text="Visualizando", font=F(12, "bold"), text_color=C["muted"]).pack(side="left",
+                                                                                               padx=(0, 8))
+        self.seletor_visao(barra).pack(side="left")
+        self.lb_caixa_dono = ctk.CTkLabel(barra, text="", font=F(12, "bold"), text_color=C["aviso"])
+        self.lb_caixa_dono.pack(side="left", padx=12)
         k = ctk.CTkFrame(pg, fg_color="transparent")
-        k.grid(row=0, column=0, sticky="ew", padx=24, pady=(0, 8))
+        k.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 8))
         for i in range(3):
             k.grid_columnconfigure(i, weight=1, uniform="caixa")
         self.k_disp = CardKPI(k, "Saldo disponível (D+0)")
@@ -1466,13 +1590,14 @@ class App(ctk.CTk):
         self.k_proj = CardKPI(k, "Saldo projetado", destaque=True)
         for i, c in enumerate((self.k_disp, self.k_trans, self.k_proj)):
             c.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 8, 0 if i == 2 else 8))
-        botao(self.k_disp, "✎  Editar", self.editar_saldo, "neutro", altura=30, fonte=12, width=96).place(
-            relx=1.0, x=-14, y=12, anchor="ne")
+        self.bt_editar_saldo = botao(self.k_disp, "✎  Editar", self.editar_saldo, "neutro", altura=30, fonte=12,
+                                     width=96)
+        self.bt_editar_saldo.place(relx=1.0, x=-14, y=12, anchor="ne")
         self.lb_caixa_info = ctk.CTkLabel(pg, text="", font=F(12), text_color=C["muted"], anchor="w", justify="left")
-        self.lb_caixa_info.grid(row=1, column=0, sticky="ew", padx=28, pady=(0, 12))
+        self.lb_caixa_info.grid(row=2, column=0, sticky="ew", padx=28, pady=(0, 12))
 
         card = self.card(pg)
-        card.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 24))
+        card.grid(row=3, column=0, sticky="nsew", padx=24, pady=(0, 24))
         self.lb_qtd_agenda = self.topo_card(card, "Agenda financeira")[1]
         self.fr_grupos = ctk.CTkFrame(card, fg_color="transparent")
         self.fr_grupos.pack(fill="x", padx=18, pady=(0, 10))
@@ -1493,6 +1618,14 @@ class App(ctk.CTk):
         self.bt_saldo.configure(text=f"Saldo: {brl(r['disponivel'])}" if r["definido"] else "Definir saldo")
         if not hasattr(self, "k_disp"):
             return
+        amigo = self.visao
+        if amigo:  # caixa do amigo, calculado com as operações e o saldo da planilha dele
+            r = nc.resumo_caixa({"caixa": self.amigo_caixa or {}}, hoje, meses=self.dados_amigo)
+        self.lb_caixa_dono.configure(text=f"Caixa de {amigo} · somente leitura" if amigo else "")
+        if amigo:
+            self.bt_editar_saldo.place_forget()
+        else:
+            self.bt_editar_saldo.place(relx=1.0, x=-14, y=12, anchor="ne")
         if r["definido"]:
             self.k_disp.set(brl(r["disponivel"]), "livre para novas operações",
                             C["danger"] if r["disponivel"] < 0 else None)
@@ -1500,8 +1633,9 @@ class App(ctk.CTk):
                 text=f"Saldo informado em {r['base']:%d/%m/%Y}. As liquidações seguintes entram sozinhas no "
                      f"saldo disponível quando a data chega.")
         else:
-            self.k_disp.set("—", "clique em Editar para informar")
-            self.lb_caixa_info.configure(text="Informe o saldo livre na conta para acompanhar o caixa.")
+            self.k_disp.set("—", "não informado" if amigo else "clique em Editar para informar")
+            self.lb_caixa_info.configure(text=f"{amigo} ainda não informou o saldo da conta." if amigo else
+                                         "Informe o saldo livre na conta para acompanhar o caixa.")
         partes = []
         if r["a_debitar"]:
             partes.append(f"{brl(r['a_debitar'])} a debitar")
@@ -1575,7 +1709,8 @@ class App(ctk.CTk):
         linha1.pack(fill="x", padx=20, pady=(16, 0))
         esq = ctk.CTkFrame(linha1, fg_color="transparent")
         esq.pack(side="left")
-        ctk.CTkLabel(esq, text="Radar de Ações", font=F(18, "bold"), text_color=C["texto"]).pack(anchor="w")
+        self.lb_radar_titulo = ctk.CTkLabel(esq, text="Radar de Ações", font=F(18, "bold"), text_color=C["texto"])
+        self.lb_radar_titulo.pack(anchor="w")
         self.lb_radar_status = ctk.CTkLabel(esq, text="Cotações do Yahoo Finance (atraso de até 15 min)",
                                             font=F(12), text_color=C["muted"])
         self.lb_radar_status.pack(anchor="w")
@@ -1589,13 +1724,18 @@ class App(ctk.CTk):
 
         dir_ = ctk.CTkFrame(linha1, fg_color="transparent")
         dir_.pack(side="right")
-        self.en_radar = ctk.CTkEntry(dir_, width=200, height=38, font=F(13), corner_radius=8,
+        self.seletor_visao(dir_, 240).pack(side="left", padx=(0, 16))
+        self.fr_radar_meu = ctk.CTkFrame(dir_, fg_color="transparent")
+        self.fr_radar_meu.pack(side="left")
+        self.bt_importar_todos = botao(dir_, "+  Importar todos para o meu radar", self.importar_todos_radar, "accent",
+                                       width=250)
+        self.en_radar = ctk.CTkEntry(self.fr_radar_meu, width=200, height=38, font=F(13), corner_radius=8,
                                      border_color=C["borda"], fg_color=C["card2"], text_color=C["texto"],
                                      placeholder_text="Ticker (ex.: VALE3)")
         self.en_radar.pack(side="left")
         self.en_radar.bind("<Return>", lambda e: self.adicionar_radar())
-        botao(dir_, "+  Adicionar", self.adicionar_radar, "accent", width=120).pack(side="left", padx=8)
-        botao(dir_, "Atualizar", lambda: self.atualizar_radar(forcar=True), "neutro", width=100).pack(side="left")
+        botao(self.fr_radar_meu, "+  Adicionar", self.adicionar_radar, "accent", width=120).pack(side="left", padx=8)
+        botao(dir_, "Atualizar", lambda: self.atualizar_radar(forcar=True), "neutro", width=100).pack(side="right")
 
         lista = self.card(pg)
         lista.grid(row=1, column=0, sticky="nsew", padx=24, pady=(0, 24))
@@ -1687,6 +1827,7 @@ class App(ctk.CTk):
         self.lista_noticias = ctk.CTkScrollableFrame(lista, fg_color="transparent")
         self.lista_noticias.pack(fill="both", expand=True, padx=10, pady=12)
         self.lista_noticias.grid_columnconfigure(0, weight=1)
+        self.lista_noticias.bind("<Configure>", self.mural_redimensionado, add="+")
 
     def filtrar_noticias(self, tema=None, ticker=None):
         if tema:
@@ -1703,7 +1844,7 @@ class App(ctk.CTk):
         if not hasattr(self, "lista_noticias"):
             return
         d = nt.ler_estado()
-        radar = [r["ticker"] for r in self.cfg["radar"]]
+        radar = [r["ticker"] for r in nc.ordenar_radar(self.cfg["radar"])]
         opcoes = ["Todos os ativos"] + radar
         if self.noticias_filtro["ticker"] not in opcoes:
             self.noticias_filtro["ticker"] = "Todos os ativos"
@@ -1713,6 +1854,7 @@ class App(ctk.CTk):
         itens = [i for i in d["itens"] if set(i["tickers"]) & set(radar)
                  and (f["tema"] == "Todas" or i["temas"])
                  and (f["ticker"] == "Todos os ativos" or f["ticker"] in i["tickers"])]
+        rolagem = self.posicao_rolagem()
         for w in self.lista_noticias.winfo_children():
             w.destroy()
         if not radar:
@@ -1724,10 +1866,120 @@ class App(ctk.CTk):
         if not itens:
             ctk.CTkLabel(self.lista_noticias, text=vazio, font=F(13), text_color=C["muted"]).grid(row=0, column=0,
                                                                                                 pady=60)
-        for n, it in enumerate(itens[:80]):
-            CardNoticia(self.lista_noticias, self, it, nt.eh_nova(d, it)).grid(row=n, column=0, sticky="ew", pady=4,
-                                                                             padx=4)
+        else:
+            self.montar_mural(itens[:60], d)
+        self.after_idle(lambda: self.restaurar_rolagem(rolagem))
+        if any(i["id"] not in self.det_noticias for i in d["itens"][:nt.MAX_DETALHES]):
+            self.detalhar_noticias(d["itens"])
         self.status_noticias(d)
+
+    def largura_mural(self):
+        try:
+            px = self.lista_noticias.winfo_width()
+            escala = ctk.ScalingTracker.get_widget_scaling(self.lista_noticias)
+        except Exception:
+            px, escala = 0, 1
+        larg = px / (escala or 1) - 24
+        return larg if larg > 300 else 1250
+
+    def montar_mural(self, itens, d):
+        """Destaque no topo e o resto em colunas, cada cartão no tamanho do seu conteúdo (estilo mural)."""
+        largura = self.largura_mural()
+        self.mural_largura = largura
+        espaco = 16
+        ncol = max(1, min(4, int((largura + espaco) // 340)))
+        larg_col = (largura - espaco * (ncol - 1)) / ncol
+        det = self.det_noticias
+        linha = 0
+        resto = list(itens)
+        if ncol >= 2:
+            com_foto = [i for i in itens[:6] if det.get(i["id"], {}).get("img")]
+            destaque = next((i for i in com_foto if i["temas"]), com_foto[0] if com_foto else itens[0])
+            resto.remove(destaque)
+            CardNoticia(self.lista_noticias, self, destaque, det.get(destaque["id"]), nt.eh_nova(d, destaque),
+                        largura, "destaque").grid(row=0, column=0, sticky="ew", padx=4, pady=(4, espaco))
+            linha = 1
+        grade = ctk.CTkFrame(self.lista_noticias, fg_color="transparent")
+        grade.grid(row=linha, column=0, sticky="new", padx=4)
+        colunas, alturas = [], [0.0] * ncol
+        for c in range(ncol):
+            grade.grid_columnconfigure(c, weight=1, uniform="mural")
+            f = ctk.CTkFrame(grade, fg_color="transparent")
+            f.grid(row=0, column=c, sticky="new", padx=(0 if c == 0 else espaco / 2, 0 if c == ncol - 1 else espaco / 2))
+            colunas.append(f)
+        for n, it in enumerate(resto):
+            dt = det.get(it["id"])
+            estilo = estilo_noticia(it, dt, n)
+            c = alturas.index(min(alturas))
+            CardNoticia(colunas[c], self, it, dt, nt.eh_nova(d, it), larg_col, estilo).pack(fill="x", pady=(0, espaco))
+            alturas[c] += altura_noticia(it, dt, estilo, larg_col) + espaco
+
+    def mural_redimensionado(self, _=None):
+        if self.pagina != "noticias":
+            return
+        if self.redim_job:
+            self.after_cancel(self.redim_job)
+
+        def refazer():
+            self.redim_job = None
+            if abs(self.largura_mural() - self.mural_largura) > 40:
+                self.desenhar_noticias()
+
+        self.redim_job = self.after(300, refazer)
+
+    def posicao_rolagem(self):
+        try:
+            return self.lista_noticias._parent_canvas.yview()[0]
+        except Exception:
+            return 0
+
+    def restaurar_rolagem(self, pos):
+        try:
+            self.lista_noticias._parent_canvas.yview_moveto(pos)
+        except Exception:
+            pass
+
+    def detalhar_noticias(self, itens):
+        """Busca imagem e resumo das matérias (em segundo plano) e redesenha quando chegarem."""
+        if self.detalhando:
+            return
+        self.detalhando = True
+        itens = [dict(i) for i in itens]
+
+        def fim(mudou):
+            self.detalhando = False
+            self.det_noticias = nt.ler_detalhes()
+            if mudou and self.pagina == "noticias":
+                self.desenhar_noticias()
+
+        def erro(_):
+            self.detalhando = False
+
+        self.bg(lambda: nt.enriquecer(itens), ok=fim, erro=erro)
+
+    def imagem_noticia(self, url, larg, alt, ao_carregar):
+        """Imagem da matéria recortada no tamanho do cartão (Pillow)."""
+        chave = (url, int(larg), int(alt))
+        img = self.fotos.get(chave)
+        if img is not None:
+            ao_carregar(img)
+            return
+        destino = DADOS / "noticias_img" / (hashlib.sha1(url.encode()).hexdigest()[:20] + ".jpg")
+
+        def pronto(caminho):
+            if not caminho:
+                return
+            try:
+                from PIL import Image, ImageOps
+                with Image.open(caminho) as im:
+                    recorte = ImageOps.fit(im.convert("RGB"), (int(larg * 2), int(alt * 2)), Image.LANCZOS)
+                foto = ctk.CTkImage(light_image=recorte, dark_image=recorte, size=(int(larg), int(alt)))
+            except Exception:
+                return
+            self.fotos[chave] = foto
+            ao_carregar(foto)
+
+        self.bg(lambda: nt.baixar_imagem_noticia(url, destino), ok=pronto, erro=lambda e: None)
 
     def status_noticias(self, d):
         if not d["hora"] or self.noticias_rodando:
@@ -1755,7 +2007,7 @@ class App(ctk.CTk):
         self.noticias_rodando = True
         self.lb_noticias_status.configure(text="Buscando notícias…", text_color=C["muted"])
         radar = [dict(r) for r in self.cfg["radar"]]
-        self.bg(lambda: nt.atualizar(radar), ok=self.noticias_chegaram, erro=self.noticias_erro)
+        self.bg(lambda: nt.atualizar(radar, detalhes=True), ok=self.noticias_chegaram, erro=self.noticias_erro)
 
     def _radar_sem_noticias(self):
         conhecidos = set(nt.ler_estado()["conhecidos"])
@@ -1763,6 +2015,7 @@ class App(ctk.CTk):
 
     def noticias_chegaram(self, res):
         self.noticias_rodando = False
+        self.det_noticias = nt.ler_detalhes()
         _, novas = res
         if self.pagina == "noticias":
             self.desenhar_noticias()
@@ -1801,27 +2054,116 @@ class App(ctk.CTk):
     def custodia(self):
         return {l["ticker"] for l in carregar(mes_inicial())["lotes"] if restante(l) > 0}
 
+    def radar_lista(self):
+        """Radar exibido: o do amigo selecionado em "Visualizando" ou o meu, na ordem escolhida."""
+        return self.amigo_radar if self.visao else nc.ordenar_radar(self.cfg["radar"])
+
     def radar_redesenhar(self):
-        tickers = [r["ticker"] for r in self.cfg["radar"]]
-        nomes = {r["ticker"]: r.get("nome", "") for r in self.cfg["radar"]}
+        if not hasattr(self, "lista_radar"):
+            return
+        amigo = self.visao
+        modo = f"amigo:{amigo}" if amigo else "meu"
+        if modo != self.radar_modo:  # trocou de dono: as linhas têm botões diferentes
+            for card in self.radar_cards.values():
+                card.destroy()
+            self.radar_cards.clear()
+            self.radar_modo = modo
+            self.lb_radar_titulo.configure(text=f"Radar de {amigo}" if amigo else "Radar de Ações")
+            if amigo:
+                self.fr_radar_meu.pack_forget()
+                self.bt_importar_todos.pack(side="left")
+            else:
+                self.bt_importar_todos.pack_forget()
+                self.fr_radar_meu.pack(side="left")
+        lista = self.radar_lista()
+        tickers = [r["ticker"] for r in lista]
+        nomes = {r["ticker"]: r.get("nome", "") for r in lista}
+        meus = {r["ticker"] for r in self.cfg["radar"]}
         for t in list(self.radar_cards):
             if t not in tickers:
                 self.radar_cards.pop(t).destroy()
-        custodia = self.custodia()
-        for i, t in enumerate(tickers):
-            card = self.radar_cards.get(t)
-            if card is None:
-                card = self.radar_cards[t] = LinhaRadar(self.lista_radar, t, self.radar_comprar, self.radar_vender,
-                                                        self.remover_radar)
+        custodia = set() if amigo else self.custodia()
+        for t in tickers:
+            if t not in self.radar_cards:
+                if amigo:
+                    card = LinhaRadar(self.lista_radar, t, None, None, None, ao_importar=self.importar_radar)
+                else:
+                    card = LinhaRadar(self.lista_radar, t, self.radar_comprar, self.radar_vender, self.remover_radar,
+                                      ao_arrastar=self.arrastar_radar)
+                self.radar_cards[t] = card
                 self.imagem("t:" + t, lambda t=t: nt.logo_png(t), TAM_LOGO,
                             lambda img, c=card: por_logo(c.lb_logo, img))
-            card.configure(fg_color=C["card"] if i % 2 == 0 else C["zebra"])
-            card.grid(row=i, column=0, sticky="ew", pady=1)
-            card.set(self.radar_dados.get(t), t in custodia, nomes.get(t, ""))
+            self.radar_cards[t].set(self.radar_dados.get(t), t in custodia, nomes.get(t, ""), ja_tenho=t in meus)
+        self.posicionar_linhas(tickers)
         if tickers:
             self.lb_radar_vazio.grid_forget()
         else:
+            self.lb_radar_vazio.configure(text=f"{amigo} não tem ativos no radar." if amigo else
+                                          "Nenhum ativo no radar. Adicione um ticker acima.")
             self.lb_radar_vazio.grid(row=0, column=0, pady=60)
+
+    def posicionar_linhas(self, tickers, arrastado=None):
+        for i, t in enumerate(tickers):
+            card = self.radar_cards[t]
+            cor_ = C["selecao"] if t == arrastado else (C["card"] if i % 2 == 0 else C["zebra"])
+            card.configure(fg_color=cor_)
+            card.grid(row=i, column=0, sticky="ew", pady=1)
+
+    def arrastar_radar(self, fase, t, ev):
+        """Arrastar pela alça ⠿: a linha acompanha o mouse e a nova ordem é gravada ao soltar."""
+        if fase == "ini":
+            self.arraste = {"t": t, "ordem": [r["ticker"] for r in nc.ordenar_radar(self.cfg["radar"])]}
+            self.posicionar_linhas(self.arraste["ordem"], t)
+            return
+        if not self.arraste:
+            return
+        ordem = self.arraste["ordem"]
+        if fase == "mov":
+            y = ev.y_root
+            try:
+                canvas = self.lista_radar._parent_canvas
+                topo, alt = canvas.winfo_rooty(), canvas.winfo_height()
+                if y < topo + 30:
+                    canvas.yview_scroll(-1, "units")
+                elif y > topo + alt - 30:
+                    canvas.yview_scroll(1, "units")
+            except Exception:
+                pass
+            outros = [x for x in ordem if x != t]
+            idx = sum(1 for x in outros
+                      if self.radar_cards[x].winfo_rooty() + self.radar_cards[x].winfo_height() / 2 < y)
+            nova = outros[:idx] + [t] + outros[idx:]
+            if nova != ordem:
+                self.arraste["ordem"] = nova
+                self.posicionar_linhas(nova, t)
+            return
+        self.arraste = None  # soltou
+        if ordem != [r["ticker"] for r in nc.ordenar_radar(self.cfg["radar"])]:
+            nc.reordenar_radar(self.cfg, ordem)
+            self.agendar_sync()
+        self.posicionar_linhas(ordem)
+
+    def importar_radar(self, t):
+        item = next((r for r in self.amigo_radar if r["ticker"] == t), {"nome": ""})
+        if nc.adicionar_radar(self.cfg, t, item.get("nome", "")) is None:
+            return
+        self.agendar_sync()
+        self.radar_redesenhar()
+        self.atualizar_noticias()
+
+    def importar_todos_radar(self):
+        novos = [r for r in self.amigo_radar if all(m["ticker"] != r["ticker"] for m in self.cfg["radar"])]
+        if not novos:
+            avisar(self, "Radar", "Todos os ativos do radar do amigo já estão no seu radar.")
+            return
+        if not confirmar(self, "Importar radar", f"Adicionar {len(novos)} ativo(s) ao seu radar: "
+                         f"{', '.join(r['ticker'] for r in novos)}?", sim="Importar"):
+            return
+        for r in novos:
+            nc.adicionar_radar(self.cfg, r["ticker"], r.get("nome", ""))
+        self.agendar_sync()
+        self.radar_redesenhar()
+        self.atualizar_noticias()
 
     def adicionar_radar(self):
         t = self.en_radar.get().strip().upper()
@@ -1833,7 +2175,7 @@ class App(ctk.CTk):
         if any(r["ticker"] == t for r in self.cfg["radar"]):
             avisar(self, "Radar", f"{t} já está no radar.")
             return
-        self.cfg["radar"].append({"ticker": t, "nome": "", "desde": date.today().isoformat()})
+        nc.adicionar_radar(self.cfg, t)
         self.en_radar.delete(0, "end")
         self.agendar_sync()
         self.radar_redesenhar()
@@ -1850,7 +2192,7 @@ class App(ctk.CTk):
         self.desenhar_noticias()
 
     def atualizar_radar(self, forcar=False, apenas=None):
-        tickers = apenas or [r["ticker"] for r in self.cfg["radar"]]
+        tickers = apenas or [r["ticker"] for r in self.radar_lista()]
         if not tickers:
             return
         if self.radar_rodando:
@@ -1858,7 +2200,7 @@ class App(ctk.CTk):
             return
         self.radar_rodando = True
         self.lb_radar_status.configure(text="Atualizando cotações…", text_color=C["muted"])
-        nomes = {r["ticker"]: r.get("nome", "") for r in self.cfg["radar"]}
+        nomes = {r["ticker"]: r.get("nome", "") for r in self.cfg["radar"] + list(self.amigo_radar)}
         mercado = self.mercado
 
         def trabalho():
@@ -1875,16 +2217,15 @@ class App(ctk.CTk):
 
     def radar_resultado(self, res):
         t = res["ticker"]
-        if not any(r["ticker"] == t for r in self.cfg["radar"]):
-            return
         self.radar_dados[t] = res
-        item = next(r for r in self.cfg["radar"] if r["ticker"] == t)
-        if res.get("nome") and not item.get("nome"):
+        item = next((r for r in self.cfg["radar"] if r["ticker"] == t), None)
+        if item is not None and res.get("nome") and not item.get("nome"):
             item["nome"] = res["nome"]
             self.agendar_sync()
+        exibido = next((r for r in self.radar_lista() if r["ticker"] == t), None)
         card = self.radar_cards.get(t)
-        if card:
-            card.set(res, t in self.custodia(), item.get("nome", ""))
+        if card and exibido is not None:
+            card.set(res, not self.visao and t in self.custodia(), exibido.get("nome", ""), ja_tenho=item is not None)
 
     def radar_fim(self, _=None):
         self.radar_rodando = False
@@ -1992,7 +2333,7 @@ class App(ctk.CTk):
             self.bt_conta.configure(text=e if len(e) <= 26 else e[:24] + "…")
         else:
             self.bt_conta.configure(text="Conectar Google")
-        self.om_visao.configure(values=["Meus dados"] + [a["email"] for a in self.cfg["amigos"]])
+        self.seletores("configure", values=["Meus dados"] + [a["email"] for a in self.cfg["amigos"]])
 
     def conectar_token(self):
         self.carregando_token = True
@@ -2078,9 +2419,11 @@ class App(ctk.CTk):
                 self.g.sair()
                 self.visao = None
                 self.dados_amigo = {}
+                self.amigo_radar, self.amigo_caixa = [], None
                 self.d = carregar(self.mes)
                 self.atualizar()
                 self.atualizar_conta()
+                self.visao_mudou()
                 self.status_sync("off")
 
     # --- sincronização
@@ -2190,16 +2533,18 @@ class App(ctk.CTk):
         if rotulo == "Meus dados":
             self.visao = None
             self.dados_amigo = {}
+            self.amigo_radar, self.amigo_caixa = [], None
             self.mes = mes_inicial()
             self.d = carregar(self.mes)
             self.atualizar()
+            self.visao_mudou()
             return
         if not self.g.email:
-            self.om_visao.set(self.visao or "Meus dados")
+            self.seletores("set", self.visao or "Meus dados")
             avisar(self, "Amigos", "Conecte sua conta Google para ver os dados dos amigos.")
             return
         email = rotulo
-        self.om_visao.configure(state="disabled")
+        self.seletores("configure", state="disabled")
         self.lb_sub.configure(text=f"Carregando dados de {email}…", text_color=C["muted"])
 
         def carregar_amigo():
@@ -2207,28 +2552,53 @@ class App(ctk.CTk):
             if not sid:
                 raise gs.ErroGoogle(f"{email} ainda não compartilhou a planilha com você. "
                                     f"Peça para ele adicionar {self.g.email} em Amigos.")
-            return reconstruir(self.g.ler(sid))[0]
+            meses, _, radar, _, caixa = reconstruir(self.g.ler(sid))
+            return meses, nc.ordenar_radar(radar), caixa
 
-        self.bg(carregar_amigo, ok=lambda meses: self.amigo_ok(email, meses),
+        self.bg(carregar_amigo, ok=lambda res: self.amigo_ok(email, *res),
                 erro=self.amigo_erro)
+
+    def seletor_visao(self, pai, largura=280):
+        om = ctk.CTkOptionMenu(pai, values=["Meus dados"] + [a["email"] for a in self.cfg.get("amigos", [])],
+                               command=self.trocar_visao, width=largura, height=36, font=F(13, "bold"),
+                               dropdown_font=F(13), corner_radius=8, fg_color=C["neutro"], button_color=C["neutro_h"],
+                               button_hover_color=C["borda"], text_color=C["texto"])
+        om.set(self.visao or "Meus dados")
+        self.lista_seletores.append(om)
+        return om
+
+    def seletores(self, metodo, *a, **kw):
+        """Aplica a mesma alteração em todos os seletores "Visualizando" (Apuração, Caixa e Radar)."""
+        for om in self.lista_seletores:
+            getattr(om, metodo)(*a, **kw)
+
+    def visao_mudou(self):
+        self.seletores("set", self.visao or "Meus dados")
+        self.atualizar_caixa()
+        self.radar_redesenhar()
+        if self.pagina == "radar":
+            self.atualizar_radar()
 
     def recarregar_amigo(self):
         if self.visao:
             self.trocar_visao(self.visao)
 
-    def amigo_ok(self, email, meses):
-        self.om_visao.configure(state="normal")
+    def amigo_ok(self, email, meses, radar=None, caixa=None):
+        self.seletores("configure", state="normal")
         trocou = self.visao != email
         self.visao = email
         self.dados_amigo = meses
+        self.amigo_radar = radar or []
+        self.amigo_caixa = caixa
         if trocou or self.mes not in meses:
             abertos = sorted(m for m, d in meses.items() if not d["fechado"])
             self.mes = abertos[0] if abertos else (max(meses) if meses else date.today().strftime("%Y-%m"))
         self.d = meses.get(self.mes) or mes_vazio(self.mes)
         self.atualizar()
+        self.visao_mudou()
 
     def amigo_erro(self, e):
-        self.om_visao.configure(state="normal")
+        self.seletores("configure", state="normal")
         self.atualizar()
         if isinstance(e, gs.Offline):
             msg = "Sem conexão com a internet."
