@@ -43,10 +43,62 @@ def _valido(v):
     return v is not None and not (isinstance(v, float) and math.isnan(v)) and v > 0
 
 
+URL_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{t}.SA"
+UA = {"User-Agent": "Mozilla/5.0"}
+
+# período do gráfico -> (range e intervalo do Yahoo, validade do cache em segundos)
+PERIODOS_GRAFICO = {
+    "1D": ("1d", "5m", 60), "5D": ("5d", "30m", 120), "1M": ("1mo", "1d", 900), "6M": ("6mo", "1d", 1800),
+    "1A": ("1y", "1d", 1800), "5A": ("5y", "1wk", 3600), "Máx": ("max", "1mo", 3600),
+}
+
+
+def variacao(preco, anterior):
+    """(variação em R$, variação %) em relação ao fechamento anterior."""
+    if not _valido(preco) or not _valido(anterior):
+        return None, None
+    return preco - anterior, (preco / anterior - 1) * 100
+
+
+def anterior_de(pares, dia_atual):
+    """Último fechamento de um pregão anterior ao dia atual do mercado; pares = [(data, fechamento)]."""
+    antes = [c for d, c in sorted(pares) if d < dia_atual]
+    return antes[-1] if antes else None
+
+
+def _get_chart(ticker, params):
+    import requests
+    r = requests.get(URL_CHART.format(t=ticker), params=params, headers=UA, timeout=20)
+    if r.status_code == 429:
+        raise RuntimeError("Too Many Requests")
+    if r.status_code == 404:
+        raise SemDados(f"Sem dados para {ticker} no Yahoo Finance.")
+    r.raise_for_status()
+    res = (r.json().get("chart") or {}).get("result") or []
+    if not res:
+        raise SemDados(f"Sem dados para {ticker} no Yahoo Finance.")
+    return res[0]
+
+
+def _extras(dados, hi, lo, cl, anterior, mercado=None):
+    """Variação do dia, mínima/máxima de 6 meses e distância até a média; mercado = máxima/mínima do dia,
+    de 52 semanas e volume, quando o Yahoo informa."""
+    preco = dados["preco"]
+    var, var_pct = variacao(preco, anterior)
+    media = dados["media6m"]
+    dados.update({"anterior": anterior, "var": var, "var_pct": var_pct, "min6m": min(lo), "max6m": max(hi),
+                  "var6m_pct": (preco / cl[0] - 1) * 100 if _valido(preco) and _valido(cl[0]) else None,
+                  "vs_media_pct": (preco / media - 1) * 100 if _valido(preco) and _valido(media) else None})
+    for k, v in (mercado or {}).items():
+        dados[k] = float(v) if _valido(v) else None
+    return dados
+
+
 class Mercado:
     def __init__(self):
         self._hist = {}
         self._nomes = {}
+        self._graficos = {}
         self._trava = threading.Lock()
 
     def limpar(self):
@@ -150,37 +202,40 @@ class Mercado:
             agora = time.time()
             h = self._hist.get(ticker)
             if not h or agora - h[0] > 60:
+                from datetime import datetime, timezone
                 fim = int(agora)
                 inicio = fim - DIAS_HISTORICO * 86400
-                r = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}.SA",
-                                 params={"period1": inicio, "period2": fim, "interval": "1d"},
-                                 headers={"User-Agent": "Mozilla/5.0"}, timeout=20)
-                if r.status_code == 429:
-                    raise RuntimeError("Too Many Requests")
-                if r.status_code == 404:
-                    raise SemDados(f"Sem dados para {ticker} no Yahoo Finance.")
-                r.raise_for_status()
-                res = (r.json().get("chart") or {}).get("result") or []
-                if not res:
-                    raise SemDados(f"Sem dados para {ticker} no Yahoo Finance.")
-                meta = res[0].get("meta", {})
-                q = ((res[0].get("indicators") or {}).get("quote") or [{}])[0]
-                linhas = [(a, b, c) for a, b, c in zip(q.get("high") or [], q.get("low") or [], q.get("close") or [])
+                res = _get_chart(ticker, {"period1": inicio, "period2": fim, "interval": "1d"})
+                meta = res.get("meta", {})
+                desvio = meta.get("gmtoffset") or 0
+                q = ((res.get("indicators") or {}).get("quote") or [{}])[0]
+                linhas = [(datetime.fromtimestamp(ts + desvio, timezone.utc).date(), a, b, c)
+                          for ts, a, b, c in zip(res.get("timestamp") or [], q.get("high") or [], q.get("low") or [],
+                                                 q.get("close") or [])
                           if _valido(a) and _valido(b) and _valido(c)]
                 if len(linhas) < PERIODOS_ATR + 1:
                     raise SemDados(f"Histórico insuficiente para {ticker}.")
-                hi, lo, cl = (list(x) for x in zip(*linhas))
+                datas, hi, lo, cl = (list(x) for x in zip(*linhas))
+                t_mercado = meta.get("regularMarketTime")
+                dia = (datetime.fromtimestamp(t_mercado + desvio, timezone.utc).date() if t_mercado
+                       else datas[-1])
                 h = (agora, {"media6m": sum(cl) / len(cl), "atr": calcular_atr(hi, lo, cl), "ultimo": cl[-1],
                              "preco": meta.get("regularMarketPrice"),
-                             "nome": meta.get("longName") or meta.get("shortName") or ""})
+                             "nome": meta.get("longName") or meta.get("shortName") or "",
+                             "anterior": anterior_de(list(zip(datas, cl)), dia), "hi": hi, "lo": lo, "cl": cl,
+                             "mercado": {"max_dia": meta.get("regularMarketDayHigh"),
+                                         "min_dia": meta.get("regularMarketDayLow"),
+                                         "max52": meta.get("fiftyTwoWeekHigh"), "min52": meta.get("fiftyTwoWeekLow"),
+                                         "volume": meta.get("regularMarketVolume")}})
                 self._hist[ticker] = h
             preco = h[1]["preco"] if _valido(h[1]["preco"]) else h[1]["ultimo"]
             nome = nome_conhecido or h[1]["nome"]
             atr = h[1]["atr"]
             atr_pct = atr / preco * 100 if atr and preco else None
             risco = classificar_risco(atr_pct) if atr_pct is not None else None
-            return {"ticker": ticker, "nome": nome, "preco": preco, "media6m": h[1]["media6m"],
-                    "atr": atr, "atr_pct": atr_pct, "risco": risco, "hora": time.time()}
+            dados = {"ticker": ticker, "nome": nome, "preco": preco, "media6m": h[1]["media6m"],
+                     "atr": atr, "atr_pct": atr_pct, "risco": risco, "hora": time.time()}
+            return _extras(dados, h[1]["hi"], h[1]["lo"], h[1]["cl"], h[1]["anterior"], h[1]["mercado"])
 
     def _dados_yf(self, ticker, nome_conhecido=""):
         import yfinance as yf
@@ -201,16 +256,34 @@ class Mercado:
                 hi = [float(x) for x in df["High"].tolist()]
                 lo = [float(x) for x in df["Low"].tolist()]
                 cl = [float(x) for x in df["Close"].tolist()]
-                h = (agora, {"media6m": sum(cl) / len(cl), "atr": calcular_atr(hi, lo, cl), "ultimo": cl[-1]})
+                try:
+                    datas = [idx.date() for idx in df.index]
+                except Exception:
+                    datas = []
+                h = (agora, {"media6m": sum(cl) / len(cl), "atr": calcular_atr(hi, lo, cl), "ultimo": cl[-1],
+                             "hi": hi, "lo": lo, "cl": cl, "pares": list(zip(datas, cl))})
                 self._hist[ticker] = h
 
-            preco = None
+            preco = anterior = None
             try:
                 preco = float(t.fast_info.last_price)
             except Exception:
                 preco = None
+            try:
+                anterior = float(t.fast_info.previous_close)
+            except Exception:
+                anterior = None
+            extras = {}
+            for chave, campo in (("max_dia", "day_high"), ("min_dia", "day_low"), ("max52", "year_high"),
+                                 ("min52", "year_low"), ("volume", "last_volume")):
+                try:
+                    extras[chave] = getattr(t.fast_info, campo)
+                except Exception:
+                    extras[chave] = None
             if not _valido(preco):
                 preco = h[1]["ultimo"]
+            if not _valido(anterior):
+                anterior = anterior_de(h[1]["pares"], date.today())
 
             nome = nome_conhecido or self._nomes.get(ticker)
             if not nome:
@@ -224,8 +297,36 @@ class Mercado:
             atr = h[1]["atr"]
             atr_pct = atr / preco * 100 if atr and preco else None
             risco = classificar_risco(atr_pct) if atr_pct is not None else None
-            return {"ticker": ticker, "nome": nome, "preco": preco, "media6m": h[1]["media6m"],
-                    "atr": atr, "atr_pct": atr_pct, "risco": risco, "hora": time.time()}
+            dados = {"ticker": ticker, "nome": nome, "preco": preco, "media6m": h[1]["media6m"],
+                     "atr": atr, "atr_pct": atr_pct, "risco": risco, "hora": time.time()}
+            return _extras(dados, h[1]["hi"], h[1]["lo"], h[1]["cl"], anterior, extras)
+
+    def grafico(self, ticker, periodo):
+        """Pontos (timestamp, fechamento) do período para o gráfico, com o fechamento de referência
+        (fechamento anterior no 1D; primeiro ponto nos demais). Executar fora da thread da interface."""
+        alcance, intervalo, validade = PERIODOS_GRAFICO[periodo]
+        chave = ("g", ticker, periodo)
+        agora = time.time()
+        c = self._graficos.get(chave)
+        if c and agora - c[0] < validade:
+            return c[1]
+        res = _get_chart(ticker, {"range": alcance, "interval": intervalo, "includePrePost": "false"})
+        meta = res.get("meta", {})
+        q = ((res.get("indicators") or {}).get("quote") or [{}])[0]
+        pontos = [(ts, float(v)) for ts, v in zip(res.get("timestamp") or [], q.get("close") or []) if _valido(v)]
+        if len(pontos) < 2:
+            raise SemDados(f"Sem dados de {periodo} para {ticker}.")
+        preco = meta.get("regularMarketPrice")
+        if periodo == "1D":
+            ref = meta.get("previousClose") or meta.get("chartPreviousClose") or pontos[0][1]
+            if _valido(preco):  # o último ponto intradiário pode estar alguns minutos atrás da cotação
+                pontos[-1] = (pontos[-1][0], float(preco))
+        else:
+            ref = pontos[0][1]
+        g = {"ticker": ticker, "periodo": periodo, "pontos": pontos, "referencia": float(ref),
+             "desvio": meta.get("gmtoffset") or 0, "intradiario": intervalo.endswith("m")}
+        self._graficos[chave] = (agora, g)
+        return g
 
 
 class Cotacoes:
@@ -269,3 +370,57 @@ class Cotacoes:
 
         threading.Thread(target=trabalho, daemon=True).start()
         return True
+
+
+# ---------------------------------------------------------------- lista do radar (filtros e ordenação)
+
+FILTROS_RADAR = ["Todos", "Em alta", "Em queda", "Em carteira"]
+ORDENS_RADAR = [("manual", "Minha ordem"), ("alta", "Maior alta do dia"), ("queda", "Maior queda do dia"),
+                ("ticker", "Ticker (A–Z)"), ("risco", "Menor risco (ATR%)"), ("media", "Mais abaixo da média 6m")]
+
+
+def filtrar_ordenar(itens, dados, filtro="Todos", ordem="manual", custodia=()):
+    """Itens do radar (dicts com 'ticker') filtrados e ordenados com as cotações em `dados` (ticker -> dict).
+    Ativos ainda sem cotação ficam no fim das ordenações por número."""
+    def campo(t, k):
+        v = (dados.get(t) or {}).get(k)
+        return v if isinstance(v, (int, float)) else None
+
+    if filtro == "Em alta":
+        itens = [i for i in itens if (campo(i["ticker"], "var_pct") or 0) > 0]
+    elif filtro == "Em queda":
+        itens = [i for i in itens if (campo(i["ticker"], "var_pct") or 0) < 0]
+    elif filtro == "Em carteira":
+        itens = [i for i in itens if i["ticker"] in custodia]
+    chave = {"alta": ("var_pct", True), "queda": ("var_pct", False), "risco": ("atr_pct", False),
+             "media": ("vs_media_pct", False)}.get(ordem)
+    if ordem == "ticker":
+        return sorted(itens, key=lambda i: i["ticker"])
+    if chave:
+        k, desc = chave
+        com = [i for i in itens if campo(i["ticker"], k) is not None]
+        sem = [i for i in itens if campo(i["ticker"], k) is None]
+        return sorted(com, key=lambda i: campo(i["ticker"], k), reverse=desc) + sem
+    return list(itens)
+
+
+def resumo_dia(tickers, dados):
+    """(quantos em alta, quantos em queda, variação média do dia em %) dos ativos com cotação."""
+    vs = [(dados.get(t) or {}).get("var_pct") for t in tickers]
+    vs = [v for v in vs if isinstance(v, (int, float))]
+    return sum(v > 0 for v in vs), sum(v < 0 for v in vs), (sum(vs) / len(vs) if vs else None)
+
+
+def fmt_pct(v, sinal=True):
+    if v is None:
+        return "—"
+    return (f"{v:+.2f}%" if sinal else f"{v:.2f}%").replace(".", ",")
+
+
+def fmt_volume(v):
+    if not v:
+        return "—"
+    for lim, suf in ((1e9, " bi"), (1e6, " mi"), (1e3, " mil")):
+        if v >= lim:
+            return f"{v / lim:.1f}".replace(".", ",") + suf
+    return str(int(v))

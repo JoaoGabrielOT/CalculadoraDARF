@@ -710,8 +710,8 @@ def pilula(pai, texto, fundo, cor_texto, fonte=11):
 
 
 COLUNAS_RADAR = [  # título, largura fixa da célula, peso (sobra de espaço), alinhamento
-    ("ATIVO", 290, 3, "w"), ("COTAÇÃO", 105, 1, "e"), ("MÉDIA 6 MESES", 115, 1, "e"), ("ATR (14)", 90, 1, "e"),
-    ("ATR%", 75, 1, "e"), ("RISCO", 185, 1, "center"), ("", 250, 0, "e")]
+    ("ATIVO", 270, 3, "w"), ("COTAÇÃO", 95, 1, "e"), ("DIA", 100, 1, "e"), ("MÉDIA 6 MESES", 105, 1, "e"),
+    ("ATR (14)", 80, 1, "e"), ("ATR%", 65, 1, "e"), ("RISCO", 175, 1, "center"), ("", 240, 0, "e")]
 ANCORA = {"w": dict(relx=0, anchor="w"), "e": dict(relx=1, anchor="e"), "center": dict(relx=0.5, anchor="center")}
 ALTURA_LINHA_RADAR = 58
 
@@ -748,7 +748,8 @@ def cabecalho_radar(pai):
 
 
 class LinhaRadar(ctk.CTkFrame):
-    def __init__(self, pai, ticker, ao_comprar, ao_vender, ao_remover, ao_arrastar=None, ao_importar=None):
+    def __init__(self, pai, ticker, ao_comprar, ao_vender, ao_remover, ao_arrastar=None, ao_importar=None,
+                 ao_abrir=None):
         super().__init__(pai, fg_color=C["card"], corner_radius=8)
         self.ticker = ticker
         self.amigo = ao_importar is not None
@@ -770,15 +771,24 @@ class LinhaRadar(ctk.CTkFrame):
                                     wraplength=200, height=16)
         self.lb_nome.pack(anchor="w")
         self.vals = {}
-        for i, k in enumerate(("preco", "media6m", "atr", "atr_pct"), start=1):
+        for i, k in ((1, "preco"), (3, "media6m"), (4, "atr"), (5, "atr_pct")):
             v = ctk.CTkLabel(cel[i][0], text="—", font=F(14 if k == "preco" else 13, "bold"), text_color=C["texto"])
             por_na_celula(cel[i], v)
             self.vals[k] = v
-        self.badge = ctk.CTkLabel(cel[5][0], text="", font=F(11, "bold"), corner_radius=10, height=24,
+        dia = ctk.CTkFrame(cel[2][0], fg_color="transparent")
+        por_na_celula(cel[2], dia)
+        self.lb_var = ctk.CTkLabel(dia, text="—", font=F(13, "bold"), text_color=C["muted"], height=18, anchor="e")
+        self.lb_var.pack(anchor="e")
+        self.lb_var_rs = ctk.CTkLabel(dia, text="", font=F(11), text_color=C["muted"], height=14, anchor="e")
+        self.lb_var_rs.pack(anchor="e")
+        self.badge = ctk.CTkLabel(cel[6][0], text="", font=F(11, "bold"), corner_radius=10, height=24,
                                   fg_color="transparent")
-        por_na_celula(cel[5], self.badge)
-        acoes = ctk.CTkFrame(cel[6][0], fg_color="transparent")
-        por_na_celula(cel[6], acoes)
+        por_na_celula(cel[6], self.badge)
+        acoes = ctk.CTkFrame(cel[7][0], fg_color="transparent")
+        por_na_celula(cel[7], acoes)
+        if ao_abrir:  # clique na linha (fora dos botões e da alça) abre o gráfico
+            for w in [self.lb_logo, txt] + [c for c, _ in cel[1:7]]:
+                ligar_clique(w, lambda: ao_abrir(ticker))
         self.bt_vender = self.bt_importar = None
         if self.amigo:
             self.bt_importar = botao(acoes, "+  Meu radar", lambda: ao_importar(ticker), "accent", altura=30,
@@ -797,6 +807,8 @@ class LinhaRadar(ctk.CTkFrame):
     def limpar(self):
         for v in self.vals.values():
             v.configure(text="—")
+        self.lb_var.configure(text="—", text_color=C["muted"])
+        self.lb_var_rs.configure(text="")
         self.badge.configure(text="", fg_color="transparent")
 
     def set(self, dados, pode_vender, nome="", ja_tenho=False):
@@ -819,6 +831,11 @@ class LinhaRadar(ctk.CTkFrame):
         self.vals["atr"].configure(text=brl(dados["atr"]) if dados.get("atr") else "—")
         pct = dados.get("atr_pct")
         self.vals["atr_pct"].configure(text=f"{pct:.2f}%".replace(".", ",") if pct is not None else "—")
+        vp, v = dados.get("var_pct"), dados.get("var")
+        cor_v = cor_variacao(vp)
+        seta = "▲ " if (vp or 0) > 0.0049 else ("▼ " if (vp or 0) < -0.0049 else "")
+        self.lb_var.configure(text=seta + mk.fmt_pct(vp) if vp is not None else "—", text_color=cor_v)
+        self.lb_var_rs.configure(text=("+" if v > 0 else "") + brl(v) if v is not None else "", text_color=cor_v)
         if dados.get("risco"):
             rotulo, fundo, txt = dados["risco"]
             self.badge.configure(text=f"  {rotulo}  ", fg_color=fundo, text_color=txt)
@@ -827,6 +844,12 @@ class LinhaRadar(ctk.CTkFrame):
 
 
 TAM_LOGO = 36
+
+
+def cor_variacao(v):
+    if v is None or abs(v) < 0.005:
+        return C["muted"]
+    return C["accent"] if v > 0 else C["danger"]
 
 
 def imagem_quadrada(dados, tam):
@@ -1090,6 +1113,8 @@ class App(ctk.CTk):
         self.lista_seletores = []
         self.radar_modo = None
         self.arraste = None
+        self.radar_filtro = "Todos"
+        self.radar_ordem = self.cfg.get("radar_ordem_lista", "manual")
         self.sync_rodando = False
         self.resync = False
         self.sync_job = None
@@ -1764,6 +1789,21 @@ class App(ctk.CTk):
         for (limite, rotulo, fundo, txt), faixa in zip(mk.FAIXAS_RISCO, ("< 2,2%", "2,2% a 3,0%", "3,0% a 4,5%",
                                                                          "> 4,5%")):
             pilula(leg, f"{rotulo} · {faixa}", fundo, txt).pack(side="left", padx=(0, 6))
+        self.om_radar_ordem = ctk.CTkOptionMenu(
+            leg, values=[t for _, t in mk.ORDENS_RADAR], command=self.ordenar_radar, width=210, height=32,
+            font=F(12, "bold"), dropdown_font=F(12), corner_radius=8, fg_color=C["neutro"],
+            button_color=C["neutro_h"], button_hover_color=C["borda"], text_color=C["texto"])
+        self.om_radar_ordem.set(dict(mk.ORDENS_RADAR)[self.radar_ordem])
+        self.om_radar_ordem.pack(side="right")
+        ctk.CTkLabel(leg, text="Ordenar", font=F(11, "bold"), text_color=C["muted"]).pack(side="right", padx=(16, 8))
+        self.sb_radar_filtro = ctk.CTkSegmentedButton(
+            leg, values=mk.FILTROS_RADAR, command=self.filtrar_radar, height=32, font=F(12, "bold"),
+            fg_color=C["neutro"], selected_color=C["accent"], selected_hover_color=C["accent_h"],
+            unselected_color=C["neutro"], unselected_hover_color=C["neutro_h"], text_color=C["texto"])
+        self.sb_radar_filtro.set(self.radar_filtro)
+        self.sb_radar_filtro.pack(side="right")
+        self.lb_radar_resumo = ctk.CTkLabel(leg, text="", font=F(12, "bold"), text_color=C["muted"])
+        self.lb_radar_resumo.pack(side="right", padx=16)
 
         dir_ = ctk.CTkFrame(linha1, fg_color="transparent")
         dir_.pack(side="right")
@@ -2110,21 +2150,30 @@ class App(ctk.CTk):
             else:
                 self.bt_importar_todos.pack_forget()
                 self.fr_radar_meu.pack(side="left")
-        lista = self.radar_lista()
-        tickers = [r["ticker"] for r in lista]
-        nomes = {r["ticker"]: r.get("nome", "") for r in lista}
-        meus = {r["ticker"] for r in self.cfg["radar"]}
-        for t in list(self.radar_cards):
-            if t not in tickers:
-                self.radar_cards.pop(t).destroy()
+        todos = self.radar_lista()
         custodia = set() if amigo else self.custodia()
+        lista = mk.filtrar_ordenar(todos, self.radar_dados, self.radar_filtro, self.radar_ordem, custodia)
+        tickers = [r["ticker"] for r in lista]
+        nomes = {r["ticker"]: r.get("nome", "") for r in todos}
+        meus = {r["ticker"] for r in self.cfg["radar"]}
+        validos = {r["ticker"] for r in todos}
+        for t in list(self.radar_cards):
+            if t not in validos:
+                self.radar_cards.pop(t).destroy()
+            elif t not in tickers:
+                self.radar_cards[t].grid_forget()
+        altas, quedas, media = mk.resumo_dia([r["ticker"] for r in todos], self.radar_dados)
+        self.lb_radar_resumo.configure(
+            text=f"Hoje: {altas} em alta · {quedas} em queda · média {mk.fmt_pct(media)}" if media is not None else "",
+            text_color=cor_variacao(media))
         for t in tickers:
             if t not in self.radar_cards:
                 if amigo:
-                    card = LinhaRadar(self.lista_radar, t, None, None, None, ao_importar=self.importar_radar)
+                    card = LinhaRadar(self.lista_radar, t, None, None, None, ao_importar=self.importar_radar,
+                                      ao_abrir=self.abrir_grafico)
                 else:
                     card = LinhaRadar(self.lista_radar, t, self.radar_comprar, self.radar_vender, self.remover_radar,
-                                      ao_arrastar=self.arrastar_radar)
+                                      ao_arrastar=self.arrastar_radar, ao_abrir=self.abrir_grafico)
                 self.radar_cards[t] = card
                 self.imagem("t:" + t, lambda t=t: nt.logo_png(t), TAM_LOGO,
                             lambda img, c=card: por_logo(c.lb_logo, img))
@@ -2133,9 +2182,28 @@ class App(ctk.CTk):
         if tickers:
             self.lb_radar_vazio.grid_forget()
         else:
-            self.lb_radar_vazio.configure(text=f"{amigo} não tem ativos no radar." if amigo else
-                                          "Nenhum ativo no radar. Adicione um ticker acima.")
+            if todos:
+                vazio = "Nenhum ativo com esse filtro."
+            else:
+                vazio = f"{amigo} não tem ativos no radar." if amigo else "Nenhum ativo no radar. Adicione um ticker acima."
+            self.lb_radar_vazio.configure(text=vazio)
             self.lb_radar_vazio.grid(row=0, column=0, pady=60)
+
+    def filtrar_radar(self, valor):
+        self.radar_filtro = valor
+        self.radar_redesenhar()
+
+    def ordenar_radar(self, rotulo):
+        self.radar_ordem = next(k for k, t in mk.ORDENS_RADAR if t == rotulo)
+        self.cfg["radar_ordem_lista"] = self.radar_ordem
+        gravar_config(self.cfg)
+        self.radar_redesenhar()
+
+    def abrir_grafico(self, t):
+        if self.arraste:
+            return
+        item = next((r for r in self.radar_lista() if r["ticker"] == t), {"ticker": t, "nome": ""})
+        JanelaGrafico(self, t, item.get("nome", ""), self.radar_dados.get(t))
 
     def posicionar_linhas(self, tickers, arrastado=None):
         for i, t in enumerate(tickers):
@@ -2146,6 +2214,11 @@ class App(ctk.CTk):
 
     def arrastar_radar(self, fase, t, ev):
         """Arrastar pela alça ⠿: a linha acompanha o mouse e a nova ordem é gravada ao soltar."""
+        if self.radar_ordem != "manual" or self.radar_filtro != "Todos":
+            if fase == "ini":
+                self.lb_radar_status.configure(text="Para arrastar, use Ordenar: Minha ordem e o filtro Todos.",
+                                               text_color=C["aviso"])
+            return
         if fase == "ini":
             self.arraste = {"t": t, "ordem": [r["ticker"] for r in nc.ordenar_radar(self.cfg["radar"])]}
             self.posicionar_linhas(self.arraste["ordem"], t)
@@ -2264,6 +2337,8 @@ class App(ctk.CTk):
 
     def radar_fim(self, _=None):
         self.radar_rodando = False
+        if self.pagina == "radar":
+            self.radar_redesenhar()  # reaplica filtro/ordenação com as cotações novas
         self.lb_radar_status.configure(
             text=f"Atualizado às {datetime.now():%H:%M} · Yahoo Finance (atraso de até 15 min)",
             text_color=C["muted"])
@@ -2640,6 +2715,235 @@ class App(ctk.CTk):
         else:
             msg = str(e)
         avisar(self, "Não foi possível carregar", msg)
+
+
+class JanelaGrafico(Janela):
+    """Gráfico de preço do ativo com períodos (1D a Máx), passar o mouse mostra o preço de cada ponto."""
+
+    LARG, ALT = 860, 330
+    MARGEM = (14, 16, 74, 30)  # esquerda, topo, direita (eixo de preços), base (eixo de datas)
+
+    def __init__(self, app, ticker, nome, dados):
+        super().__init__(app, f"{ticker} · gráfico")
+        self.app, self.ticker, self.dados = app, ticker, dados or {}
+        self.periodo = "1D"
+        self.g = None
+        self.pontos_tela = []
+        cx = self.caixa
+        topo = ctk.CTkFrame(cx, fg_color="transparent")
+        topo.pack(fill="x", padx=22, pady=(18, 4))
+        logo = selo_logo(topo, ticker, 44)
+        logo.pack(side="left", padx=(0, 12))
+        app.imagem("t:" + ticker, lambda: nt.logo_png(ticker), 44, lambda img: por_logo(logo, img))
+        tit = ctk.CTkFrame(topo, fg_color="transparent")
+        tit.pack(side="left")
+        ctk.CTkLabel(tit, text=ticker, font=F(20, "bold"), text_color=C["texto"], height=26).pack(anchor="w")
+        ctk.CTkLabel(tit, text=cortar(nome or self.dados.get("nome", ""), 60), font=F(12), text_color=C["muted"],
+                     height=16).pack(anchor="w")
+        preco = ctk.CTkFrame(topo, fg_color="transparent")
+        preco.pack(side="right")
+        ctk.CTkLabel(preco, text=brl(self.dados["preco"]) if self.dados.get("preco") else "—", font=F(24, "bold"),
+                     text_color=C["texto"], height=30).pack(anchor="e")
+        vp, v = self.dados.get("var_pct"), self.dados.get("var")
+        ctk.CTkLabel(preco, text=(f"{mk.fmt_pct(vp)}  ({'+' if (v or 0) > 0 else ''}{brl(v)}) hoje" if vp is not None
+                                  else "variação do dia indisponível"), font=F(13, "bold"),
+                     text_color=cor_variacao(vp), height=18).pack(anchor="e")
+
+        barra = ctk.CTkFrame(cx, fg_color="transparent")
+        barra.pack(fill="x", padx=22, pady=(12, 6))
+        self.sb = ctk.CTkSegmentedButton(
+            barra, values=list(mk.PERIODOS_GRAFICO), command=self.trocar_periodo, height=32, font=F(12, "bold"),
+            fg_color=C["neutro"], selected_color=C["accent"], selected_hover_color=C["accent_h"],
+            unselected_color=C["neutro"], unselected_hover_color=C["neutro_h"], text_color=C["texto"])
+        self.sb.set(self.periodo)
+        self.sb.pack(side="left")
+        self.lb_periodo = ctk.CTkLabel(barra, text="", font=F(13, "bold"), text_color=C["muted"])
+        self.lb_periodo.pack(side="right")
+
+        esc = ctk.ScalingTracker.get_widget_scaling(self) or 1
+        self.esc = esc
+        self.w, self.h = int(self.LARG * esc), int(self.ALT * esc)
+        self.cv = tk.Canvas(cx, width=self.w, height=self.h, highlightthickness=0, bd=0, bg=cor("card"))
+        self.cv.pack(padx=22, pady=(4, 6))
+        self.cv.bind("<Motion>", self.mover)
+        self.cv.bind("<Leave>", lambda e: self.cv.delete("cursor"))
+
+        stats = ctk.CTkFrame(cx, fg_color=C["card2"], corner_radius=12)
+        stats.pack(fill="x", padx=22, pady=(6, 4))
+        d = self.dados
+        itens = [("Fech. anterior", brl(d["anterior"]) if d.get("anterior") else "—"),
+                 ("Mín./máx. do dia", self.faixa(d.get("min_dia"), d.get("max_dia"))),
+                 ("Mín./máx. 52 sem.", self.faixa(d.get("min52"), d.get("max52"))),
+                 ("Média 6 meses", brl(d["media6m"]) + (f" ({mk.fmt_pct(d['vs_media_pct'])})"
+                                                         if d.get("vs_media_pct") is not None else "")
+                  if d.get("media6m") else "—"),
+                 ("ATR (14)", brl(d["atr"]) + (f" · {mk.fmt_pct(d['atr_pct'], False)}" if d.get("atr_pct") else "")
+                  if d.get("atr") else "—"),
+                 ("Volume", mk.fmt_volume(d.get("volume")))]
+        for i, (rot, val) in enumerate(itens):
+            stats.grid_columnconfigure(i, weight=1, uniform="st")
+            ctk.CTkLabel(stats, text=rot.upper(), font=F(10, "bold"), text_color=C["muted"]).grid(
+                row=0, column=i, padx=10, pady=(10, 0))
+            ctk.CTkLabel(stats, text=val, font=F(12, "bold"), text_color=C["texto"]).grid(
+                row=1, column=i, padx=10, pady=(0, 10))
+
+        acoes = ctk.CTkFrame(cx, fg_color="transparent")
+        acoes.pack(fill="x", padx=22, pady=(10, 18))
+        botao(acoes, "Fechar", self.destroy, "neutro", width=100).pack(side="right")
+        botao(acoes, "Ver notícias", self.ver_noticias, "neutro", width=130).pack(side="right", padx=8)
+        if app.visao:
+            if all(r["ticker"] != ticker for r in app.cfg["radar"]):
+                botao(acoes, "+  Meu radar", self.importar, "accent", width=130).pack(side="left")
+        else:
+            botao(acoes, "Comprar", lambda: self.operar(app.radar_comprar), "accent", width=110).pack(side="left")
+            if ticker in app.custodia():
+                botao(acoes, "Vender", lambda: self.operar(app.radar_vender), "neutro", width=110).pack(
+                    side="left", padx=8)
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.carregar()
+        self.mostrar()
+
+    @staticmethod
+    def faixa(a, b):
+        return f"{brl(a)} – {brl(b)}" if a and b else "—"
+
+    def operar(self, acao):
+        self.destroy()
+        acao(self.ticker)
+
+    def importar(self):
+        self.destroy()
+        self.app.importar_radar(self.ticker)
+
+    def ver_noticias(self):
+        self.destroy()
+        self.app.noticias_filtro["ticker"] = self.ticker
+        self.app.trocar_pagina(PAGINA_NOTICIAS)
+
+    def trocar_periodo(self, p):
+        self.periodo = p
+        self.carregar()
+
+    def carregar(self):
+        self.cv.delete("all")
+        self.cv.create_text(self.w / 2, self.h / 2, text="Carregando…", fill=cor("muted"), font=(FONTE, 11))
+        self.lb_periodo.configure(text="")
+        periodo = self.periodo
+        self.app.bg(lambda: self.app.mercado.grafico(self.ticker, periodo),
+                    ok=lambda g: self.chegou(g, periodo), erro=self.falhou)
+
+    def falhou(self, e):
+        if not self.winfo_exists():
+            return
+        self.cv.delete("all")
+        self.cv.create_text(self.w / 2, self.h / 2, text=erro_mercado(e), fill=cor("danger"), font=(FONTE, 11))
+
+    def chegou(self, g, periodo):
+        if not self.winfo_exists() or periodo != self.periodo:
+            return
+        self.g = g
+        ult, ref = g["pontos"][-1][1], g["referencia"]
+        var = (ult / ref - 1) * 100 if ref else None
+        nome = {"1D": "hoje", "Máx": "desde o início"}.get(periodo, f"em {periodo}")
+        self.lb_periodo.configure(text=f"{mk.fmt_pct(var)} {nome}", text_color=cor_variacao(var))
+        self.desenhar()
+
+    def rotulo_tempo(self, ts, curto=False):
+        d = datetime(1970, 1, 1) + timedelta(seconds=ts + self.g["desvio"])
+        if self.periodo == "1D":
+            return d.strftime("%H:%M")
+        if self.periodo == "5D":
+            return d.strftime("%d/%m") if curto else d.strftime("%d/%m %H:%M")
+        if self.periodo in ("5A", "Máx"):
+            return d.strftime("%m/%Y")
+        return d.strftime("%d/%m/%y") if curto else d.strftime("%d/%m/%Y")
+
+    def desenhar(self):
+        cv, g, e = self.cv, self.g, self.esc
+        cv.delete("all")
+        pts = g["pontos"]
+        ml, mt, mr, mb = (int(m * e) for m in self.MARGEM)
+        x0, x1, y0, y1 = ml, self.w - mr, mt, self.h - mb
+        valores = [v for _, v in pts] + ([g["referencia"]] if self.periodo == "1D" else [])
+        vmin, vmax = min(valores), max(valores)
+        folga = (vmax - vmin) * 0.08 or vmax * 0.01 or 1
+        vmin, vmax = vmin - folga, vmax + folga
+        n = len(pts)
+
+        def px(i):
+            return x0 + (x1 - x0) * (i / (n - 1))
+
+        def py(v):
+            return y1 - (y1 - y0) * ((v - vmin) / (vmax - vmin))
+
+        subiu = pts[-1][1] >= g["referencia"]
+        linha = cor("accent") if subiu else cor("danger")
+        fundo = cor("card")
+        grade = cor("borda")
+        texto_ = cor("muted")
+        fonte = (FONTE, max(8, int(9 * e)))
+        for k in range(5):  # grade e eixo de preços
+            v = vmin + (vmax - vmin) * k / 4
+            y = py(v)
+            cv.create_line(x0, y, x1, y, fill=grade)
+            cv.create_text(x1 + 8 * e, y, text=brl(v), anchor="w", fill=texto_, font=fonte)
+        marcas = min(6, n)
+        for k in range(marcas):  # eixo de tempo
+            i = round(k * (n - 1) / max(1, marcas - 1))
+            cv.create_text(px(i), y1 + 14 * e, text=self.rotulo_tempo(pts[i][0], curto=True), fill=texto_,
+                           font=fonte, anchor="n" if 0 < k < marcas - 1 else ("nw" if k == 0 else "ne"))
+        coords = []
+        for i, (_, v) in enumerate(pts):
+            coords += [px(i), py(v)]
+        # área sob a linha: faixas da cor da linha mais clara (Canvas do Tk não tem transparência)
+        base = [x0, y1] + coords + [x1, y1]
+        cv.create_polygon(*base, fill=misturar(linha, fundo, 0.16), outline="")
+        if self.periodo == "1D":
+            yr = py(g["referencia"])
+            cv.create_line(x0, yr, x1, yr, fill=texto_, dash=(4, 4))
+            cv.create_text(x0 + 4, yr - 4, text=f"Fech. anterior {brl(g['referencia'])}", anchor="sw", fill=texto_,
+                           font=fonte)
+        cv.create_line(*coords, fill=linha, width=max(2, int(2 * e)), smooth=False)
+        xu, yu = coords[-2], coords[-1]
+        r = 4 * e
+        cv.create_oval(xu - r, yu - r, xu + r, yu + r, fill=linha, outline="")
+        self.pontos_tela = [(coords[2 * i], coords[2 * i + 1], pts[i]) for i in range(n)]
+        self.area = (x0, x1, y0, y1)
+
+    def mover(self, ev):
+        if not self.pontos_tela:
+            return
+        cv, e = self.cv, self.esc
+        cv.delete("cursor")
+        x0, x1, y0, y1 = self.area
+        if not x0 <= ev.x <= x1:
+            return
+        xs = [p[0] for p in self.pontos_tela]
+        i = min(range(len(xs)), key=lambda k: abs(xs[k] - ev.x))
+        x, y, (ts, v) = self.pontos_tela[i]
+        ref = self.g["referencia"]
+        var = (v / ref - 1) * 100 if ref else None
+        cor_l = cor("accent") if var is None or var >= 0 else cor("danger")
+        cv.create_line(x, y0, x, y1, fill=cor("muted"), dash=(2, 3), tags="cursor")
+        r = 5 * e
+        cv.create_oval(x - r, y - r, x + r, y + r, fill=cor_l, outline=cor("card"), width=2, tags="cursor")
+        txt = f"{self.rotulo_tempo(ts)}   {brl(v)}   {mk.fmt_pct(var)}"
+        fonte = (FONTE, max(9, int(10 * e)), "bold")
+        lado = "w" if x < (x0 + x1) / 2 else "e"
+        tx = x + 10 * e if lado == "w" else x - 10 * e
+        item = cv.create_text(tx, y0 + 12 * e, text=txt, anchor=lado, fill=cor("texto"), font=fonte, tags="cursor")
+        bx = cv.bbox(item)
+        if bx:
+            fundo = cv.create_rectangle(bx[0] - 6, bx[1] - 4, bx[2] + 6, bx[3] + 4, fill=cor("card2"),
+                                        outline=cor("borda"), tags="cursor")
+            cv.tag_lower(fundo, item)
+
+
+def misturar(c1, c2, t):
+    """Cor entre c1 e c2 (t = peso de c1), para simular transparência no Canvas."""
+    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(x * t + y * (1 - t)):02x}" for x, y in zip(a, b))
 
 
 class DialogoAtualizacao(Janela):

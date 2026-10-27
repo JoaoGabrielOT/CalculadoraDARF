@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import flet as ft
+import flet.canvas as cv
 
 AQUI = Path(__file__).resolve().parent
 for _p in (AQUI, AQUI.parent):
@@ -346,6 +347,220 @@ class CampoData:
                                                 confirm_text="OK"))
 
 
+class GraficoAtivo:
+    """Diálogo com o gráfico de preço do ativo: períodos de 1D a Máx; tocar/arrastar no gráfico mostra o ponto."""
+
+    ALTURA = 220
+    MARGEM = (4, 10, 58, 22)  # esquerda, topo, direita (preços), base (datas)
+
+    def __init__(self, app, ticker, nome, dados):
+        self.app, self.ticker, self.dados = app, ticker, dados
+        self.periodo = "1D"
+        self.g = None
+        self.largura = max(260, min(560, (app.page.width or 380) - 96))
+        self.pontos = []
+        d = dados
+        vp, v = d.get("var_pct"), d.get("var")
+        self.lb_periodo = texto("", 13, ft.FontWeight.BOLD)
+        self.lb_ponto = texto("Toque no gráfico para ver o preço de cada ponto", 12, cor=MUTED)
+        self.canvas = cv.Canvas(width=self.largura, height=self.ALTURA, on_resize=self.redimensionou,
+                                resize_interval=100,
+                                shapes=[cv.Text(self.largura / 2, self.ALTURA / 2, "Carregando…",
+                                                style=ft.TextStyle(size=12, color=MUTED),
+                                                alignment=ft.Alignment.CENTER)])
+        self.chips = ft.Row(spacing=6, wrap=True, run_spacing=6)
+        self.desenhar_chips()
+
+        def stat(titulo, valor):
+            return ft.Container(width=(self.largura - 8) / 2, padding=ft.Padding.symmetric(horizontal=10, vertical=6),
+                                border_radius=ft.BorderRadius.all(10), bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                                content=ft.Column(spacing=0, controls=[texto(titulo, 10, cor=MUTED),
+                                                                       texto(valor, 13, ft.FontWeight.BOLD)]))
+
+        faixa = lambda a, b: f"{brl(a)} – {brl(b)}" if a and b else "—"  # noqa: E731
+        stats = ft.Row(spacing=8, run_spacing=8, wrap=True, controls=[
+            stat("Fech. anterior", brl(d["anterior"]) if d.get("anterior") else "—"),
+            stat("Mín./máx. do dia", faixa(d.get("min_dia"), d.get("max_dia"))),
+            stat("Mín./máx. 52 sem.", faixa(d.get("min52"), d.get("max52"))),
+            stat("Média 6 meses", (brl(d["media6m"]) + (f" ({mk.fmt_pct(d['vs_media_pct'])})"
+                                                       if d.get("vs_media_pct") is not None else ""))
+                 if d.get("media6m") else "—"),
+            stat("ATR (14)", brl(d["atr"]) + (f" · {mk.fmt_pct(d['atr_pct'], False)}" if d.get("atr_pct") else "")
+                 if d.get("atr") else "—"),
+            stat("Volume", mk.fmt_volume(d.get("volume")))])
+        acoes = []
+        if app.visao:
+            if all(r["ticker"] != ticker for r in app.cfg["radar"]):
+                acoes.append(botao_primario("Meu radar", ft.Icons.PLAYLIST_ADD, lambda e: self.depois(app.importar_radar)))
+        else:
+            acoes.append(botao_primario("Comprar", ft.Icons.ADD_SHOPPING_CART, lambda e: self.depois(app.radar_comprar)))
+            if ticker in nc.custodia_atual():
+                acoes.append(ft.OutlinedButton("Vender", icon=ft.Icons.SELL,
+                                               on_click=lambda e: self.depois(app.radar_vender)))
+        acoes.append(ft.TextButton("Notícias", icon=ft.Icons.NEWSPAPER, on_click=lambda e: self.depois(self.noticias)))
+        cor_v = cor_resultado(round(vp, 2)) if vp is not None else MUTED
+        conteudo = ft.Column(tight=True, spacing=10, scroll=ft.ScrollMode.AUTO, controls=[
+            ft.Row(spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                logo_ativo(ticker, 40), ft.Column(spacing=0, expand=True, controls=[
+                    texto(ticker, 18, ft.FontWeight.BOLD),
+                    texto(nome or d.get("nome", ""), 12, cor=MUTED, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)])]),
+            ft.Row(vertical_alignment=ft.CrossAxisAlignment.END, controls=[
+                texto(brl(d["preco"]) if d.get("preco") else "—", 26, ft.FontWeight.BOLD),
+                texto(f"{mk.fmt_pct(vp)} ({'+' if (v or 0) > 0 else ''}{brl(v)}) hoje" if vp is not None else "", 13,
+                      ft.FontWeight.BOLD, cor_v)]),
+            self.chips, self.lb_periodo,
+            ft.GestureDetector(content=self.canvas, on_tap_down=self.tocou, on_pan_update=self.arrastou,
+                               on_horizontal_drag_update=self.arrastou),
+            self.lb_ponto, stats, ft.Row(spacing=8, wrap=True, controls=acoes)])
+        self.dlg = ft.AlertDialog(content=ft.Container(width=self.largura, content=conteudo),
+                                  content_padding=ft.Padding.all(18),
+                                  actions=[ft.TextButton("Fechar", on_click=lambda e: app.page.pop_dialog())])
+        app.page.show_dialog(self.dlg)
+        self.carregar()
+
+    def depois(self, acao):
+        self.app.page.pop_dialog()
+        acao(self.ticker)
+
+    def noticias(self, t):
+        self.app.f_noticias["ticker"] = t
+        self.app.ir_para(ABA_NOTICIAS)
+
+    def desenhar_chips(self):
+        self.chips.controls = [
+            ft.Container(content=chip(p, p == self.periodo), on_click=lambda e, p=p: self.trocar(p))
+            for p in mk.PERIODOS_GRAFICO]
+
+    def trocar(self, p):
+        self.periodo = p
+        self.desenhar_chips()
+        self.carregar()
+
+    def atualizar(self):
+        try:
+            self.dlg.update()
+        except Exception:
+            pass
+
+    def carregar(self):
+        periodo = self.periodo
+        self.lb_periodo.value = "Carregando…"
+        self.lb_periodo.color = MUTED
+        self.atualizar()
+
+        def trabalho():
+            try:
+                g = self.app.mercado.grafico(self.ticker, periodo)
+            except Exception as ex:
+                if periodo == self.periodo:
+                    self.lb_periodo.value = erro_mercado(ex)
+                    self.lb_periodo.color = VERMELHO
+                    self.atualizar()
+                return
+            if periodo != self.periodo:
+                return
+            self.g = g
+            ult, ref = g["pontos"][-1][1], g["referencia"]
+            var = (ult / ref - 1) * 100 if ref else None
+            nome = {"1D": "hoje", "Máx": "desde o início"}.get(periodo, f"em {periodo}")
+            self.lb_periodo.value = f"{mk.fmt_pct(var)} {nome}"
+            self.lb_periodo.color = cor_resultado(round(var, 2)) if var is not None else MUTED
+            self.desenhar()
+
+        self.app.page.run_thread(trabalho)
+
+    def redimensionou(self, e):
+        if e.width and abs(e.width - self.largura) > 4:
+            self.largura = e.width
+            self.desenhar()
+
+    def rotulo_tempo(self, ts, curto=False):
+        d = datetime(1970, 1, 1) + timedelta(seconds=ts + self.g["desvio"])
+        if self.periodo == "1D":
+            return d.strftime("%H:%M")
+        if self.periodo == "5D":
+            return d.strftime("%d/%m") if curto else d.strftime("%d/%m %H:%M")
+        if self.periodo in ("5A", "Máx"):
+            return d.strftime("%m/%Y")
+        return d.strftime("%d/%m/%y") if curto else d.strftime("%d/%m/%Y")
+
+    def desenhar(self, cursor=None):
+        g = self.g
+        if not g:
+            return
+        pts = g["pontos"]
+        ml, mt, mr, mb = self.MARGEM
+        x0, x1, y0, y1 = ml, self.largura - mr, mt, self.ALTURA - mb
+        valores = [v for _, v in pts] + ([g["referencia"]] if self.periodo == "1D" else [])
+        vmin, vmax = min(valores), max(valores)
+        folga = (vmax - vmin) * 0.08 or vmax * 0.01 or 1
+        vmin, vmax = vmin - folga, vmax + folga
+        n = len(pts)
+        px = lambda i: x0 + (x1 - x0) * (i / (n - 1))  # noqa: E731
+        py = lambda v: y1 - (y1 - y0) * ((v - vmin) / (vmax - vmin))  # noqa: E731
+        linha = VERDE if pts[-1][1] >= g["referencia"] else VERMELHO
+        estilo = ft.TextStyle(size=10, color=MUTED)
+        grade = ft.Paint(color=ft.Colors.with_opacity(0.25, ft.Colors.OUTLINE), stroke_width=1,
+                         style=ft.PaintingStyle.STROKE)
+        formas = []
+        for k in range(5):
+            v = vmin + (vmax - vmin) * k / 4
+            y = py(v)
+            formas.append(cv.Line(x0, y, x1, y, paint=grade))
+            formas.append(cv.Text(x1 + 6, y, brl(v).replace("R$ ", ""), style=estilo,
+                                  alignment=ft.Alignment.CENTER_LEFT))
+        marcas = min(4, n)
+        for k in range(marcas):
+            i = round(k * (n - 1) / max(1, marcas - 1))
+            alin = ft.Alignment.TOP_CENTER if 0 < k < marcas - 1 else (
+                ft.Alignment.TOP_LEFT if k == 0 else ft.Alignment.TOP_RIGHT)
+            formas.append(cv.Text(px(i), y1 + 6, self.rotulo_tempo(pts[i][0], True), style=estilo, alignment=alin))
+        coords = [(px(i), py(v)) for i, (_, v) in enumerate(pts)]
+        area = [cv.Path.MoveTo(x0, y1)] + [cv.Path.LineTo(x, y) for x, y in coords] + [cv.Path.LineTo(x1, y1),
+                                                                                       cv.Path.Close()]
+        formas.append(cv.Path(area, paint=ft.Paint(style=ft.PaintingStyle.FILL, gradient=ft.PaintLinearGradient(
+            begin=(0, y0), end=(0, y1), colors=[ft.Colors.with_opacity(0.35, linha),
+                                                ft.Colors.with_opacity(0.0, linha)]))))
+        if self.periodo == "1D":
+            yr = py(g["referencia"])
+            formas.append(cv.Line(x0, yr, x1, yr, paint=ft.Paint(color=MUTED, stroke_width=1,
+                                                                 style=ft.PaintingStyle.STROKE,
+                                                                 stroke_dash_pattern=[4, 4])))
+        formas.append(cv.Path([cv.Path.MoveTo(*coords[0])] + [cv.Path.LineTo(x, y) for x, y in coords[1:]],
+                              paint=ft.Paint(color=linha, stroke_width=2, style=ft.PaintingStyle.STROKE,
+                                             stroke_join=ft.StrokeJoin.ROUND)))
+        formas.append(cv.Circle(coords[-1][0], coords[-1][1], 4, paint=ft.Paint(color=linha)))
+        if cursor is not None:
+            x, y = coords[cursor]
+            formas.append(cv.Line(x, y0, x, y1, paint=ft.Paint(color=MUTED, stroke_width=1,
+                                                                style=ft.PaintingStyle.STROKE,
+                                                                stroke_dash_pattern=[3, 3])))
+            formas.append(cv.Circle(x, y, 5, paint=ft.Paint(color=linha)))
+        self.pontos = coords
+        self.canvas.width = self.largura
+        self.canvas.shapes = formas
+        self.atualizar()
+
+    def mostrar_ponto(self, x):
+        if not self.pontos or not self.g:
+            return
+        i = min(range(len(self.pontos)), key=lambda k: abs(self.pontos[k][0] - x))
+        ts, v = self.g["pontos"][i]
+        ref = self.g["referencia"]
+        var = (v / ref - 1) * 100 if ref else None
+        self.lb_ponto.value = f"{self.rotulo_tempo(ts)} · {brl(v)} · {mk.fmt_pct(var)}"
+        self.lb_ponto.color = cor_resultado(round(var, 2)) if var is not None else None
+        self.desenhar(cursor=i)
+
+    def tocou(self, e):
+        if e.local_position is not None:
+            self.mostrar_ponto(e.local_position.x)
+
+    def arrastou(self, e):
+        if e.local_position is not None:
+            self.mostrar_ponto(e.local_position.x)
+
+
 # ---------------------------------------------------------------- aplicativo
 
 class App:
@@ -383,6 +598,8 @@ class App:
         self.launcher = ft.UrlLauncher()
         self.noticias_rodando = False
         self.noticias_msg = ""
+        self.radar_filtro = "Todos"
+        self.radar_ordem = self.cfg.get("radar_ordem_lista", "manual")
         self.f_noticias = {"tema": "Todas", "ticker": "Todos"}
         self.cfg.setdefault("noticias_notificar", True)
 
@@ -1445,18 +1662,42 @@ class App:
             topo.append(ft.Row(controls=[campo, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=VERDE, icon_size=32,
                                                               on_click=adicionar)]))
         topo += [rotulo("Risco pelo ATR%"), legenda]
-        lista = self.radar_lista()
-        cabecalho = self.seletor_visao("Radar") + [bloco(ft.Column(spacing=10, controls=topo))]
-        if not lista:
+        todos = self.radar_lista()
+        custodia = set() if amigo else nc.custodia_atual()
+        lista = mk.filtrar_ordenar(todos, self.radar_dados, self.radar_filtro, self.radar_ordem, custodia)
+        manual = self.radar_ordem == "manual" and self.radar_filtro == "Todos"
+
+        def filtrar(k):
+            self.radar_filtro = k
+            self.render()
+
+        def ordenar(k):
+            self.radar_ordem = k
+            self.cfg["radar_ordem_lista"] = k
+            nc.gravar_config(self.cfg)
+            self.render()
+
+        altas, quedas, media = mk.resumo_dia([r["ticker"] for r in todos], self.radar_dados)
+        filtros = [ft.Row(spacing=8, wrap=True, run_spacing=8, controls=[
+            chip_menu("Mostrar", self.radar_filtro, [(f, f) for f in mk.FILTROS_RADAR], filtrar, "Todos"),
+            chip_menu("Ordenar", self.radar_ordem, mk.ORDENS_RADAR, ordenar, "manual")])]
+        if media is not None:
+            filtros.append(texto(f"Hoje: {altas} em alta · {quedas} em queda · média {mk.fmt_pct(media)}", 12,
+                                 ft.FontWeight.BOLD, cor_resultado(round(media, 2))))
+        cabecalho = self.seletor_visao("Radar") + [bloco(ft.Column(spacing=10, controls=topo)), *filtros]
+        if not todos:
             cabecalho.append(texto(f"{amigo} não tem ativos no radar." if amigo else
                                    "Nenhum ativo no radar. Adicione um ticker acima.", 13, cor=MUTED))
+        elif not lista:
+            cabecalho.append(texto("Nenhum ativo com esse filtro.", 13, cor=MUTED))
         elif not amigo and len(lista) > 1:
-            cabecalho.append(texto("Toque e segure um ativo e arraste para mudar a ordem.", 12, cor=MUTED))
+            cabecalho.append(texto("Toque para ver o gráfico. Toque e segure e arraste para mudar a ordem." if manual
+                                   else "Toque para ver o gráfico. Para arrastar, use Ordenar: Minha ordem.", 12,
+                                   cor=MUTED))
         meus = {r["ticker"] for r in self.cfg["radar"]}
-        custodia = set() if amigo else nc.custodia_atual()
         cards = [self.card_radar(item, item["ticker"] in custodia, amigo=bool(amigo), ja_tenho=item["ticker"] in meus)
                  for item in lista]
-        if amigo:
+        if amigo or not manual:
             return ft.ListView(controls=cabecalho + cards + [ft.Container(height=24)], padding=ft.Padding.all(16),
                                spacing=12, expand=True)
         return ft.ReorderableListView(
@@ -1523,8 +1764,17 @@ class App:
 
         if dados and not erro:
             pct = dados.get("atr_pct")
+            vp, v = dados.get("var_pct"), dados.get("var")
+            cor_v = cor_resultado(round(vp, 2)) if vp is not None else MUTED
+            seta = ft.Icons.ARROW_DROP_UP if (vp or 0) > 0.0049 else (
+                ft.Icons.ARROW_DROP_DOWN if (vp or 0) < -0.0049 else ft.Icons.REMOVE)
+            dia = ft.Row(spacing=0, tight=True, vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                ft.Icon(seta, color=cor_v, size=22),
+                texto(f"{mk.fmt_pct(vp)} ({'+' if (v or 0) > 0 else ''}{brl(v)})" if vp is not None else "—", 13,
+                      ft.FontWeight.BOLD, cor_v)])
             corpo = [
-                ft.Row(controls=[texto(brl(dados["preco"]), 20, ft.FontWeight.BOLD), ft.Container(expand=True), badge]),
+                ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                    texto(brl(dados["preco"]), 20, ft.FontWeight.BOLD), dia, ft.Container(expand=True), badge]),
                 ft.Row(spacing=20, controls=[
                     mini("Média 6 meses", brl(dados["media6m"])),
                     mini("ATR (14)", brl(dados["atr"]) if dados.get("atr") else "—"),
@@ -1548,7 +1798,13 @@ class App:
         if not amigo:
             cab.append(ft.Icon(ft.Icons.DRAG_INDICATOR, color=MUTED, size=20))
         return bloco(ft.Column(spacing=10, controls=[
-            ft.Row(spacing=12, controls=cab), *corpo, ft.Row(spacing=8, controls=acoes)]), padding=14)
+            ft.Row(spacing=12, controls=cab), *corpo, ft.Row(spacing=8, controls=acoes)]), padding=14,
+            ink=True, on_click=lambda e: self.abrir_grafico(t))
+
+    # ------------------------------------------------------------ gráfico do ativo
+    def abrir_grafico(self, t):
+        item = next((r for r in self.radar_lista() if r["ticker"] == t), {"ticker": t, "nome": ""})
+        GraficoAtivo(self, t, item.get("nome", ""), self.radar_dados.get(t) or {})
 
     # ------------------------------------------------------------ notícias
     def tela_noticias(self):
