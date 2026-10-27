@@ -32,6 +32,8 @@ VERDE = "#10b981"
 VERMELHO = "#ef4444"
 AMARELO = "#f59e0b"
 MUTED = ft.Colors.ON_SURFACE_VARIANT
+PRIMARIO = ft.Colors.ON_SURFACE        # ação primária neutra: inverte com o tema (clara no escuro, escura no claro)
+PRIMARIO_TXT = ft.Colors.SURFACE
 NOME_APK = "CalculadoraDARF.apk"
 URL_RELEASES = f"https://github.com/{upd.REPOSITORIO}/releases/latest"
 ORD_LOTES = [("cadastro", "Cadastro"), ("data", "Data da compra"), ("ticker", "Ticker"), ("qtd", "Quantidade"),
@@ -90,7 +92,29 @@ def texto(valor, tam=14, peso=None, cor=None, **kw):
 
 
 def rotulo(valor):
-    return texto(valor.upper(), 11, ft.FontWeight.BOLD, MUTED)
+    return texto(valor.upper(), 12, ft.FontWeight.BOLD, MUTED)
+
+
+def valor_total(qtd, preco):
+    """Total ao vivo do formulário (quantidade × preço); vazio enquanto algum campo estiver incompleto."""
+    try:
+        return f"Total: {brl(nc.parse_qtd(qtd or '') * nc.parse_num(preco or ''))}"
+    except ValueError:
+        return ""
+
+
+def botao_primario(valor, icone, acao):
+    return ft.FilledButton(valor, icon=icone, on_click=acao,
+                           style=ft.ButtonStyle(bgcolor=PRIMARIO, color=PRIMARIO_TXT))
+
+
+def linha_valor(titulo, valor, cor=None, sub=None, tam=16):
+    esq = [texto(titulo, 14)]
+    if sub:
+        esq.append(texto(sub, 12, cor=MUTED))
+    return ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.START,
+                  controls=[ft.Column(spacing=0, expand=True, controls=esq),
+                            texto(valor, tam, ft.FontWeight.BOLD, cor)])
 
 
 def bloco(conteudo, padding=16, cor=None, borda=None, **kw):
@@ -327,7 +351,8 @@ class App:
                     self.paginas[i].content = tela()
             editavel = self.aba == 0 and not self.visao and not self.d["fechado"]
             self.page.floating_action_button = ft.FloatingActionButton(
-                icon=ft.Icons.ADD, on_click=lambda e: self.form_compra()) if editavel else None
+                icon=ft.Icons.ADD, tooltip="Nova compra", bgcolor=PRIMARIO, foreground_color=PRIMARIO_TXT,
+                on_click=lambda e: self.form_compra()) if editavel else None
             self.atualizar_icone_sync()
             self.page.update()
         except Exception:
@@ -351,11 +376,19 @@ class App:
             estado = pilula("Fechado", ft.Colors.SURFACE_CONTAINER_HIGHEST, MUTED)
         else:
             estado = pilula("● Aberto", ft.Colors.with_opacity(0.18, VERDE), VERDE)
+        if self.visao:
+            estado = pilula("Somente leitura", ft.Colors.with_opacity(0.2, AMARELO), AMARELO)
+        elif d["fechado"]:
+            estado = pilula("Fechado", ft.Colors.SURFACE_CONTAINER_HIGHEST, MUTED)
+        else:
+            estado = pilula("Aberto", ft.Colors.SURFACE_CONTAINER_HIGHEST, ft.Colors.ON_SURFACE)
+        mais = [ft.PopupMenuItem(content=ft.Text("Fechar mês"), icon=ft.Icons.LOCK, on_click=self.fechar_mes)] \
+            if editavel else []
         topo = ft.Row(vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
             ft.OutlinedButton(fmt_mes(self.mes), icon=ft.Icons.CALENDAR_MONTH, on_click=self.abrir_meses),
             estado,
             ft.Container(expand=True),
-            ft.TextButton("Fechar mês", icon=ft.Icons.LOCK, on_click=self.fechar_mes) if editavel else ft.Container()])
+            ft.PopupMenuButton(icon=ft.Icons.MORE_VERT, items=mais) if mais else ft.Container()])
         itens = [topo]
 
         if self.g.email and self.cfg["amigos"]:
@@ -366,55 +399,73 @@ class App:
         if self.visao:
             itens.append(texto(f"Dados de {self.visao} · somente leitura", 12, cor=AMARELO))
 
-        def kpi(titulo, valor, sub, cor=None, destaque=False):
-            return ft.Container(col={"xs": 6, "md": 3}, padding=ft.Padding.all(14),
-                                border_radius=ft.BorderRadius.all(16), bgcolor=ft.Colors.SURFACE_CONTAINER,
-                                border=ft.Border.all(2, VERDE) if destaque else None,
-                                content=ft.Column(spacing=2, controls=[
-                                    rotulo(titulo), texto(valor, 19, ft.FontWeight.BOLD, cor),
-                                    texto(sub, 11, cor=MUTED)]))
-
         n = len(r["ops"])
-        itens.append(ft.ResponsiveRow(spacing=10, run_spacing=10, controls=[
-            kpi("Lucro bruto", brl(r["bruto"]), f"{n} venda{'s' if n != 1 else ''} no mês", cor_resultado(r["bruto"])),
-            kpi("Lucro líquido", brl(r["lucro_liquido"]), "após taxas e impostos", cor_resultado(r["lucro_liquido"])),
-            kpi("Imposto devido", brl(r["imposto_total"]), f"IRRF retido: {brl(r['irrf'])}"),
-            kpi("Total da DARF", brl(r["darf"]), nc.info_darf(r, self.mes),
-                VERDE if r["darf"] >= nc.DARF_MINIMO else None, destaque=True)]))
-
         v = r["vendas_acoes_st"]
         isento = r["isento"]
+        ops_dt = [o for o in r["ops"] if o["dt"]]
+        ops_st = [o for o in r["ops"] if not o["dt"]]
 
+        # imposto a pagar (destaque)
+        complemento = [texto(nc.info_darf(r, self.mes), 12, cor=MUTED)]
+        if r["darf_anterior"]:
+            complemento.append(texto(f"Inclui {brl(r['darf_anterior'])} de meses anteriores", 12, cor=MUTED))
+        itens.append(bloco(ft.Column(spacing=6, controls=[rotulo("Imposto a pagar"),
+                                                          texto(brl(r["darf"]), 32, ft.FontWeight.BOLD)] + complemento),
+                           padding=20))
+
+        # resultado do mês
+        itens.append(bloco(ft.Column(spacing=12, controls=[
+            rotulo("Resultado do mês"),
+            linha_valor("Lucro bruto", brl(r["bruto"]), cor_resultado(r["bruto"]), f"{n} venda{'s' if n != 1 else ''}"),
+            linha_valor("Lucro líquido", brl(r["lucro_liquido"]), cor_resultado(r["lucro_liquido"]),
+                        "após taxas e impostos")])))
+
+        # day trade x swing trade
+        def regime(titulo, aliquota, imposto, ops_, extra):
+            return ft.Container(expand=True, padding=ft.Padding.all(14), border_radius=ft.BorderRadius.all(16),
+                                bgcolor=ft.Colors.SURFACE_CONTAINER, content=ft.Column(spacing=4, controls=[
+                                    rotulo(titulo), texto(brl(imposto), 17, ft.FontWeight.BOLD),
+                                    texto(f"Alíquota {aliquota} · {len(ops_)} venda{'s' if len(ops_) != 1 else ''}", 11,
+                                          cor=MUTED),
+                                    texto(extra, 11, cor=MUTED)]))
+        extra_st = "Isento até R$ 20 mil em ações" if isento else "Acima do limite de isenção"
+        itens.append(ft.Row(spacing=10, vertical_alignment=ft.CrossAxisAlignment.START, controls=[
+            regime("Swing trade", "15%", r["imp_st"], ops_st, extra_st),
+            regime("Day trade", "20%", r["imp_dt"], ops_dt, "Sem isenção")]))
+
+        # detalhamento (recolhido por padrão)
         def linha(t, val, forte=False):
             return ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[
                 texto(t, 14 if forte else 13, ft.FontWeight.BOLD if forte else None, None if forte else MUTED),
                 texto(val, 15 if forte else 13, ft.FontWeight.BOLD)])
-
-        itens.append(bloco(ft.Column(spacing=8, controls=[
-            texto("Detalhamento", 16, ft.FontWeight.BOLD),
-            rotulo("Limite de isenção (ações · swing)"),
-            texto(f"{brl(v)}  de  {brl(nc.LIMITE_ISENCAO)}", 14, ft.FontWeight.BOLD),
-            ft.ProgressBar(value=min(v / nc.LIMITE_ISENCAO, 1), color=VERDE if isento else VERMELHO, bar_height=8,
-                           border_radius=ft.BorderRadius.all(4)),
-            texto("Isento de IR em swing trade de ações" if isento else "Acima do limite · lucro tributado em 15%",
-                  12, ft.FontWeight.BOLD, VERDE if isento else VERMELHO),
-            ft.Divider(),
-            linha("Taxas B3 + corretagem", brl(r["custos"])),
-            linha("Imposto swing trade (15%)", brl(r["imp_st"])),
-            linha("Imposto day trade (20%)", brl(r["imp_dt"])),
-            linha("IRRF retido (dedo-duro)", ("- " + brl(r["irrf"])) if r["irrf"] else brl(0)),
-            linha("DARF de meses anteriores", brl(r["darf_anterior"])),
-            ft.Divider(),
-            linha("Total a pagar", brl(r["darf"]), forte=True),
-            texto("Código da DARF: 6015 · vencimento no último dia útil do mês seguinte", 11, cor=MUTED)])))
+        detalhe = ft.ExpansionTile(title=texto("Detalhamento", 15, ft.FontWeight.BOLD), expanded=False,
+                                   tile_padding=ft.Padding.symmetric(horizontal=16), bgcolor=ft.Colors.TRANSPARENT,
+                                   controls_padding=ft.Padding.only(left=16, right=16, bottom=16), controls=[
+            ft.Column(spacing=8, controls=[
+                rotulo("Limite de isenção (ações · swing)"),
+                texto(f"{brl(v)}  de  {brl(nc.LIMITE_ISENCAO)}", 14, ft.FontWeight.BOLD),
+                ft.ProgressBar(value=min(v / nc.LIMITE_ISENCAO, 1), color=VERDE if isento else VERMELHO, bar_height=8,
+                               border_radius=ft.BorderRadius.all(4)),
+                texto("Isento de IR em swing trade de ações" if isento else "Acima do limite · lucro tributado em 15%",
+                      12, ft.FontWeight.BOLD, VERDE if isento else VERMELHO),
+                ft.Divider(),
+                linha("Taxas B3 + corretagem", brl(r["custos"])),
+                linha("Imposto swing trade (15%)", brl(r["imp_st"])),
+                linha("Imposto day trade (20%)", brl(r["imp_dt"])),
+                linha("Imposto devido", brl(r["imposto_total"]), forte=True),
+                linha("IRRF retido (dedo-duro)", ("- " + brl(r["irrf"])) if r["irrf"] else brl(0)),
+                linha("DARF de meses anteriores", brl(r["darf_anterior"])),
+            ])])
+        itens.append(ft.Container(content=detalhe, bgcolor=ft.Colors.SURFACE_CONTAINER,
+                                  border_radius=ft.BorderRadius.all(16), clip_behavior=ft.ClipBehavior.HARD_EDGE))
 
         # ativos comprados
         total = len(d["lotes"])
         self.cont_lotes = pilula("", ft.Colors.SURFACE_CONTAINER_HIGHEST, MUTED)
         itens.append(ft.Row(controls=[texto("Ativos comprados", 17, ft.FontWeight.BOLD), self.cont_lotes,
                                       ft.Container(expand=True),
-                                      ft.FilledTonalButton("Registrar venda", icon=ft.Icons.SELL,
-                                                           on_click=lambda e: self.form_venda())
+                                      ft.OutlinedButton("Registrar venda", icon=ft.Icons.SELL,
+                                                        on_click=lambda e: self.form_venda())
                                       if editavel else ft.Container()]))
         if total:
             itens += self.barra_filtros(self.f_lotes, ORD_LOTES, "cadastro", [
@@ -537,9 +588,17 @@ class App:
         editavel = not self.visao and not self.d["fechado"]
         total = len(self.d["lotes"])
         lotes = self.lotes_filtrados()
-        self.col_lotes.controls = [self.item_lote(l, editavel) for l in lotes] or [
-            texto("Nenhum ativo neste mês. Toque em + para cadastrar uma compra." if not total
-                  else "Nenhum ativo para esse filtro.", 13, cor=MUTED)]
+        if lotes:
+            vazio_lotes = []
+        elif not total:
+            vazio_lotes = [ft.Column(horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10, controls=[
+                ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=40, color=MUTED),
+                texto("Nenhuma compra neste mês", 14, ft.FontWeight.BOLD),
+                texto("Cadastre a primeira compra para começar.", 12, cor=MUTED),
+                botao_primario("Nova compra", ft.Icons.ADD, lambda e: self.form_compra()) if editavel else ft.Container()])]
+        else:
+            vazio_lotes = [texto("Nenhum ativo para esse filtro.", 13, cor=MUTED)]
+        self.col_lotes.controls = [self.item_lote(l, editavel) for l in lotes] or vazio_lotes
         self.cont_lotes.content.value = str(total) if len(lotes) == total else f"{len(lotes)}/{total}"
         ops = self.vendas_filtradas(r["ops"])
         self.col_vendas.controls = [self.item_venda(o, editavel) for o in ops] or [
@@ -584,7 +643,9 @@ class App:
                     texto(st, 12, ft.FontWeight.BOLD, cor_st)]),
                 ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.END, controls=[
                     texto(brl(l["qtd"] * l["preco"]), 15, ft.FontWeight.BOLD),
-                    texto(f"Restante: {nc.restante(l)}", 12, cor=MUTED)])]))
+                    texto(f"Restante: {nc.restante(l)}", 12, cor=MUTED)]),
+                ft.IconButton(ft.Icons.MORE_VERT, icon_color=MUTED, tooltip="Opções",
+                              on_click=lambda e, l=l: self.acoes_lote(l)) if editavel else ft.Container()]))
 
     def item_venda(self, o, editavel):
         return ft.Container(
@@ -598,7 +659,9 @@ class App:
                     texto(f"Taxas B3: {brl(o['taxas'] + o['corretagem'])}", 12, cor=MUTED)]),
                 ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.END, controls=[
                     texto(brl(o["liquido"]), 15, ft.FontWeight.BOLD, cor_resultado(o["liquido"])),
-                    texto(f"Imposto: {brl(o['imposto'])}", 12, cor=MUTED)])]))
+                    texto(f"Imposto: {brl(o['imposto'])}", 12, cor=MUTED)]),
+                ft.IconButton(ft.Icons.MORE_VERT, icon_color=MUTED, tooltip="Opções",
+                              on_click=lambda e, o=o: self.acoes_venda(o)) if editavel else ft.Container()]))
 
     def acoes_lote(self, l):
         def fechar_e(f):
@@ -738,17 +801,25 @@ class App:
             if editar["vendas"]:
                 maximo = min(maximo, date.fromisoformat(min(v["data"] for v in editar["vendas"])))
         sugestoes, tipos = nc.sugestoes(self.d)
-        tk = ft.TextField(label="Ticker", value=ini.get("ticker", ""), hint_text="Ex.: PETR4",
+        tk = ft.TextField(label="Ticker *", value=ini.get("ticker", ""), hint_text="Ex.: PETR4",
                           capitalization=ft.TextCapitalization.CHARACTERS)
         tipo = ft.SegmentedButton(selected=[ini.get("tipo") or "Ação"], show_selected_icon=False,
                                   segments=[ft.Segment(value="Ação", label=ft.Text("Ação")),
                                             ft.Segment(value="BDR", label=ft.Text("BDR"))])
-        data = CampoData(self, "Data da compra", valor=date.fromisoformat(editar["data_compra"]) if editar
+        data = CampoData(self, "Data da compra *", valor=date.fromisoformat(editar["data_compra"]) if editar
                          else date.today(), maximo=maximo)
-        qtd = ft.TextField(label="Quantidade", keyboard_type=ft.KeyboardType.NUMBER, value=ini.get("qtd", ""))
-        preco = ft.TextField(label="Preço unitário (R$)", keyboard_type=ft.KeyboardType.NUMBER,
+        qtd = ft.TextField(label="Quantidade *", keyboard_type=ft.KeyboardType.NUMBER, value=ini.get("qtd", ""))
+        preco = ft.TextField(label="Preço unitário (R$) *", keyboard_type=ft.KeyboardType.NUMBER,
                              value=ini.get("preco", ""), hint_text="Ex.: 32,50")
         erro = texto("", 12, cor=VERMELHO)
+        total_lb = texto(valor_total(qtd.value, preco.value), 13, ft.FontWeight.BOLD)
+
+        def calcular_total(e=None):
+            total_lb.value = valor_total(qtd.value, preco.value)
+            dlg.update()
+
+        qtd.on_change = calcular_total
+        preco.on_change = calcular_total
 
         def escolher(t):
             tk.value = t
@@ -821,7 +892,7 @@ class App:
         conteudo = [tk]
         if sugestoes:
             conteudo += [texto("Frequentes", 11, cor=MUTED), chips]
-        conteudo += [rotulo("Tipo"), tipo, data.controle, qtd, preco, erro]
+        conteudo += [rotulo("Tipo"), tipo, data.controle, qtd, preco, total_lb, erro]
         if editar and editar["vendas"]:
             conteudo.insert(0, texto(f"Já vendidas: {nc.vendido(editar)}", 12, cor=MUTED))
         dlg = ft.AlertDialog(title=ft.Text("Editar compra" if editar else "Novo ativo"), scrollable=True,
@@ -848,13 +919,21 @@ class App:
             sugestoes, _ = nc.sugestoes(self.d, so_custodia=True)
         inicio_mes, fim_mes = nc.limites_mes(self.mes)
         estado = {"ticker": None, "lote": None}
-        tk = ft.TextField(label="Ticker", hint_text="Ex.: PETR4", capitalization=ft.TextCapitalization.CHARACTERS)
-        compra = ft.Dropdown(label="Compra", options=[], expand=True)
+        tk = ft.TextField(label="Ticker *", hint_text="Ex.: PETR4", capitalization=ft.TextCapitalization.CHARACTERS)
+        compra = ft.Dropdown(label="Compra *", options=[], expand=True)
         info = texto("", 12, cor=MUTED)
-        data = CampoData(self, "Data da venda", minimo=inicio_mes, maximo=min(fim_mes, date.today()))
-        qtd = ft.TextField(label="Quantidade", keyboard_type=ft.KeyboardType.NUMBER)
-        preco = ft.TextField(label="Preço unitário (R$)", keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ex.: 35,10")
+        data = CampoData(self, "Data da venda *", minimo=inicio_mes, maximo=min(fim_mes, date.today()))
+        qtd = ft.TextField(label="Quantidade *", keyboard_type=ft.KeyboardType.NUMBER)
+        preco = ft.TextField(label="Preço unitário (R$) *", keyboard_type=ft.KeyboardType.NUMBER, hint_text="Ex.: 35,10")
         erro = texto("", 12, cor=VERMELHO)
+        total_lb = texto("", 13, ft.FontWeight.BOLD)
+
+        def calcular_total(e=None):
+            total_lb.value = valor_total(qtd.value, preco.value)
+            dlg.update()
+
+        qtd.on_change = calcular_total
+        preco.on_change = calcular_total
 
         def selecionar_lote(lid):
             l = next((x for x in abertos if x["id"] == lid), None)
@@ -868,7 +947,7 @@ class App:
             info.value = f"{l['tipo']} · Custo {brl(l['preco'])} · Disponível: {disp}"
             if minimo > maximo:
                 info.value += "\nNão há data válida para vender essa compra neste mês."
-            qtd.label = f"Quantidade (máx. {disp})"
+            qtd.label = f"Quantidade * (máx. {disp})"
             qtd.value = str(disp)
             data.set_limites(minimo, maximo)
             hoje = date.today()
@@ -896,7 +975,7 @@ class App:
                 compra.disabled = True
                 estado["lote"] = None
                 info.value = "Nenhuma compra em aberto desse ticker" if t else "Escolha um ticker"
-                qtd.label = "Quantidade"
+                qtd.label = "Quantidade *"
 
         def escolher(t):
             tk.value = t
@@ -982,7 +1061,7 @@ class App:
         conteudo = [tk]
         if sugestoes:
             conteudo += [texto("Em carteira", 11, cor=MUTED), chips]
-        conteudo += [compra, info, data.controle, qtd, preco, erro]
+        conteudo += [compra, info, data.controle, qtd, preco, total_lb, erro]
         dlg = ft.AlertDialog(title=ft.Text("Editar venda" if editar else "Registrar venda"), scrollable=True,
                              content=ft.Container(width=380, content=ft.Column(tight=True, spacing=12,
                                                                                controls=conteudo)),
@@ -1042,34 +1121,33 @@ class App:
         badge = ft.Container()
         if dados and dados.get("risco"):
             rot, fundo, txt = dados["risco"]
-            badge = pilula(rot, fundo, txt)
+            badge = pilula(rot, fundo, txt, 10)
 
-        def metrica(titulo, valor):
-            return ft.Column(spacing=0, expand=True, controls=[texto(titulo, 11, cor=MUTED),
-                                                                texto(valor, 14, ft.FontWeight.BOLD)])
+        def mini(titulo, valor):
+            return ft.Column(spacing=0, controls=[texto(titulo, 11, cor=MUTED), texto(valor, 13, ft.FontWeight.BOLD)])
 
         if dados and not erro:
             pct = dados.get("atr_pct")
             corpo = [
-                ft.Row(controls=[texto(brl(dados["preco"]), 24, ft.FontWeight.BOLD), ft.Container(expand=True),
-                                 badge]),
-                ft.Row(controls=[metrica("Média 6 meses", brl(dados["media6m"])),
-                                 metrica("ATR médio (14)", brl(dados["atr"]) if dados.get("atr") else "—"),
-                                 metrica("ATR% médio", f"{pct:.2f}%".replace(".", ",") if pct is not None else "—")])]
+                ft.Row(controls=[texto(brl(dados["preco"]), 20, ft.FontWeight.BOLD), ft.Container(expand=True), badge]),
+                ft.Row(spacing=20, controls=[
+                    mini("Média 6 meses", brl(dados["media6m"])),
+                    mini("ATR (14)", brl(dados["atr"]) if dados.get("atr") else "—"),
+                    mini("ATR%", f"{pct:.2f}%".replace(".", ",") if pct is not None else "—")])]
         else:
-            corpo = [texto(erro or "—", 13, cor=VERMELHO if erro else MUTED)]
-        return bloco(ft.Column(spacing=8, controls=[
+            corpo = [texto(erro or "Carregando cotação…", 13, cor=VERMELHO if erro else MUTED)]
+        return bloco(ft.Column(spacing=10, controls=[
             ft.Row(controls=[ft.Column(spacing=0, expand=True, controls=[
-                texto(t, 18, ft.FontWeight.BOLD), texto(nome, 12, cor=MUTED, max_lines=2,
+                texto(t, 16, ft.FontWeight.BOLD), texto(nome, 12, cor=MUTED, max_lines=1,
                                                         overflow=ft.TextOverflow.ELLIPSIS)])]),
             *corpo,
-            ft.Row(controls=[
-                ft.FilledButton("Comprar", icon=ft.Icons.ADD_SHOPPING_CART, on_click=lambda e: self.radar_comprar(t)),
+            ft.Row(spacing=8, controls=[
+                botao_primario("Comprar", ft.Icons.ADD_SHOPPING_CART, lambda e: self.radar_comprar(t)),
                 ft.OutlinedButton("Vender", icon=ft.Icons.SELL, disabled=not pode_vender,
                                   on_click=lambda e: self.radar_vender(t)),
                 ft.Container(expand=True),
-                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=VERMELHO, tooltip="Remover",
-                              on_click=lambda e: self.remover_radar(t))])]))
+                ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=VERMELHO, tooltip="Remover do radar",
+                              on_click=lambda e: self.remover_radar(t))])]), padding=14)
 
     def remover_radar(self, t):
         def remover():
@@ -1150,10 +1228,10 @@ class App:
                       "offline": "Sem conexão · será enviado depois", "erro": "Erro ao sincronizar"}[self.status]
         if self.status == "ok" and self.ultima_sync:
             status_txt += f" às {self.ultima_sync:%H:%M}"
+        itens.append(rotulo("Google"))
         if self.g.email:
             sid = self.cfg["planilhas"].get(self.g.email)
-            conteudo = [texto("Conta Google", 16, ft.FontWeight.BOLD), texto(self.g.email, 14),
-                        texto(status_txt, 12, cor=MUTED)]
+            conteudo = [texto(self.g.email, 15, ft.FontWeight.BOLD), texto(status_txt, 12, cor=MUTED)]
             if self.ultimo_erro and self.status == "erro":
                 conteudo.append(texto(f"Último erro: {self.ultimo_erro}", 12, cor=VERMELHO))
             conteudo.append(ft.Row(wrap=True, spacing=8, controls=[
@@ -1162,10 +1240,10 @@ class App:
                                   on_click=lambda e: self.abrir_url(f"https://docs.google.com/spreadsheets/d/{sid}")),
                 ft.TextButton("Sair", icon=ft.Icons.LOGOUT, on_click=self.sair)]))
             itens.append(bloco(ft.Column(spacing=8, controls=conteudo)))
+            itens.append(rotulo("Amigos"))
             itens.append(self.bloco_amigos())
         else:
             itens.append(bloco(ft.Column(spacing=10, controls=[
-                texto("Conta Google", 16, ft.FontWeight.BOLD),
                 texto("Conecte para sincronizar com a planilha no Google Drive (a mesma usada no computador) e "
                       "para compartilhar com amigos.", 13, cor=MUTED),
                 texto(status_txt, 12, cor=MUTED),
@@ -1175,10 +1253,12 @@ class App:
                 texto("Depois de autorizar no navegador, volte para este app.", 12, cor=MUTED)])))
 
         escuro = self.page.theme_mode == ft.ThemeMode.DARK
+        itens.append(rotulo("Preferências"))
         itens.append(bloco(ft.Row(controls=[texto("Modo escuro", 14), ft.Container(expand=True),
                                             ft.Switch(value=escuro, on_change=self.trocar_tema)])))
+        itens.append(rotulo("Sobre"))
         itens.append(bloco(ft.Column(spacing=8, controls=[
-            texto("Sobre", 16, ft.FontWeight.BOLD), texto(f"Versão {VERSAO}", 13, cor=MUTED),
+            texto(f"Versão {VERSAO}", 13, cor=MUTED),
             ft.OutlinedButton("Verificar atualização", icon=ft.Icons.SYSTEM_UPDATE,
                               on_click=lambda e: self.page.run_thread(self.verificar_atualizacao, True))])))
         return ft.ListView(controls=itens, padding=ft.Padding.all(16), spacing=12, expand=True)
