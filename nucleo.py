@@ -644,7 +644,8 @@ def resumo_caixa(cfg, hoje=None, meses=None):
     a_debitar = sum(it["valor"] for it in pendentes if it["valor"] < 0)
     a_receber = sum(it["valor"] for it in pendentes if it["valor"] > 0)
     disponivel = saldo + entrou
-    return {"definido": base is not None, "base": base, "disponivel": disponivel,
+    return {"definido": base is not None, "base": base, "saldo_base": saldo, "entrou": entrou,
+            "disponivel": disponivel,
             "a_debitar": a_debitar, "a_receber": a_receber, "transito": a_debitar + a_receber,
             "projetado": disponivel + a_debitar + a_receber, "itens": itens}
 
@@ -660,6 +661,19 @@ def agenda_caixa(resumo, hoje=None, dias_historico=15):
             grupos[it["liquidacao"]].append(it)
     return [(d, rotulo_vencimento(d, hoje), sum(i["valor"] for i in grupos[d]), grupos[d])
             for d in sorted(grupos, reverse=False)]
+
+
+def projecao_caixa(resumo, hoje=None):
+    """Liquidações pendentes por data, com o saldo que sobra depois de cada uma:
+    lista de (data, rótulo, total do dia, itens, saldo após o dia)."""
+    hoje = hoje or date.today()
+    saldo = resumo["disponivel"]
+    saida = []
+    for d, rot, total, itens in agenda_caixa(resumo, hoje):
+        if d > hoje:
+            saldo += total
+            saida.append((d, rot, total, itens, saldo))
+    return saida
 
 
 def definir_saldo(cfg, valor, hoje=None):
