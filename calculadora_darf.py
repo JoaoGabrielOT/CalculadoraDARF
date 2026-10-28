@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import threading
+import time as _time
 import uuid
 import webbrowser
 from collections import Counter, defaultdict
@@ -886,10 +887,20 @@ def por_logo(rotulo, img):
         pass
 
 
+def ligar(w, evento, func):
+    """Liga o evento só neste widget do Tk. O bind do CustomTkinter também liga nos widgets internos
+    (canvas e rótulo), que a recursão visita de novo: o evento disparava duas vezes (ex.: duas janelas)."""
+    misc = getattr(tk, "Misc", None)
+    if misc is not None and isinstance(w, misc):
+        misc.bind(w, evento, func, "+")
+    else:
+        w.bind(evento, func, add="+")
+
+
 def ligar_clique(w, acao):
-    """Clique em qualquer parte do cartão (inclusive nos rótulos internos) executa a ação."""
+    """Clique em qualquer parte do cartão (inclusive nos rótulos internos) executa a ação uma única vez."""
     try:
-        w.bind("<Button-1>", lambda e: acao(), add="+")
+        ligar(w, "<Button-1>", lambda e: acao())
         w.configure(cursor="hand2")
     except Exception:
         pass
@@ -1000,8 +1011,8 @@ class CardNoticia(ctk.CTkFrame):
     def ligar_realce(self, w):
         """Borda verde enquanto o mouse está sobre o cartão (efeito de cartão flutuante)."""
         try:
-            w.bind("<Enter>", lambda e: self.configure(border_color=C["accent"]), add="+")
-            w.bind("<Leave>", lambda e: self.after(30, self.conferir_saida), add="+")
+            ligar(w, "<Enter>", lambda e: self.configure(border_color=C["accent"]))
+            ligar(w, "<Leave>", lambda e: self.after(30, self.conferir_saida))
         except Exception:
             pass
         for f in w.winfo_children():
@@ -1115,6 +1126,8 @@ class App(ctk.CTk):
         self.arraste = None
         self.radar_filtro = "Todos"
         self.radar_ordem = self.cfg.get("radar_ordem_lista", "manual")
+        self.grafico_aberto = False
+        self.grafico_fechado = 0.0
         self.sync_rodando = False
         self.resync = False
         self.sync_job = None
@@ -2200,10 +2213,16 @@ class App(ctk.CTk):
         self.radar_redesenhar()
 
     def abrir_grafico(self, t):
-        if self.arraste:
+        # um clique só abre uma janela: ignora cliques repetidos e o que chega logo depois de fechar
+        if self.arraste or self.grafico_aberto or _time.monotonic() - self.grafico_fechado < 0.5:
             return
         item = next((r for r in self.radar_lista() if r["ticker"] == t), {"ticker": t, "nome": ""})
-        JanelaGrafico(self, t, item.get("nome", ""), self.radar_dados.get(t))
+        self.grafico_aberto = True
+        try:
+            JanelaGrafico(self, t, item.get("nome", ""), self.radar_dados.get(t))
+        finally:
+            self.grafico_aberto = False
+            self.grafico_fechado = _time.monotonic()
 
     def posicionar_linhas(self, tickers, arrastado=None):
         for i, t in enumerate(tickers):
