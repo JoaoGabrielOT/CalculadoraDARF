@@ -177,7 +177,7 @@ def mes_inicial():
 
 
 CONFIG_PADRAO = {"tema": "Dark", "amigos": [], "radar": [], "planilhas": {}, "pendente": False, "excluidos": {},
-                 "caixa": {"saldo": 0.0, "data": "", "mod": 0}}
+                 "caixa": {"saldo": 0.0, "data": "", "mod": 0}, "metas": []}
 
 
 def ler_config():
@@ -191,11 +191,11 @@ def ler_config():
 
 
 def _chave_lista(nome):
-    return "email" if nome == "amigos" else "ticker"
+    return {"amigos": "email", "metas": "id"}.get(nome, "ticker")
 
 
 def gravar_config(cfg, carimbar=True):
-    """Grava a configuração, marcando a hora de alteração dos amigos e do radar."""
+    """Grava a configuração, marcando a hora de alteração dos amigos, do radar e das metas."""
     with TRAVA:
         cfg.setdefault("excluidos", {})
         if carimbar:
@@ -204,7 +204,7 @@ def gravar_config(cfg, carimbar=True):
                 antigo = json.loads(CONFIG.read_text(encoding="utf-8"))
             except Exception:
                 antigo = {}
-            for nome in ("amigos", "radar"):
+            for nome in ("amigos", "radar", "metas"):
                 k = _chave_lista(nome)
                 ant = {x[k]: x for x in antigo.get(nome, [])}
                 atuais = set()
@@ -758,8 +758,13 @@ def montar_linhas(meses, cfg):
     caixa = cfg.get("caixa") or {}
     lista_caixa = [[round(float(caixa.get("saldo") or 0), 2), serial(caixa["data"]), caixa.get("mod", 0)]] \
         if caixa.get("data") else []
+    lista_metas = [[m["id"], m["ticker"], m.get("tipo", ""), m["lote_id"], m["qtd"], m["preco_alvo"],
+                    m["lucro_desejado"] if m.get("lucro_desejado") is not None else "", m["criada_em"],
+                    m.get("status", "ativa"), m.get("ultimo_erro", ""),
+                    json.dumps(m["execucao"], ensure_ascii=False) if m.get("execucao") else "", m.get("mod", 0)]
+                   for m in sorted(cfg.get("metas", []), key=lambda m: (m["criada_em"], m["id"]))]
     return {"Resumo": resumo, "Compras": compras, "Vendas": vendas, "Amigos": lista_amigos,
-            "Radar": lista_radar, "Caixa": lista_caixa, "Exclusões": excl}
+            "Radar": lista_radar, "Caixa": lista_caixa, "Metas": lista_metas, "Exclusões": excl}
 
 
 def reconstruir(abas):
@@ -839,6 +844,33 @@ def reconstruir(abas):
     return meses, amigos, radar, excl_cfg, caixa
 
 
+def reconstruir_metas(abas):
+    """Metas da aba "Metas" da planilha (fora de reconstruir para não mudar o que ele devolve)."""
+    metas = []
+    for row in abas.get("Metas", []):
+        row = (list(row) + [""] * 12)[:12]
+        try:
+            m = {"id": str(row[0]).strip(), "ticker": str(row[1]).strip().upper(), "tipo": str(row[2]),
+                 "lote_id": str(row[3]), "qtd": int(row[4]), "preco_alvo": float(row[5]),
+                 "criada_em": str(row[7]), "status": str(row[8]) or "ativa", "mod": _num(row[11])}
+            datetime.fromisoformat(m["criada_em"])
+        except (ValueError, TypeError):
+            continue
+        if not m["id"] or not m["ticker"]:
+            continue
+        if row[6] != "":
+            m["lucro_desejado"] = _num(row[6])
+        if row[9]:
+            m["ultimo_erro"] = str(row[9])
+        if row[10]:
+            try:
+                m["execucao"] = json.loads(str(row[10]))
+            except ValueError:
+                pass
+        metas.append(m)
+    return metas
+
+
 # ---------------------------------------------------------------- mesclagem (vários aparelhos)
 
 def _escolher(a, b):
@@ -890,6 +922,21 @@ def mesclar_mes(local, remoto):
     return out
 
 
+def deduplicar_auto(meses):
+    """Venda automática de meta (id "auto-...") só pode existir em um mês: se dois aparelhos a registraram em
+    meses diferentes, fica a do mês mais antigo. meses: {mês: dados}. Retorna os meses alterados."""
+    vistas, alterados = set(), set()
+    for mes in sorted(meses):
+        for l in meses[mes]["lotes"]:
+            antes = len(l["vendas"])
+            l["vendas"] = [v for v in l["vendas"]
+                           if not str(v["id"]).startswith("auto-") or v["id"] not in vistas]
+            vistas.update(v["id"] for v in l["vendas"] if str(v["id"]).startswith("auto-"))
+            if len(l["vendas"]) != antes:
+                alterados.add(mes)
+    return alterados
+
+
 def mesclar_lista(local, remoto, chave, excl, prefixo):
     itens = {x[chave]: x for x in remoto}
     for x in local:
@@ -897,16 +944,36 @@ def mesclar_lista(local, remoto, chave, excl, prefixo):
     return [x for k, x in itens.items() if excl.get(f"{prefixo}:{k}", -1) < x.get("mod", 0)]
 
 
-def mesclar_tudo(remoto, cfg):
-    """Mescla os dados da planilha com os locais e grava o resultado. Retorna True se algo local mudou."""
+def mesclar_metas(local, remoto):
+    """Metas pelo id: "executada" vence qualquer outro status (a venda já foi registrada); nos demais casos vale
+    a alteração mais recente. A venda automática tem id fixo (auto-<meta>), então nunca duplica."""
+    itens = {m["id"]: m for m in remoto}
+    for m in local:
+        o = itens.get(m["id"])
+        if o is None:
+            itens[m["id"]] = m
+        elif (m.get("status") == "executada") != (o.get("status") == "executada"):
+            itens[m["id"]] = m if m.get("status") == "executada" else o
+        else:
+            itens[m["id"]] = _escolher(m, o)
+    return sorted(itens.values(), key=lambda m: (m["criada_em"], m["id"]))
+
+
+def mesclar_tudo(remoto, cfg, metas_r=None):
+    """Mescla os dados da planilha com os locais e grava o resultado. Retorna True se algo local mudou.
+    metas_r: metas da planilha (reconstruir_metas)."""
     meses_r, amigos_r, radar_r, excl_r = remoto[:4]
     caixa_r = remoto[4] if len(remoto) > 4 else None
     mudou = False
     with TRAVA:
+        mesclados = {}
         for mes in sorted(set(listar_meses()) | set(meses_r)):
             local = carregar(mes) if arquivo(mes).exists() else None
-            novo = mesclar_mes(local, meses_r.get(mes))
-            if local is None or json.dumps(novo, sort_keys=True) != json.dumps(local, sort_keys=True):
+            texto_local = json.dumps(local, sort_keys=True) if local is not None else None
+            mesclados[mes] = (texto_local, mesclar_mes(local, meses_r.get(mes)))
+        deduplicar_auto({mes: novo for mes, (_, novo) in mesclados.items()})
+        for mes, (texto_local, novo) in mesclados.items():
+            if texto_local is None or json.dumps(novo, sort_keys=True) != texto_local:
                 salvar(novo, carimbar=False)
                 mudou = True
         excl = dict(excl_r)
@@ -918,6 +985,11 @@ def mesclar_tudo(remoto, cfg):
         cfg["amigos"], cfg["radar"], cfg["excluidos"] = amigos, radar, excl
         if json.dumps([amigos, radar, excl], sort_keys=True) != antes:
             mudou = True
+        metas_l = sorted(cfg.get("metas", []), key=lambda m: (m["criada_em"], m["id"]))
+        metas = mesclar_metas(metas_l, metas_r or [])
+        if json.dumps(metas, sort_keys=True) != json.dumps(metas_l, sort_keys=True):
+            mudou = True
+        cfg["metas"] = metas
         if caixa_r and caixa_r.get("mod", 0) > (cfg.get("caixa") or {}).get("mod", 0):
             cfg["caixa"] = caixa_r
             mudou = True

@@ -23,6 +23,7 @@ for _p in (AQUI, AQUI.parent):
 import atualizador as upd  # noqa: E402
 import google_sync as gs  # noqa: E402
 import mercado as mk  # noqa: E402
+import metas as ms  # noqa: E402
 import noticias as nt  # noqa: E402
 import nucleo as nc  # noqa: E402
 from nucleo import brl, fmt_data, fmt_mes  # noqa: E402
@@ -602,6 +603,8 @@ class App:
         self.radar_ordem = self.cfg.get("radar_ordem_lista", "manual")
         self.f_noticias = {"tema": "Todas", "ticker": "Todos"}
         self.cfg.setdefault("noticias_notificar", True)
+        self.cfg.setdefault("metas", [])
+        self.metas_ui = None  # atualiza o diálogo de metas quando ele está aberto
 
         page.title = "Calculadora DARF"
         page.theme = ft.Theme(color_scheme_seed=VERDE)
@@ -627,11 +630,20 @@ class App:
         if self.g.tem_token():
             page.run_thread(self.conectar_token)
         page.run_thread(self.verificar_atualizacao)
+        page.run_thread(self.verificar_metas)  # ao abrir: cobre o período em que o app ficou fechado
+        try:  # ao voltar para o primeiro plano
+            page.on_app_lifecycle_state_change = self.mudou_ciclo
+        except Exception:
+            pass
         if self.cfg.get("noticias_notificar", True) and no_android():
             page.run_thread(self.pedir_permissao_notificacao)
         threading.Thread(target=self.laco, daemon=True).start()
 
     # ------------------------------------------------------------ utilidades
+    def mudou_ciclo(self, e):
+        if "resume" in str(getattr(e, "state", "")).lower():
+            self.page.run_thread(self.verificar_metas)
+
     def aviso(self, msg):
         try:
             self.page.show_dialog(ft.SnackBar(content=ft.Text(msg)))
@@ -747,6 +759,16 @@ class App:
                 content=ft.Row(spacing=8, controls=[ft.Icon(ft.Icons.ACCOUNT_BALANCE_WALLET, size=18, color=MUTED),
                                                     texto(txt, 13, ft.FontWeight.BOLD, expand=True),
                                                     ft.Icon(ft.Icons.CHEVRON_RIGHT, size=18, color=MUTED)])))
+
+            ativas = len(ms.metas_ativas(self.cfg))
+            itens.append(ft.Container(
+                on_click=lambda e: self.dialogo_metas(), padding=ft.Padding.symmetric(horizontal=14, vertical=10),
+                border_radius=ft.BorderRadius.all(12), bgcolor=ft.Colors.SURFACE_CONTAINER,
+                content=ft.Row(spacing=8, controls=[
+                    ft.Icon(ft.Icons.TRACK_CHANGES, size=18, color=MUTED),
+                    texto("Meta de lucro / Preço-alvo" + (f" · {ativas} ativa{'s' if ativas != 1 else ''}"
+                                                           if ativas else ""), 13, ft.FontWeight.BOLD, expand=True),
+                    ft.Icon(ft.Icons.CHEVRON_RIGHT, size=18, color=MUTED)])))
 
         itens += self.seletor_visao("Dados")
 
@@ -1107,6 +1129,41 @@ class App:
         self.render()
 
     def fechar_mes(self, e=None):
+        """Antes de fechar, verifica as metas do mês: um alvo já atingido é registrado e uma consulta que falhou
+        bloqueia o fechamento (fechar poderia invalidar a meta)."""
+        if not ms.metas_ativas(self.cfg):
+            return self.confirmar_fechamento()
+        mes = self.mes
+        self.aviso("Verificando as metas antes de fechar…")
+
+        def trabalho():
+            try:
+                res = ms.preparar_fechamento(self.cfg, mes, mk.historico_desde)
+            except Exception as ex:
+                traceback.print_exc()
+                res = {"bloqueio": f"Falha ao verificar as metas antes de fechar: {str(ex)[:120]}",
+                       "executadas": [], "invalidas": []}
+            if self.mes != mes:
+                return
+            if res["bloqueio"]:
+                self.page.show_dialog(ft.AlertDialog(
+                    title=ft.Text("Não foi possível fechar o mês"), content=ft.Text(res["bloqueio"]),
+                    actions=[ft.FilledButton("OK", on_click=lambda e: self.page.pop_dialog())]))
+                return
+            if res["executadas"] or res["invalidas"]:
+                with nc.TRAVA:
+                    if not self.visao:
+                        self.d = nc.carregar(self.mes)
+                self.agendar_sync()
+                self.render(todas=True)
+                for m in res["executadas"]:
+                    self.aviso(f"Meta atingida: {m['ticker']} vendida a {brl(m['execucao']['preco_usado'])}.")
+                for m in res["invalidas"]:
+                    self.aviso(f"Meta inválida ({m['ticker']}): {m.get('ultimo_erro', '')}")
+            self.confirmar_fechamento()
+        self.page.run_thread(trabalho)
+
+    def confirmar_fechamento(self):
         r = nc.apurar(self.d)
 
         def confirmar():
@@ -2295,7 +2352,7 @@ class App:
                 self.resync = False
                 abas = self.g.ler(sid)
                 with nc.TRAVA:
-                    mudou = nc.mesclar_tudo(nc.reconstruir(abas), self.cfg)
+                    mudou = nc.mesclar_tudo(nc.reconstruir(abas), self.cfg, metas_r=nc.reconstruir_metas(abas))
                     dados = nc.montar_linhas(nc.listar_meses(), self.cfg)
                     if mudou and not self.visao:
                         self.d = nc.carregar(self.mes)
@@ -2345,8 +2402,235 @@ class App:
                 if self.aba == 0:
                     em_carteira = {l["ticker"] for l in self.d["lotes"] if nc.restante(l) > 0}
                     self.cotacoes.atualizar(em_carteira, self.cotacoes_chegaram)
+                self.verificar_metas()
             except Exception:
                 traceback.print_exc()
+
+    # ------------------------------------------------------------ metas de lucro / preço-alvo
+    def verificar_metas(self):
+        """Busca o histórico das metas ativas e registra as vendas dos alvos atingidos (roda em thread)."""
+        try:
+            rel = ms.verificar(self.cfg, mk.historico_desde)
+        except Exception:
+            traceback.print_exc()
+            return
+        if rel is None:
+            return None
+        if rel["mudou"]:
+            with nc.TRAVA:
+                if not self.visao:
+                    self.d = nc.carregar(self.mes)
+            self.agendar_sync()
+            self.render(todas=True)
+            for m in rel["executadas"]:
+                ex = m["execucao"]
+                self.aviso(f"Meta atingida: {m['ticker']} vendida a {brl(ex['preco_usado'])} em "
+                           f"{fmt_data(ex['data'])} {ex['hora']}.")
+            for m in rel["invalidas"]:
+                self.aviso(f"Meta inválida ({m['ticker']}): {m.get('ultimo_erro', '')}")
+        if self.metas_ui:
+            self.metas_ui()
+        return rel
+
+    def dialogo_metas(self):
+        """Calculadora de preço-alvo e lista das metas (vendas automáticas)."""
+        if self.visao:
+            self.aviso("Volte para os seus dados para criar metas.")
+            return
+        estado = {"calc": None}
+        opcoes = {}
+        compra = ft.Dropdown(label="Ativo / compra *", options=[], expand=True)
+        qtd = ft.TextField(label="Quantidade *", keyboard_type=ft.KeyboardType.NUMBER)
+        lucro = ft.TextField(label="Lucro líquido desejado (R$) *", keyboard_type=ft.KeyboardType.NUMBER,
+                             hint_text="Ex.: 1.000,00")
+        preco = ft.TextField(label="Preço-alvo da venda (R$) *", keyboard_type=ft.KeyboardType.NUMBER,
+                             hint_text="Ex.: 21,78")
+        resultado = ft.Column(spacing=4)
+        nota = texto("", 11, cor=MUTED)
+        erro = texto("", 12, cor=VERMELHO)
+        lista = ft.Column(spacing=8)
+        verif = texto("", 11, cor=MUTED)
+
+        def atualizar_dlg():
+            try:
+                dlg.update()
+            except Exception:  # diálogo ainda não exibido ou já fechado
+                pass
+
+        def lote_atual():
+            return opcoes.get(compra.value)
+
+        def mostrar(r, p):
+            lote = lote_atual()[0]
+            resultado.controls = [
+                linha_valor("Lucro desejado", brl(r["lucro_desejado"]), tam=14),
+                linha_valor("Preço médio do lote", brl(r["preco_medio"]), tam=14),
+                linha_valor("Custo estimado de venda", brl(p["custos"]), tam=14),
+                linha_valor("Imposto estimado", brl(p["imposto"]), tam=14),
+                linha_valor("Preço-alvo sugerido", brl(r["preco"]), tam=14),
+                linha_valor("Lucro bruto projetado", brl(p["bruto"]), cor_resultado(p["bruto"]), tam=14),
+                linha_valor("Lucro líquido projetado", brl(p["lucro_apos_imposto"]),
+                            cor_resultado(p["lucro_apos_imposto"]), tam=14)]
+            regime = "Day trade (20%)" if r["day_trade"] else "Swing trade (15%)"
+            irrf = f" IRRF retido estimado: {brl(p['irrf'])} (abate da DARF)." if p["irrf"] else ""
+            nota.value = (f"{regime} · taxas B3 {brl(p['taxas'])} + corretagem {brl(p['corretagem'])}.{irrf} "
+                          "Estimativa conservadora: sem isenção de R$ 20 mil e sem prejuízos anteriores.")
+
+        def limpar(msg=""):
+            resultado.controls = []
+            nota.value = msg
+            estado["calc"] = None
+
+        def calcular(e=None):
+            erro.value = ""
+            sel = lote_atual()
+            if not sel:
+                limpar()
+                return atualizar_dlg()
+            try:
+                q = nc.parse_qtd(qtd.value or "")
+                l = nc.parse_valor(lucro.value or "")
+            except ValueError:
+                limpar("Informe a quantidade e o lucro líquido desejado.")
+                return atualizar_dlg()
+            lote, livre = sel
+            if q > livre:
+                limpar(f"Quantidade maior que a livre ({livre}).")
+                return atualizar_dlg()
+            try:
+                r = ms.calcular_preco_alvo(lote, q, l, lote["data_compra"] == date.today().isoformat())
+            except (ValueError, OverflowError) as ex:
+                limpar(str(ex) if isinstance(ex, ValueError) else "Valores grandes demais para calcular.")
+                return atualizar_dlg()
+            estado["calc"] = r
+            preco.value = nc.preco_texto(r["preco"])
+            mostrar(r, ms.projetar(lote, q, r["preco"], r["day_trade"]))
+            atualizar_dlg()
+
+        def projetar_preco(e=None):
+            r = estado["calc"]
+            if not r or not lote_atual():
+                return
+            try:
+                p = nc.parse_num(preco.value or "")
+            except ValueError:
+                return
+            mostrar(r, ms.projetar(lote_atual()[0], r["qtd"], p, r["day_trade"]))
+            atualizar_dlg()
+
+        def escolheu_lote(e=None):
+            sel = lote_atual()
+            if sel:
+                qtd.value = str(sel[1])
+            calcular()
+
+        def carregar_opcoes():
+            opcoes.clear()
+            for mes, l, livre in ms.lotes_para_meta(self.cfg):
+                opcoes[f"{l['id']}"] = (l, livre)
+            compra.options = [ft.DropdownOption(
+                key=k, text=f"{l['ticker']} · {fmt_data(l['data_compra'])} · {brl(l['preco'])} · {livre} livres")
+                for k, (l, livre) in opcoes.items()]
+            if compra.value not in opcoes:
+                compra.value = next(iter(opcoes), None)
+            compra.disabled = not opcoes
+
+        def desenhar_lista():
+            cards = []
+            for m in sorted(self.cfg.get("metas", []), key=lambda x: x["criada_em"], reverse=True):
+                d = ms.descricao(m)
+                cor = {"accent": VERDE, "danger": VERMELHO, "aviso": AMARELO, "muted": MUTED}[d["cor"]]
+                linhas_card = [ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[
+                    texto(d["titulo"], 14, ft.FontWeight.BOLD), texto(d["status"], 12, ft.FontWeight.BOLD, cor)]),
+                    texto(d["detalhe"], 11, cor=VERMELHO if d["erro"] else MUTED)]
+                if m.get("status") == "ativa":
+                    linhas_card.append(ft.TextButton("Cancelar meta", on_click=lambda e, i=m["id"]: cancelar(i)))
+                cards.append(bloco(ft.Column(spacing=4, controls=linhas_card), padding=12))
+            lista.controls = cards or [texto("Nenhuma meta criada.", 12, cor=MUTED)]
+
+        def atualizar_tudo():
+            carregar_opcoes()
+            desenhar_lista()
+            atualizar_dlg()
+
+        def cancelar(meta_id):
+            try:
+                ms.cancelar_meta(self.cfg, meta_id)
+            except ValueError as ex:
+                self.aviso(str(ex))
+            self.agendar_sync()
+            atualizar_tudo()
+
+        def criar(e):
+            sel = lote_atual()
+            try:
+                if not sel:
+                    raise ValueError("Não há compra em aberto para criar a meta.")
+                try:
+                    q = nc.parse_qtd(qtd.value or "")
+                except ValueError:
+                    raise ValueError("Quantidade inválida.")
+                try:
+                    p = nc.parse_num(preco.value or "")
+                except ValueError:
+                    raise ValueError("Preço-alvo inválido.")
+                try:
+                    l = nc.parse_valor(lucro.value or "")
+                except ValueError:
+                    l = None
+                ms.criar_meta(self.cfg, sel[0]["id"], q, p, l)
+            except ValueError as ex:
+                erro.value = str(ex)
+                erro.color = VERMELHO
+                return atualizar_dlg()
+            self.agendar_sync()
+            erro.value = "Meta criada. O app registra a venda quando o preço-alvo for atingido."
+            erro.color = VERDE
+            atualizar_tudo()
+            self.page.run_thread(self.verificar_metas)
+
+        def verificar_agora(e):
+            verif.value = "Verificando o histórico de preços…"
+            atualizar_dlg()
+
+            def trabalho():
+                rel = self.verificar_metas()
+                if rel is None:
+                    verif.value = ("Verificação já em andamento." if ms.metas_ativas(self.cfg)
+                                   else "Não há metas ativas para verificar.")
+                else:
+                    verif.value = f"Verificado às {datetime.now():%H:%M}."
+                atualizar_tudo()
+            self.page.run_thread(trabalho)
+
+        def fechou(e=None):
+            self.metas_ui = None
+
+        def atualizar_de_fora():
+            carregar_opcoes()
+            desenhar_lista()
+            atualizar_dlg()
+
+        qtd.on_change = calcular
+        lucro.on_change = calcular
+        preco.on_change = projetar_preco
+        compra.on_select = escolheu_lote
+        carregar_opcoes()
+        desenhar_lista()
+        sel0 = lote_atual()
+        if sel0:
+            qtd.value = str(sel0[1])
+        self.metas_ui = atualizar_de_fora
+        conteudo = [texto(ms.AVISO_REGISTRO, 12, ft.FontWeight.BOLD, AMARELO), compra, qtd, lucro, resultado, nota,
+                    preco, erro, ft.FilledButton("Criar venda automática com este preço", on_click=criar),
+                    ft.Divider(), ft.Row(controls=[rotulo("Metas"), ft.Container(expand=True),
+                                                   ft.TextButton("Verificar agora", on_click=verificar_agora)]),
+                    verif, lista]
+        dlg = ft.AlertDialog(title=ft.Text("Meta de lucro / Preço-alvo"), scrollable=True, on_dismiss=fechou,
+                             content=ft.Container(width=400, content=ft.Column(tight=True, spacing=12,
+                                                                               controls=conteudo)),
+                             actions=[ft.TextButton("Fechar", on_click=lambda e: self.page.pop_dialog())])
+        self.page.show_dialog(dlg)
 
     # ------------------------------------------------------------ atualização do aplicativo
     def verificar_atualizacao(self, manual=False):

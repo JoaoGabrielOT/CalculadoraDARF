@@ -80,6 +80,46 @@ def _get_chart(ticker, params):
     return res[0]
 
 
+def intervalos_historico(dias):
+    """Intervalos do Yahoo a tentar, do mais fino ao mais grosso, conforme a idade do período pedido:
+    1m cobre até 7 dias por consulta, 5m/15m até 60 dias, 1h até ~2 anos e 1d sem limite."""
+    if dias <= 7:
+        return ["1m", "5m", "15m", "1h", "1d"]
+    if dias <= 60:
+        return ["5m", "15m", "1h", "1d"]
+    if dias <= 700:
+        return ["1h", "1d"]
+    return ["1d"]
+
+
+def historico_desde(ticker, desde, agora=None):
+    """Máximas das barras do Yahoo desde `desde` (datetime; sem fuso vale Brasília), no intervalo mais fino
+    disponível. Retorna {"barras": [{"ts", "dt" (datetime com fuso), "alta"}], "fonte", "intervalo"}.
+    Levanta SemDados se não houver nenhuma barra. Executar fora da thread da interface."""
+    from datetime import datetime, timezone
+    fuso_padrao = timezone(timedelta(hours=-3))
+    if desde.tzinfo is None:
+        desde = desde.replace(tzinfo=fuso_padrao)
+    agora = agora or datetime.now(timezone.utc)
+    dias = (agora - desde).total_seconds() / 86400
+    ultimo = None
+    for intervalo in intervalos_historico(max(dias, 0)):
+        inicio = int(desde.timestamp()) - (86400 if intervalo in ("1h", "1d") else 0)
+        try:
+            res = _get_chart(ticker, {"period1": inicio, "period2": int(agora.timestamp()) + 60,
+                                      "interval": intervalo, "includePrePost": "false"})
+        except SemDados as e:
+            ultimo = e
+            continue
+        tz = timezone(timedelta(seconds=(res.get("meta") or {}).get("gmtoffset") or -10800))
+        q = ((res.get("indicators") or {}).get("quote") or [{}])[0]
+        barras = [{"ts": ts, "dt": datetime.fromtimestamp(ts, tz), "alta": float(a)}
+                  for ts, a in zip(res.get("timestamp") or [], q.get("high") or []) if _valido(a)]
+        if barras:
+            return {"barras": barras, "fonte": "Yahoo Finance", "intervalo": intervalo}
+    raise ultimo or SemDados(f"Sem histórico de {ticker} desde {desde:%d/%m/%Y %H:%M}.")
+
+
 def _extras(dados, hi, lo, cl, anterior, mercado=None):
     """Variação do dia, mínima/máxima de 6 meses e distância até a média; mercado = máxima/mínima do dia,
     de 52 semanas e volume, quando o Yahoo informa."""

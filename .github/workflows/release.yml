@@ -76,7 +76,7 @@ jobs:
           fi
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="0.0.0"; fi
           printf 'VERSAO = "%s"\n' "$V" > versao.py
-          cp nucleo.py google_sync.py mercado.py noticias.py atualizador.py versao.py android/
+          cp nucleo.py google_sync.py mercado.py metas.py noticias.py atualizador.py versao.py android/
           printf '%s' "$GOOGLE_CREDENTIALS" > android/credentials.json
           python -c "import json; assert 'installed' in json.load(open('android/credentials.json'))"
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"

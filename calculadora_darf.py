@@ -20,6 +20,7 @@ import customtkinter as ctk
 
 import atualizador as upd
 import google_sync as gs
+import metas as ms
 import nucleo as nc
 import mercado as mk
 import noticias as nt
@@ -1174,6 +1175,8 @@ class App(ctk.CTk):
         self.cfg.setdefault("planilhas", {})
         self.cfg.setdefault("pendente", False)
         self.cfg.setdefault("radar", [])
+        self.cfg.setdefault("metas", [])
+        self.metas_rodando = False
         self.mes = mes_inicial()
         self.d = carregar(self.mes)
 
@@ -1236,6 +1239,7 @@ class App(ctk.CTk):
         self.after(60000, self.tick_caixa)
         self.after(60000, self.tick_sync)
         self.after(60000, self.tick_radar)
+        self.after(4000, self.tick_metas)
         self.after(8000, self.tick_noticias)
         self.after(1500, self.preparar_notificacoes)
         if upd.pode_atualizar():
@@ -1243,6 +1247,7 @@ class App(ctk.CTk):
             self.after(3000, self.verificar_atualizacao)
         if self.g.tem_token():
             self.conectar_token()
+        self.after(2500, self.verificar_metas)  # ao abrir: cobre o período em que o app ficou fechado
 
     # --- layout
     def montar_cabecalho(self):
@@ -1271,6 +1276,8 @@ class App(ctk.CTk):
         self.bt_saldo.pack(side="left", padx=(0, 14))
         self.lb_sync = ctk.CTkLabel(conta, text="", font=F(12, "bold"), text_color=C["muted"])
         self.lb_sync.pack(side="left", padx=(0, 14))
+        self.bt_metas = botao(conta, "Meta de lucro", self.abrir_metas, "neutro", width=130)
+        self.bt_metas.pack(side="left", padx=(0, 8))
         self.bt_amigos = botao(conta, "Amigos", self.abrir_amigos, "neutro", width=100)
         self.bt_amigos.pack(side="left", padx=(0, 8))
         self.bt_conta = botao(conta, "Conectar Google", self.clicar_conta, "neutro", width=180)
@@ -1677,6 +1684,32 @@ class App(ctk.CTk):
         self.gravar()
 
     def fechar_mes(self):
+        """Antes de fechar, verifica as metas do mês: um alvo já atingido é registrado e uma consulta que falhou
+        bloqueia o fechamento (fechar poderia invalidar a meta)."""
+        if not ms.metas_ativas(self.cfg):
+            return self.confirmar_fechamento()
+        mes = self.mes
+
+        def pronto(res):
+            if self.mes != mes:
+                return
+            if res["bloqueio"]:
+                return avisar(self, "Não foi possível fechar o mês", res["bloqueio"])
+            if res["executadas"] or res["invalidas"]:
+                self.d = carregar(self.mes)
+                self.atualizar()
+                self.atualizar_caixa()
+                self.agendar_sync()
+                linhas = [f"{m['ticker']}: venda de {m['qtd']} registrada pela meta." for m in res["executadas"]]
+                linhas += [f"{m['ticker']}: meta inválida. {m.get('ultimo_erro', '')}" for m in res["invalidas"]]
+                avisar(self, "Metas verificadas antes de fechar", "\n".join(linhas))
+            self.confirmar_fechamento()
+
+        self.bg(lambda: ms.preparar_fechamento(self.cfg, mes, mk.historico_desde), ok=pronto,
+                erro=lambda e: avisar(self, "Não foi possível fechar o mês",
+                                      f"Falha ao verificar as metas antes de fechar: {str(e)[:120]}"))
+
+    def confirmar_fechamento(self):
         r = apurar(self.d)
         if not confirmar(self, f"Fechar {fmt_mes(self.mes)}",
                          f"Depois de fechado, o mês não pode ser alterado.\n\nTotal da DARF: {brl(r['darf'])}",
@@ -2503,6 +2536,61 @@ class App(ctk.CTk):
             self.cotacoes.atualizar(em_carteira, lambda: self.fila.put((lambda _: self.atualizar(), None, None)))
         self.after(60000, self.tick_radar)
 
+    # --- metas de lucro / preço-alvo
+    def abrir_metas(self):
+        if self.visao:
+            self.trocar_visao("Meus dados")
+        JanelaMetas(self)
+
+    def tick_metas(self):
+        self.verificar_metas()
+        self.after(60000, self.tick_metas)
+
+    def verificar_metas(self, ao_fim=None, forcar=False):
+        """Busca o histórico das metas ativas numa thread e registra as vendas dos alvos atingidos.
+        forcar: aplica mesmo com uma janela aberta (a janela de metas pede isso)."""
+        if self.metas_rodando:
+            if ao_fim:
+                ao_fim(ms.EM_ANDAMENTO)
+            return
+        ativas = ms.metas_ativas(self.cfg)
+        if not ativas:
+            if ao_fim:
+                ao_fim(None)
+            return
+        self.metas_rodando = True
+
+        def aplicar(historicos):
+            try:
+                if not forcar and self.grab_current() is not None:  # há uma janela aberta: espera para não mudar dados sob ela
+                    self.after(2000, lambda: aplicar(historicos))
+                    return
+            except Exception:
+                pass
+            self.metas_rodando = False
+            rel = ms.aplicar(self.cfg, historicos)
+            if rel["mudou"]:
+                if not self.visao:
+                    self.d = carregar(self.mes)
+                self.atualizar()
+                self.atualizar_caixa()
+                self.agendar_sync()
+            if ao_fim:
+                ao_fim(rel)
+            for m in rel["executadas"]:
+                ex = m["execucao"]
+                avisar(self, "Meta atingida", f"{m['ticker']}: venda de {m['qtd']} a {brl(ex['preco_usado'])} "
+                       f"registrada em {fmt_data(ex['data'])} {ex['hora']}.\n\n{ms.AVISO_REGISTRO}.")
+            for m in rel["invalidas"]:
+                avisar(self, "Meta inválida", f"{m['ticker']}: {m.get('ultimo_erro', '')}")
+
+        def falhou(e):
+            self.metas_rodando = False
+            if ao_fim:
+                ao_fim(None)
+
+        self.bg(lambda: ms.buscar_historicos(ativas, mk.historico_desde), ok=aplicar, erro=falhou)
+
     def preparar_operacao(self):
         """Garante a visão dos próprios dados em um mês aberto."""
         if self.visao:
@@ -2721,7 +2809,7 @@ class App(ctk.CTk):
         except Exception:
             pass
         sid, abas = res
-        mudou = nc.mesclar_tudo(reconstruir(abas), self.cfg)
+        mudou = nc.mesclar_tudo(reconstruir(abas), self.cfg, metas_r=nc.reconstruir_metas(abas))
         if mudou:
             if not self.visao:
                 self.d = carregar(self.mes)
@@ -3156,6 +3244,259 @@ class DialogoAtualizacao(Janela):
     def cancelar(self):
         self.cancelado = True
         self.destroy()
+
+
+class JanelaMetas(Janela):
+    """Calculadora de preço-alvo e lista das vendas automáticas (metas)."""
+    COR = {"accent": C["accent"], "danger": C["danger"], "aviso": C["aviso"], "muted": C["muted"]}
+
+    def __init__(self, app):
+        super().__init__(app, "Meta de lucro / Preço-alvo")
+        self.app = app
+        self.opcoes = {}
+        self.resultado_calc = None
+        ctk.CTkLabel(self.caixa, text="Meta de lucro / Preço-alvo", font=F(18, "bold"), text_color=C["texto"]).pack(
+            anchor="w", padx=24, pady=(20, 0))
+        ctk.CTkLabel(self.caixa, text=ms.AVISO_REGISTRO, font=F(12, "bold"), text_color=C["aviso"]).pack(
+            anchor="w", padx=24, pady=(2, 0))
+        corpo = ctk.CTkFrame(self.caixa, fg_color="transparent")
+        corpo.pack(fill="both", expand=True, padx=12, pady=(6, 14))
+        esq = ctk.CTkFrame(corpo, fg_color="transparent")
+        esq.pack(side="left", fill="y", padx=(12, 6), anchor="n")
+        dir_ = ctk.CTkFrame(corpo, fg_color="transparent")
+        dir_.pack(side="left", fill="both", expand=True, padx=(6, 12), anchor="n")
+        self.montar_calculadora(esq)
+        self.montar_lista(dir_)
+        self.carregar_opcoes()
+        self.desenhar_lista()
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.mostrar()
+
+    # --- calculadora
+    def rotulo(self, pai, texto):
+        ctk.CTkLabel(pai, text=texto, font=F(11, "bold"), text_color=C["muted"]).pack(anchor="w", pady=(12, 4))
+
+    def entrada(self, pai, placeholder=""):
+        w = ctk.CTkEntry(pai, width=380, height=36, font=F(13), corner_radius=8, border_color=C["borda"],
+                         fg_color=C["card2"], text_color=C["texto"], placeholder_text=placeholder)
+        w.pack(anchor="w")
+        return w
+
+    def montar_calculadora(self, pai):
+        self.rotulo(pai, "ATIVO / COMPRA")
+        self.om = ctk.CTkOptionMenu(pai, values=["-"], command=lambda v: self.escolheu_lote(), width=380, height=36,
+                                    font=F(13), dropdown_font=F(13), corner_radius=8, fg_color=C["card2"],
+                                    button_color=C["neutro_h"], button_hover_color=C["borda"],
+                                    text_color=C["texto"], text_color_disabled=C["muted"])
+        self.om.pack(anchor="w")
+        self.rotulo(pai, "QUANTIDADE")
+        self.en_qtd = self.entrada(pai, "Ex.: 100")
+        self.rotulo(pai, "LUCRO LÍQUIDO DESEJADO (R$)")
+        self.en_lucro = self.entrada(pai, "Ex.: 1.000,00")
+        for en in (self.en_qtd, self.en_lucro):
+            en.bind("<KeyRelease>", lambda e: self.calcular())
+
+        f = ctk.CTkFrame(pai, fg_color=C["card2"], corner_radius=10, border_width=1, border_color=C["borda"],
+                         width=380)
+        f.pack(anchor="w", pady=(14, 0), fill="x")
+        self.linhas = {}
+        for chave, titulo in (("lucro", "Lucro líquido desejado"), ("pm", "Preço médio do lote"),
+                              ("custo", "Custo estimado de venda"), ("imposto", "Imposto estimado"),
+                              ("sugerido", "Preço-alvo sugerido (por ação)"), ("bruto", "Lucro bruto projetado"),
+                              ("liquido", "Lucro líquido projetado")):
+            linha = ctk.CTkFrame(f, fg_color="transparent")
+            linha.pack(fill="x", padx=14, pady=(8 if chave == "lucro" else 0, 0))
+            ctk.CTkLabel(linha, text=titulo, font=F(12), text_color=C["muted"]).pack(side="left")
+            v = ctk.CTkLabel(linha, text="—", font=F(12, "bold"), text_color=C["texto"])
+            v.pack(side="right")
+            self.linhas[chave] = v
+        self.lb_nota = ctk.CTkLabel(f, text="", font=F(11), text_color=C["muted"], justify="left", wraplength=350)
+        self.lb_nota.pack(anchor="w", padx=14, pady=(4, 10))
+
+        self.rotulo(pai, "PREÇO-ALVO DA VENDA (R$) · pode editar antes de salvar")
+        self.en_preco = self.entrada(pai, "Ex.: 21,78")
+        self.en_preco.bind("<KeyRelease>", lambda e: self.projetar_preco())
+        self.lb_erro = ctk.CTkLabel(pai, text="", font=F(12), text_color=C["danger"], wraplength=380, justify="left")
+        self.lb_erro.pack(anchor="w", pady=(8, 0))
+        botao(pai, "Criar venda automática com este preço", self.criar, "accent", width=380).pack(
+            anchor="w", pady=(4, 0))
+        ctk.CTkLabel(pai, text="Estimativa conservadora: sem isenção de R$ 20 mil e sem prejuízos anteriores.",
+                     font=F(11), text_color=C["muted"], wraplength=380, justify="left").pack(anchor="w", pady=(8, 0))
+
+    def carregar_opcoes(self):
+        self.opcoes = {}
+        for mes, l, livre in ms.lotes_para_meta(self.app.cfg):
+            base = f"{l['ticker']}  ·  {fmt_data(l['data_compra'])}  ·  {brl(l['preco'])}  ·  {livre} livres"
+            rot, n = base, 2
+            while rot in self.opcoes:
+                rot = f"{base} ({n})"
+                n += 1
+            self.opcoes[rot] = (l, livre)
+        if self.opcoes:
+            atual = self.om.get()
+            self.om.configure(values=list(self.opcoes), state="normal")
+            self.om.set(atual if atual in self.opcoes else next(iter(self.opcoes)))
+            self.escolheu_lote()
+        else:
+            self.om.configure(values=["Nenhuma compra em aberto"], state="disabled")
+            self.om.set("Nenhuma compra em aberto")
+            self.limpar_resultado()
+
+    def lote_escolhido(self):
+        return self.opcoes.get(self.om.get())
+
+    def escolheu_lote(self):
+        sel = self.lote_escolhido()
+        if sel:
+            self.en_qtd.delete(0, "end")
+            self.en_qtd.insert(0, str(sel[1]))
+        self.calcular()
+
+    def limpar_resultado(self, nota=""):
+        for v in self.linhas.values():
+            v.configure(text="—")
+        self.lb_nota.configure(text=nota)
+        self.resultado_calc = None
+
+    def calcular(self):
+        self.lb_erro.configure(text="")
+        sel = self.lote_escolhido()
+        if not sel:
+            return self.limpar_resultado()
+        try:
+            qtd = nc.parse_qtd(self.en_qtd.get())
+            lucro = nc.parse_valor(self.en_lucro.get())
+        except ValueError:
+            return self.limpar_resultado("Informe a quantidade e o lucro líquido desejado.")
+        lote = sel[0]
+        if qtd > sel[1]:
+            return self.limpar_resultado(f"Quantidade maior que a livre ({sel[1]}).")
+        try:
+            r = ms.calcular_preco_alvo(lote, qtd, lucro, lote["data_compra"] == date.today().isoformat())
+        except (ValueError, OverflowError) as e:
+            return self.limpar_resultado(str(e) if isinstance(e, ValueError) else "Valores grandes demais para calcular.")
+        self.resultado_calc = r
+        self.en_preco.delete(0, "end")
+        self.en_preco.insert(0, preco_texto(r["preco"]))
+        self.mostrar_projecao(r, r["preco"])
+
+    def mostrar_projecao(self, r, preco):
+        sel = self.lote_escolhido()
+        p = ms.projetar(sel[0], r["qtd"], preco, r["day_trade"])
+        self.linhas["lucro"].configure(text=brl(r["lucro_desejado"]))
+        self.linhas["pm"].configure(text=brl(r["preco_medio"]))
+        self.linhas["custo"].configure(text=brl(p["custos"]))
+        self.linhas["imposto"].configure(text=brl(p["imposto"]))
+        self.linhas["sugerido"].configure(text=brl(r["preco"]))
+        self.linhas["bruto"].configure(text=brl(p["bruto"]))
+        self.linhas["liquido"].configure(text=brl(p["lucro_apos_imposto"]),
+                                         text_color=C["danger"] if p["lucro_apos_imposto"] < 0 else C["accent"])
+        regime = "Day trade (20%)" if r["day_trade"] else "Swing trade (15%)"
+        irrf = f" IRRF retido estimado: {brl(p['irrf'])} (abate da DARF)." if p["irrf"] else ""
+        self.lb_nota.configure(text=f"{regime} · custos: taxas B3 {brl(p['taxas'])} + corretagem "
+                                    f"{brl(p['corretagem'])}.{irrf}")
+
+    def projetar_preco(self):
+        if not self.resultado_calc:
+            return
+        try:
+            preco = nc.parse_num(self.en_preco.get())
+        except ValueError:
+            return
+        self.mostrar_projecao(self.resultado_calc, preco)
+
+    def criar(self):
+        sel = self.lote_escolhido()
+        if not sel:
+            return self.lb_erro.configure(text="Não há compra em aberto para criar a meta.", text_color=C["danger"])
+        try:
+            qtd = nc.parse_qtd(self.en_qtd.get())
+        except ValueError:
+            return self.lb_erro.configure(text="Quantidade inválida.", text_color=C["danger"])
+        try:
+            preco = nc.parse_num(self.en_preco.get())
+        except ValueError:
+            return self.lb_erro.configure(text="Preço-alvo inválido.", text_color=C["danger"])
+        try:
+            lucro = nc.parse_valor(self.en_lucro.get())
+        except ValueError:
+            lucro = None
+        try:
+            ms.criar_meta(self.app.cfg, sel[0]["id"], qtd, preco, lucro)
+        except ValueError as e:
+            return self.lb_erro.configure(text=str(e), text_color=C["danger"])
+        self.app.agendar_sync()
+        self.carregar_opcoes()
+        self.desenhar_lista()
+        self.lb_erro.configure(text="Meta criada. O app vai registrar a venda quando o preço-alvo for atingido.",
+                               text_color=C["accent"])
+        self.verificar()
+
+    # --- lista
+    def montar_lista(self, pai):
+        topo = ctk.CTkFrame(pai, fg_color="transparent")
+        topo.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(topo, text="METAS", font=F(11, "bold"), text_color=C["muted"]).pack(side="left")
+        self.bt_verificar = botao(topo, "Verificar agora", self.verificar, "neutro", width=130, altura=30, fonte=12)
+        self.bt_verificar.pack(side="right")
+        self.lb_verif = ctk.CTkLabel(pai, text="", font=F(11), text_color=C["muted"], anchor="w")
+        self.lb_verif.pack(fill="x", pady=(4, 0))
+        self.lista = ctk.CTkScrollableFrame(pai, width=400, height=520, fg_color=C["card2"], corner_radius=10)
+        self.lista.pack(fill="both", expand=True, pady=(6, 0))
+
+    def desenhar_lista(self):
+        for w in self.lista.winfo_children():
+            w.destroy()
+        metas = sorted(self.app.cfg.get("metas", []), key=lambda m: m["criada_em"], reverse=True)
+        if not metas:
+            ctk.CTkLabel(self.lista, text="Nenhuma meta criada.", font=F(12), text_color=C["muted"]).pack(pady=20)
+            return
+        for m in metas:
+            d = ms.descricao(m)
+            card = ctk.CTkFrame(self.lista, fg_color=C["card"], corner_radius=10, border_width=1,
+                                border_color=C["borda"])
+            card.pack(fill="x", pady=(0, 8), padx=2)
+            cab = ctk.CTkFrame(card, fg_color="transparent")
+            cab.pack(fill="x", padx=12, pady=(10, 0))
+            ctk.CTkLabel(cab, text=d["titulo"], font=F(13, "bold"), text_color=C["texto"]).pack(side="left")
+            ctk.CTkLabel(cab, text=d["status"], font=F(12, "bold"), text_color=self.COR[d["cor"]]).pack(side="right")
+            ctk.CTkLabel(card, text=d["detalhe"], font=F(11), wraplength=340, justify="left",
+                         text_color=C["danger"] if d["erro"] else C["muted"]).pack(anchor="w", padx=12, pady=(2, 8))
+            if m.get("status") == "ativa":
+                botao(card, "Cancelar meta", lambda i=m["id"]: self.cancelar(i), "perigo", altura=28, fonte=12,
+                      width=120).pack(anchor="e", padx=12, pady=(0, 10))
+
+    def cancelar(self, meta_id):
+        if not confirmar(self, "Cancelar meta", "A venda automática não será mais registrada para esta meta.",
+                         sim="Cancelar meta", nao="Voltar", perigo=True):
+            return
+        try:
+            ms.cancelar_meta(self.app.cfg, meta_id)
+        except ValueError as e:
+            avisar(self, "Meta", str(e))
+        self.app.agendar_sync()
+        self.carregar_opcoes()
+        self.desenhar_lista()
+
+    def verificar(self):
+        self.lb_verif.configure(text="Verificando o histórico de preços…", text_color=C["muted"])
+        self.app.verificar_metas(ao_fim=self.verificado, forcar=True)
+
+    def verificado(self, rel):
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
+        if rel is ms.EM_ANDAMENTO:
+            self.lb_verif.configure(text="Verificação já em andamento", text_color=C["muted"])
+            return
+        if rel is None:
+            self.lb_verif.configure(text="Sem metas ativas ou sem conexão com o Yahoo.", text_color=C["muted"])
+        else:
+            self.lb_verif.configure(text=f"Verificado às {datetime.now():%H:%M}.", text_color=C["muted"])
+        self.carregar_opcoes()
+        self.desenhar_lista()
 
 
 class DialogoAmigos(Janela):

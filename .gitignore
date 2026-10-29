@@ -6,3 +6,8 @@ dist/
 *.spec
 __pycache__/
 *.pyc
+
+# Arquivos locais de trabalho, fora do app
+prompt.md
+abrir-sessao-claude.cmd
+.claude/
