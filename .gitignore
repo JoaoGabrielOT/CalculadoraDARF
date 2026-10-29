@@ -11,3 +11,4 @@ __pycache__/
 prompt.md
 abrir-sessao-claude.cmd
 .claude/
+CONTEXTO_SESSAO.md

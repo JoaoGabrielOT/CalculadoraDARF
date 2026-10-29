@@ -24,6 +24,7 @@ import metas as ms
 import nucleo as nc
 import mercado as mk
 import noticias as nt
+import sugestoes as sg
 from componentes import CampoData, SeletorMes
 from tema import C, F, FONTE, botao, cor, estilo_botao
 from nucleo import (DARF_MINIMO, LIMITE_ISENCAO, apurar, brl, carregar, fmt_data, fmt_mes, gravar_config,
@@ -1705,7 +1706,7 @@ class App(ctk.CTk):
                 avisar(self, "Metas verificadas antes de fechar", "\n".join(linhas))
             self.confirmar_fechamento()
 
-        self.bg(lambda: ms.preparar_fechamento(self.cfg, mes, mk.historico_desde), ok=pronto,
+        self.bg(lambda: ms.preparar_fechamento(self.cfg, mes, mk.historico_desde, diarias=mk.barras_diarias), ok=pronto,
                 erro=lambda e: avisar(self, "Não foi possível fechar o mês",
                                       f"Falha ao verificar as metas antes de fechar: {str(e)[:120]}"))
 
@@ -2579,17 +2580,22 @@ class App(ctk.CTk):
                 ao_fim(rel)
             for m in rel["executadas"]:
                 ex = m["execucao"]
-                avisar(self, "Meta atingida", f"{m['ticker']}: venda de {m['qtd']} a {brl(ex['preco_usado'])} "
-                       f"registrada em {fmt_data(ex['data'])} {ex['hora']}.\n\n{ms.AVISO_REGISTRO}.")
+                stop = ms.gatilho(m) == "stop"
+                avisar(self, "Stop atingido" if stop else "Meta atingida",
+                       f"{m['ticker']}: venda de {m['qtd']} a {brl(ex['preco_usado'])} "
+                       f"registrada em {fmt_data(ex['data'])} {ex['hora']}.\n\n{ex.get('motivo', '')}"
+                       f"{chr(10) + sg.AVISO_GAP if stop else ''}\n\n{ms.AVISO_REGISTRO}.")
             for m in rel["invalidas"]:
                 avisar(self, "Meta inválida", f"{m['ticker']}: {m.get('ultimo_erro', '')}")
+            for texto in rel["avisos"]:
+                avisar(self, "Ajuste manual necessário", texto)
 
         def falhou(e):
             self.metas_rodando = False
             if ao_fim:
                 ao_fim(None)
 
-        self.bg(lambda: ms.buscar_historicos(ativas, mk.historico_desde), ok=aplicar, erro=falhou)
+        self.bg(lambda: ms.buscar_historicos(ativas, mk.historico_desde, mk.barras_diarias), ok=aplicar, erro=falhou)
 
     def preparar_operacao(self):
         """Garante a visão dos próprios dados em um mês aberto."""
@@ -2809,7 +2815,10 @@ class App(ctk.CTk):
         except Exception:
             pass
         sid, abas = res
-        mudou = nc.mesclar_tudo(reconstruir(abas), self.cfg, metas_r=nc.reconstruir_metas(abas))
+        avisos = []
+        mudou = nc.mesclar_tudo(reconstruir(abas), self.cfg, metas_r=nc.reconstruir_metas(abas), avisos=avisos)
+        for texto in avisos:
+            avisar(self, "Ajuste manual necessário", texto)
         if mudou:
             if not self.visao:
                 self.d = carregar(self.mes)
@@ -3259,18 +3268,178 @@ class JanelaMetas(Janela):
             anchor="w", padx=24, pady=(20, 0))
         ctk.CTkLabel(self.caixa, text=ms.AVISO_REGISTRO, font=F(12, "bold"), text_color=C["aviso"]).pack(
             anchor="w", padx=24, pady=(2, 0))
+        self.geracao = 0     # descarta o resultado de uma busca de sugestões que ficou para trás
         corpo = ctk.CTkFrame(self.caixa, fg_color="transparent")
         corpo.pack(fill="both", expand=True, padx=12, pady=(6, 14))
         esq = ctk.CTkFrame(corpo, fg_color="transparent")
         esq.pack(side="left", fill="y", padx=(12, 6), anchor="n")
         dir_ = ctk.CTkFrame(corpo, fg_color="transparent")
         dir_.pack(side="left", fill="both", expand=True, padx=(6, 12), anchor="n")
-        self.montar_calculadora(esq)
+        self.seg_modo = ctk.CTkSegmentedButton(
+            esq, values=["Sugestões", "Calculadora"], command=self.trocar_modo, height=32, font=F(12, "bold"),
+            fg_color=C["neutro"], selected_color=C["accent"], selected_hover_color=C["accent_h"],
+            unselected_color=C["neutro"], unselected_hover_color=C["neutro_h"], text_color=C["texto"])
+        self.seg_modo.pack(fill="x", pady=(8, 0))
+        self.f_calc = ctk.CTkFrame(esq, fg_color="transparent")
+        self.f_sug = ctk.CTkFrame(esq, fg_color="transparent")
+        self.montar_calculadora(self.f_calc)
+        self.montar_sugestoes(self.f_sug)
         self.montar_lista(dir_)
         self.carregar_opcoes()
         self.desenhar_lista()
+        self.seg_modo.set("Sugestões")
+        self.trocar_modo("Sugestões")
         self.bind("<Escape>", lambda e: self.destroy())
         self.mostrar()
+
+    def trocar_modo(self, modo):
+        self.f_calc.pack_forget()
+        self.f_sug.pack_forget()
+        if modo == "Calculadora":
+            self.f_calc.pack(fill="both", expand=True)
+        else:
+            self.f_sug.pack(fill="both", expand=True)
+            self.carregar_sugestoes()
+
+    # --- sugestões (alvo e stop pela volatilidade)
+    def montar_sugestoes(self, pai):
+        topo = ctk.CTkFrame(pai, fg_color="transparent")
+        topo.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(topo, text="SUGESTÕES PARA SUAS COMPRAS", font=F(11, "bold"), text_color=C["muted"]).pack(
+            side="left")
+        botao(topo, "Atualizar", self.carregar_sugestoes, "neutro", width=90, altura=28, fonte=12).pack(side="right")
+        self.lb_sug = ctk.CTkLabel(pai, text="", font=F(11), text_color=C["muted"], anchor="w")
+        self.lb_sug.pack(fill="x", pady=(4, 0))
+        self.lista_sug = ctk.CTkScrollableFrame(pai, width=400, height=400, fg_color=C["card2"], corner_radius=10)
+        self.lista_sug.pack(fill="both", expand=True, pady=(6, 0))
+        self.rodape_sug = ctk.CTkFrame(pai, fg_color="transparent")
+        self.rodape_sug.pack(fill="x", pady=(8, 0))
+
+    def limpar_sugestoes(self):
+        for w in self.lista_sug.winfo_children():
+            w.destroy()
+        for w in self.rodape_sug.winfo_children():
+            w.destroy()
+
+    def carregar_sugestoes(self):
+        self.geracao += 1
+        geracao = self.geracao
+        self.limpar_sugestoes()
+        posicoes = ms.posicoes_abertas(self.app.cfg)
+        if not posicoes:
+            self.lb_sug.configure(text="")
+            ctk.CTkLabel(self.lista_sug, text="Nenhuma compra em aberto.", font=F(12), text_color=C["muted"]).pack(
+                pady=20)
+            return
+        self.lb_sug.configure(text="Carregando sugestões…", text_color=C["muted"])
+        tickers = sorted({p[1]["ticker"] for p in posicoes})
+
+        def buscar():
+            saida = {}
+            for t in tickers:
+                try:
+                    saida[t] = mk.barras_diarias(t)
+                except Exception as e:
+                    saida[t] = e
+            return saida
+        self.app.bg(buscar, ok=lambda r: self.sugestoes_prontas(geracao, posicoes, r),
+                    erro=lambda e: self.sugestoes_prontas(geracao, posicoes, {t: e for t in tickers}))
+
+    def sugestoes_prontas(self, geracao, posicoes, resultados):
+        try:
+            if geracao != self.geracao or not self.winfo_exists():
+                return
+        except Exception:
+            return
+        self.limpar_sugestoes()
+        cotacoes = {t: r["preco"] for t, r in resultados.items() if isinstance(r, dict)}
+        pat, resultado = sg.resumo_patrimonio(self.app.cfg, cotacoes)
+        self.lb_sug.configure(text=f"Atualizado às {datetime.now():%H:%M}.", text_color=C["muted"])
+        for mes, lote, restante_, livre, ativas in posicoes:
+            qtd = livre if livre > 0 else restante_
+            item = sg.montar_item(lote, qtd, resultados[lote["ticker"]], pat)
+            self.desenhar_sugestao(lote, restante_, livre, qtd, item)
+        for rot, valor, cor_ in sg.linhas_rodape(pat, resultado):
+            self.linha_texto(self.rodape_sug, rot, valor, cor_, 380, 11)
+        for aviso in (sg.AVISO_SUGESTAO, sg.AVISO_PROVENTOS):
+            ctk.CTkLabel(self.rodape_sug, text=aviso, font=F(10), text_color=C["muted"], wraplength=380,
+                         justify="left").pack(anchor="w", pady=(4, 0))
+
+    def linha_texto(self, pai, rotulo, valor, cor_, largura, tam=11):
+        linha = ctk.CTkFrame(pai, fg_color="transparent")
+        linha.pack(fill="x", pady=(2, 0))
+        ctk.CTkLabel(linha, text=rotulo.upper(), font=F(tam - 1, "bold"), text_color=C["muted"],
+                     anchor="w").pack(anchor="w")
+        ctk.CTkLabel(linha, text=valor, font=F(tam), text_color=self.COR.get(cor_, C["texto"]), wraplength=largura,
+                     justify="left", anchor="w").pack(anchor="w")
+
+    def desenhar_sugestao(self, lote, restante_, livre, qtd, item):
+        card = ctk.CTkFrame(self.lista_sug, fg_color=C["card"], corner_radius=10, border_width=1,
+                            border_color=C["borda"])
+        card.pack(fill="x", pady=(0, 8), padx=2)
+        titulo = (f"{lote['ticker']} · {restante_} un. a {brl(lote['preco'])} · compra de "
+                  f"{fmt_data(lote['data_compra'])}")
+        ctk.CTkLabel(card, text=titulo, font=F(13, "bold"), text_color=C["texto"], wraplength=350,
+                     justify="left", anchor="w").pack(anchor="w", padx=12, pady=(10, 0))
+        ctk.CTkLabel(card, text=f"{livre} un. livres para metas · cálculo para {qtd} un.", font=F(11),
+                     text_color=C["muted"]).pack(anchor="w", padx=12)
+        corpo = ctk.CTkFrame(card, fg_color="transparent")
+        corpo.pack(fill="x", padx=12, pady=(4, 0))
+        for rot, valor, cor_ in sg.linhas_card(item):
+            self.linha_texto(corpo, rot, valor, cor_, 340)
+        sug = item.get("sug")
+        if sug is None:
+            ctk.CTkFrame(card, height=8, fg_color="transparent").pack()
+            return
+        botoes = ctk.CTkFrame(card, fg_color="transparent")
+        botoes.pack(fill="x", padx=12, pady=(8, 10))
+        b_alvo = botao(botoes, "Criar meta de alvo", lambda: self.criar_sugerido(lote, livre, item, "alvo"),
+                       "accent", altura=28, fonte=12)
+        b_alvo.pack(side="left", padx=(0, 6))
+        b_stop = botao(botoes, "Criar stop fixo", lambda: self.criar_sugerido(lote, livre, item, "stop"),
+                       "neutro", altura=28, fonte=12)
+        b_stop.pack(side="left", padx=(0, 6))
+        b_movel = None
+        if sug["modo"] == "swing" and sug["movel_disponivel"]:
+            b_movel = botao(botoes, "Criar stop móvel",
+                            lambda: self.criar_sugerido(lote, livre, item, "stop", movel=True), "neutro",
+                            altura=28, fonte=12)
+            b_movel.pack(side="left")
+        if not sug["stop_valido"]:
+            for b in (b_stop, b_movel):
+                if b is not None:
+                    b.configure(state="disabled")
+
+    def criar_sugerido(self, lote, livre, item, gatilho, movel=False):
+        sug = item["sug"]
+        cfg = self.app.cfg
+        parceira = ms.parceira_oco(cfg, lote["id"], gatilho)
+        qtd = parceira["qtd"] if parceira else livre
+        if qtd <= 0:
+            return avisar(self, "Meta", "Não há quantidade livre nesta compra: cancele uma meta ativa antes.")
+        oco = None
+        if parceira:
+            nome = ms.descricao(parceira, cfg.get("metas", []))["titulo"]
+            if not confirmar(self, "Ligar em OCO", f"Será ligado (OCO) à meta {nome}.\n\nQuando uma das duas "
+                             f"executar, a outra é cancelada automaticamente. Quantidade: {qtd} un.",
+                             sim="Criar com OCO", nao="Voltar"):
+                return
+            oco = parceira["id"]
+        try:
+            if gatilho == "alvo":
+                ms.criar_meta(cfg, lote["id"], qtd, sug["alvo"], oco_com=oco)
+            else:
+                info = {"modo": sug["modo"], "atr14": round(sug["atr14"], 4), "compra": lote["preco"]}
+                if sug.get("atr22") is not None:
+                    info["atr22"] = round(sug["atr22"], 4)
+                ms.criar_stop(cfg, lote["id"], qtd, sug["stop"], movel=movel, oco_com=oco,
+                              preco_atual=item.get("preco_atual"), sugestao=info)
+        except ValueError as e:
+            return avisar(self, "Meta", str(e))
+        self.app.agendar_sync()
+        self.carregar_opcoes()
+        self.desenhar_lista()
+        self.verificar()      # ao terminar, verificado() recarrega as sugestões
 
     # --- calculadora
     def rotulo(self, pai, texto):
@@ -3452,7 +3621,7 @@ class JanelaMetas(Janela):
             ctk.CTkLabel(self.lista, text="Nenhuma meta criada.", font=F(12), text_color=C["muted"]).pack(pady=20)
             return
         for m in metas:
-            d = ms.descricao(m)
+            d = ms.descricao(m, self.app.cfg.get("metas", []))
             card = ctk.CTkFrame(self.lista, fg_color=C["card"], corner_radius=10, border_width=1,
                                 border_color=C["borda"])
             card.pack(fill="x", pady=(0, 8), padx=2)
@@ -3477,6 +3646,8 @@ class JanelaMetas(Janela):
         self.app.agendar_sync()
         self.carregar_opcoes()
         self.desenhar_lista()
+        if self.f_sug.winfo_ismapped():
+            self.carregar_sugestoes()
 
     def verificar(self):
         self.lb_verif.configure(text="Verificando o histórico de preços…", text_color=C["muted"])
@@ -3497,6 +3668,8 @@ class JanelaMetas(Janela):
             self.lb_verif.configure(text=f"Verificado às {datetime.now():%H:%M}.", text_color=C["muted"])
         self.carregar_opcoes()
         self.desenhar_lista()
+        if self.f_sug.winfo_ismapped():
+            self.carregar_sugestoes()
 
 
 class DialogoAmigos(Janela):

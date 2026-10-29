@@ -11,7 +11,7 @@ if not defined PY (
     exit /b 1
 )
 
-for %%F in (nucleo.py google_sync.py mercado.py metas.py noticias.py tema.py componentes.py atualizador.py versao.py assets\icone.ico) do (
+for %%F in (nucleo.py google_sync.py mercado.py metas.py sugestoes.py noticias.py tema.py componentes.py atualizador.py versao.py assets\icone.ico) do (
     if not exist %%F (
         echo Arquivo %%F nao encontrado nesta pasta.
         pause

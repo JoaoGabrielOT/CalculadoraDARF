@@ -40,7 +40,7 @@ ABAS = {
         ("ID", "id", 80), ("Ticker", "negrito", 90), ("Tipo", "centro", 70), ("ID compra", "id", 80),
         ("Quantidade", "inteiro", 100), ("Preço-alvo", "moeda", 120), ("Lucro desejado", "moeda", 130),
         ("Criada em", "texto", 170), ("Status", "centro", 100), ("Último erro", "texto", 300),
-        ("Execução", "id", 80), ("Modificado", "id", 80)]},
+        ("Execução", "id", 80), ("Modificado", "id", 80), ("Gatilho", "centro", 90), ("Detalhes", "id", 80)]},
     "Exclusões": {"cor": "#6b7280", "oculta": True, "colunas": [
         ("Tipo", "texto", 100), ("Mês", "centro", 90), ("ID", "texto", 280), ("Excluído em", "texto", 140)]},
 }

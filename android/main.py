@@ -26,6 +26,7 @@ import mercado as mk  # noqa: E402
 import metas as ms  # noqa: E402
 import noticias as nt  # noqa: E402
 import nucleo as nc  # noqa: E402
+import sugestoes as sg  # noqa: E402
 from nucleo import brl, fmt_data, fmt_mes  # noqa: E402
 from versao import VERSAO  # noqa: E402
 
@@ -1138,7 +1139,7 @@ class App:
 
         def trabalho():
             try:
-                res = ms.preparar_fechamento(self.cfg, mes, mk.historico_desde)
+                res = ms.preparar_fechamento(self.cfg, mes, mk.historico_desde, diarias=mk.barras_diarias)
             except Exception as ex:
                 traceback.print_exc()
                 res = {"bloqueio": f"Falha ao verificar as metas antes de fechar: {str(ex)[:120]}",
@@ -2351,13 +2352,17 @@ class App:
             while True:
                 self.resync = False
                 abas = self.g.ler(sid)
+                avisos = []
                 with nc.TRAVA:
-                    mudou = nc.mesclar_tudo(nc.reconstruir(abas), self.cfg, metas_r=nc.reconstruir_metas(abas))
+                    mudou = nc.mesclar_tudo(nc.reconstruir(abas), self.cfg, metas_r=nc.reconstruir_metas(abas),
+                                            avisos=avisos)
                     dados = nc.montar_linhas(nc.listar_meses(), self.cfg)
                     if mudou and not self.visao:
                         self.d = nc.carregar(self.mes)
                 if mudou:
                     self.render()
+                for texto in avisos:
+                    self.aviso(f"Ajuste manual necessário: {texto}")
                 self.g.escrever(sid, dados)
                 if not self.resync:
                     break
@@ -2410,7 +2415,7 @@ class App:
     def verificar_metas(self):
         """Busca o histórico das metas ativas e registra as vendas dos alvos atingidos (roda em thread)."""
         try:
-            rel = ms.verificar(self.cfg, mk.historico_desde)
+            rel = ms.verificar(self.cfg, mk.historico_desde, diarias=mk.barras_diarias)
         except Exception:
             traceback.print_exc()
             return
@@ -2424,10 +2429,12 @@ class App:
             self.render(todas=True)
             for m in rel["executadas"]:
                 ex = m["execucao"]
-                self.aviso(f"Meta atingida: {m['ticker']} vendida a {brl(ex['preco_usado'])} em "
-                           f"{fmt_data(ex['data'])} {ex['hora']}.")
+                self.aviso(f"{'Stop atingido' if ms.gatilho(m) == 'stop' else 'Meta atingida'}: {m['ticker']} "
+                           f"vendida a {brl(ex['preco_usado'])} em {fmt_data(ex['data'])} {ex['hora']}.")
             for m in rel["invalidas"]:
                 self.aviso(f"Meta inválida ({m['ticker']}): {m.get('ultimo_erro', '')}")
+            for texto in rel["avisos"]:
+                self.aviso(f"Ajuste manual necessário: {texto}")
         if self.metas_ui:
             self.metas_ui()
         return rel
@@ -2437,7 +2444,7 @@ class App:
         if self.visao:
             self.aviso("Volte para os seus dados para criar metas.")
             return
-        estado = {"calc": None}
+        estado = {"calc": None, "ger": 0}
         opcoes = {}
         compra = ft.Dropdown(label="Ativo / compra *", options=[], expand=True)
         qtd = ft.TextField(label="Quantidade *", keyboard_type=ft.KeyboardType.NUMBER)
@@ -2450,6 +2457,12 @@ class App:
         erro = texto("", 12, cor=VERMELHO)
         lista = ft.Column(spacing=8)
         verif = texto("", 11, cor=MUTED)
+        modo = ft.SegmentedButton(selected=["Sugestões"], show_selected_icon=False,
+                                  segments=[ft.Segment(value=m, label=ft.Text(m)) for m in ("Sugestões", "Calculadora")])
+        sug_status = texto("", 11, cor=MUTED)
+        sug_col = ft.Column(spacing=8)
+        sug_rodape = ft.Column(spacing=4)
+        cores_sug = {"accent": VERDE, "danger": VERMELHO, "aviso": AMARELO, "muted": MUTED}
 
         def atualizar_dlg():
             try:
@@ -2538,7 +2551,7 @@ class App:
         def desenhar_lista():
             cards = []
             for m in sorted(self.cfg.get("metas", []), key=lambda x: x["criada_em"], reverse=True):
-                d = ms.descricao(m)
+                d = ms.descricao(m, self.cfg.get("metas", []))
                 cor = {"accent": VERDE, "danger": VERMELHO, "aviso": AMARELO, "muted": MUTED}[d["cor"]]
                 linhas_card = [ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[
                     texto(d["titulo"], 14, ft.FontWeight.BOLD), texto(d["status"], 12, ft.FontWeight.BOLD, cor)]),
@@ -2547,6 +2560,114 @@ class App:
                     linhas_card.append(ft.TextButton("Cancelar meta", on_click=lambda e, i=m["id"]: cancelar(i)))
                 cards.append(bloco(ft.Column(spacing=4, controls=linhas_card), padding=12))
             lista.controls = cards or [texto("Nenhuma meta criada.", 12, cor=MUTED)]
+
+        def linha_sug(rot, valor, cor):
+            cor = cores_sug.get(cor)
+            if len(valor) <= 30:
+                return linha_valor(rot, valor, cor, tam=13)
+            return ft.Column(spacing=0, controls=[texto(rot.upper(), 11, ft.FontWeight.BOLD, MUTED),
+                                                  texto(valor, 13, cor=cor)])
+
+        def cartao_sug(lote, restante_, livre, qtd_ref, item):
+            controles = [
+                ft.Row(alignment=ft.MainAxisAlignment.SPACE_BETWEEN, controls=[
+                    texto(f"{lote['ticker']} · {restante_} un. a {brl(lote['preco'])}", 14, ft.FontWeight.BOLD),
+                    texto(fmt_data(lote["data_compra"]), 11, cor=MUTED)]),
+                texto(f"{livre} un. livres para metas · cálculo para {qtd_ref} un.", 11, cor=MUTED)]
+            controles += [linha_sug(*l) for l in sg.linhas_card(item)]
+            sug = item.get("sug")
+            if sug is not None:
+                sem_stop = not sug["stop_valido"]
+                botoes = [ft.FilledButton("Criar meta de alvo",
+                                          on_click=lambda e: criar_sugerido(lote, livre, item, "alvo")),
+                          ft.OutlinedButton("Criar stop fixo", disabled=sem_stop,
+                                            on_click=lambda e: criar_sugerido(lote, livre, item, "stop"))]
+                if sug["modo"] == "swing" and sug["movel_disponivel"]:
+                    botoes.append(ft.OutlinedButton("Criar stop móvel", disabled=sem_stop,
+                                                    on_click=lambda e: criar_sugerido(lote, livre, item, "stop", True)))
+                controles.append(ft.Row(wrap=True, spacing=8, run_spacing=4, controls=botoes))
+            return bloco(ft.Column(spacing=4, controls=controles), padding=12)
+
+        def carregar_sug(e=None):
+            estado["ger"] += 1
+            ger = estado["ger"]
+            posicoes = ms.posicoes_abertas(self.cfg)
+            sug_rodape.controls = []
+            if not posicoes:
+                sug_col.controls = [texto("Nenhuma compra em aberto.", 12, cor=MUTED)]
+                sug_status.value = ""
+                return atualizar_dlg()
+            sug_col.controls = []
+            sug_status.value = "Carregando sugestões…"
+            atualizar_dlg()
+
+            def trabalho():
+                try:
+                    resultados = {}
+                    for t in sorted({p[1]["ticker"] for p in posicoes}):
+                        try:
+                            resultados[t] = mk.barras_diarias(t)
+                        except Exception as ex:
+                            resultados[t] = ex
+                    if ger != estado["ger"]:
+                        return
+                    cotacoes = {t: r["preco"] for t, r in resultados.items() if isinstance(r, dict)}
+                    pat, res_mes = sg.resumo_patrimonio(self.cfg, cotacoes)
+                    cards = []
+                    for mes, lote, restante_, livre, ativas in posicoes:
+                        qtd_ref = livre if livre > 0 else restante_
+                        item = sg.montar_item(lote, qtd_ref, resultados[lote["ticker"]], pat)
+                        cards.append(cartao_sug(lote, restante_, livre, qtd_ref, item))
+                    sug_col.controls = cards
+                    sug_rodape.controls = [linha_sug(*l) for l in sg.linhas_rodape(pat, res_mes)] + [
+                        texto(sg.AVISO_SUGESTAO, 11, cor=MUTED), texto(sg.AVISO_PROVENTOS, 11, cor=MUTED)]
+                    sug_status.value = f"Atualizado às {datetime.now():%H:%M}."
+                except Exception as ex:
+                    traceback.print_exc()
+                    sug_status.value = f"Não foi possível carregar as sugestões: {str(ex)[:100]}"
+                atualizar_dlg()
+            self.page.run_thread(trabalho)
+
+        def criar_sugerido(lote, livre, item, gatilho, movel=False):
+            sug = item["sug"]
+            parceira = ms.parceira_oco(self.cfg, lote["id"], gatilho)
+            qtd_ = parceira["qtd"] if parceira else livre
+            if qtd_ <= 0:
+                return self.aviso("Não há quantidade livre nesta compra: cancele uma meta ativa antes.")
+
+            def efetivar(oco):
+                try:
+                    if gatilho == "alvo":
+                        ms.criar_meta(self.cfg, lote["id"], qtd_, sug["alvo"], oco_com=oco)
+                    else:
+                        info = {"modo": sug["modo"], "atr14": round(sug["atr14"], 4), "compra": lote["preco"]}
+                        if sug.get("atr22") is not None:
+                            info["atr22"] = round(sug["atr22"], 4)
+                        ms.criar_stop(self.cfg, lote["id"], qtd_, sug["stop"], movel=movel, oco_com=oco,
+                                      preco_atual=item.get("preco_atual"), sugestao=info)
+                except ValueError as ex:
+                    return self.aviso(str(ex))
+                self.agendar_sync()
+                self.aviso("Meta criada. O app registra a venda quando o gatilho for atingido.")
+                atualizar_tudo()
+                carregar_sug()
+                self.page.run_thread(self.verificar_metas)
+
+            if parceira:
+                nome = ms.descricao(parceira, self.cfg.get("metas", []))["titulo"]
+                self.perguntar("Ligar em OCO", f"Será ligado (OCO) à meta {nome}.\n\nQuando uma das duas executar, "
+                               f"a outra é cancelada automaticamente. Quantidade: {qtd_} un.",
+                               "Criar com OCO", lambda: efetivar(parceira["id"]), nao="Voltar")
+            else:
+                efetivar(None)
+
+        def trocou_modo(e=None):
+            sugestoes = (modo.selected[0] if modo.selected else "Sugestões") == "Sugestões"
+            bloco_sug.visible = sugestoes
+            calc_col.visible = not sugestoes
+            atualizar_dlg()
+            if sugestoes:
+                carregar_sug()
 
         def atualizar_tudo():
             carregar_opcoes()
@@ -2560,6 +2681,8 @@ class App:
                 self.aviso(str(ex))
             self.agendar_sync()
             atualizar_tudo()
+            if modo.selected and modo.selected[0] == "Sugestões":
+                carregar_sug()
 
         def criar(e):
             sel = lote_atual()
@@ -2610,6 +2733,8 @@ class App:
             carregar_opcoes()
             desenhar_lista()
             atualizar_dlg()
+            if modo.selected and modo.selected[0] == "Sugestões":
+                carregar_sug()      # as metas podem ter executado ou sido canceladas: muda a quantidade livre
 
         qtd.on_change = calcular
         lucro.on_change = calcular
@@ -2621,8 +2746,15 @@ class App:
         if sel0:
             qtd.value = str(sel0[1])
         self.metas_ui = atualizar_de_fora
-        conteudo = [texto(ms.AVISO_REGISTRO, 12, ft.FontWeight.BOLD, AMARELO), compra, qtd, lucro, resultado, nota,
-                    preco, erro, ft.FilledButton("Criar venda automática com este preço", on_click=criar),
+        calc_col = ft.Column(spacing=12, visible=False, controls=[
+            compra, qtd, lucro, resultado, nota, preco, erro,
+            ft.FilledButton("Criar venda automática com este preço", on_click=criar)])
+        bloco_sug = ft.Column(spacing=8, controls=[
+            ft.Row(controls=[rotulo("Sugestões para suas compras"), ft.Container(expand=True),
+                             ft.TextButton("Atualizar", on_click=carregar_sug)]),
+            sug_status, sug_col, sug_rodape])
+        modo.on_change = trocou_modo
+        conteudo = [texto(ms.AVISO_REGISTRO, 12, ft.FontWeight.BOLD, AMARELO), modo, bloco_sug, calc_col,
                     ft.Divider(), ft.Row(controls=[rotulo("Metas"), ft.Container(expand=True),
                                                    ft.TextButton("Verificar agora", on_click=verificar_agora)]),
                     verif, lista]
@@ -2631,6 +2763,7 @@ class App:
                                                                                controls=conteudo)),
                              actions=[ft.TextButton("Fechar", on_click=lambda e: self.page.pop_dialog())])
         self.page.show_dialog(dlg)
+        carregar_sug()
 
     # ------------------------------------------------------------ atualização do aplicativo
     def verificar_atualizacao(self, manual=False):

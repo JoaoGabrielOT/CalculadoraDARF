@@ -10,7 +10,7 @@ import time
 import uuid
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
-from functools import lru_cache
+from functools import cmp_to_key, lru_cache
 from pathlib import Path
 
 TAXA_B3_SWING = 0.0003        # 0,0300% por operação (compra e venda)
@@ -194,8 +194,13 @@ def _chave_lista(nome):
     return {"amigos": "email", "metas": "id"}.get(nome, "ticker")
 
 
+SEM_CARIMBO = {"metas": ("niveis", "stop_atual")}     # mudanças que não contam como edição do registro
+
+
 def gravar_config(cfg, carimbar=True):
-    """Grava a configuração, marcando a hora de alteração dos amigos, do radar e das metas."""
+    """Grava a configuração, marcando a hora de alteração dos amigos, do radar e das metas. A subida do stop
+    móvel (niveis/stop_atual da meta) não carimba: ela é unida na mesclagem e não pode fazer uma meta ativa
+    parecer mais recente que um cancelamento feito em outro aparelho."""
     with TRAVA:
         cfg.setdefault("excluidos", {})
         if carimbar:
@@ -206,12 +211,14 @@ def gravar_config(cfg, carimbar=True):
                 antigo = {}
             for nome in ("amigos", "radar", "metas"):
                 k = _chave_lista(nome)
+                ignorar = SEM_CARIMBO.get(nome, ())
                 ant = {x[k]: x for x in antigo.get(nome, [])}
                 atuais = set()
                 for x in cfg.get(nome, []):
                     atuais.add(x[k])
                     o = ant.get(x[k])
-                    if o is None or _campos(o) != _campos(x):
+                    if o is None or {c: v for c, v in _campos(o).items() if c not in ignorar} != {
+                            c: v for c, v in _campos(x).items() if c not in ignorar}:
                         x["mod"] = t
                     x.setdefault("mod", 0)
                 for chave in set(ant) - atuais:
@@ -723,6 +730,26 @@ def _num(v, padrao=0.0):
         return padrao
 
 
+CAMPOS_DETALHES = ("oco", "stop_inicial", "stop_atual", "movel", "niveis", "cancelada_por", "cancelada_detalhe",
+                   "sugestao")
+
+
+def linha_meta(m):
+    """Linha da aba "Metas" (14 colunas). As 12 primeiras são as da versão anterior; Gatilho e Detalhes (JSON com
+    os campos do stop e do OCO) vêm depois. Na meta de stop o Preço-alvo fica vazio, e a versão anterior, que não
+    entende stop, pula a linha em vez de tratá-la como alvo."""
+    stop = m.get("gatilho") == "stop"
+    detalhes = {"id": m["id"], "gatilho": "stop" if stop else "alvo"}
+    for k in CAMPOS_DETALHES:
+        if m.get(k) not in (None, ""):
+            detalhes[k] = m[k]
+    return [m["id"], m["ticker"], m.get("tipo", ""), m["lote_id"], m["qtd"], "" if stop else m["preco_alvo"],
+            m["lucro_desejado"] if m.get("lucro_desejado") is not None else "", m["criada_em"],
+            m.get("status", "ativa"), m.get("ultimo_erro", ""),
+            json.dumps(m["execucao"], ensure_ascii=False) if m.get("execucao") else "", m.get("mod", 0),
+            detalhes["gatilho"], json.dumps(detalhes, ensure_ascii=False, separators=(",", ":"))]
+
+
 def montar_linhas(meses, cfg):
     resumo, compras, vendas, excl = [], [], [], []
     for mes in meses:
@@ -758,11 +785,7 @@ def montar_linhas(meses, cfg):
     caixa = cfg.get("caixa") or {}
     lista_caixa = [[round(float(caixa.get("saldo") or 0), 2), serial(caixa["data"]), caixa.get("mod", 0)]] \
         if caixa.get("data") else []
-    lista_metas = [[m["id"], m["ticker"], m.get("tipo", ""), m["lote_id"], m["qtd"], m["preco_alvo"],
-                    m["lucro_desejado"] if m.get("lucro_desejado") is not None else "", m["criada_em"],
-                    m.get("status", "ativa"), m.get("ultimo_erro", ""),
-                    json.dumps(m["execucao"], ensure_ascii=False) if m.get("execucao") else "", m.get("mod", 0)]
-                   for m in sorted(cfg.get("metas", []), key=lambda m: (m["criada_em"], m["id"]))]
+    lista_metas = [linha_meta(m) for m in sorted(cfg.get("metas", []), key=lambda m: (m["criada_em"], m["id"]))]
     return {"Resumo": resumo, "Compras": compras, "Vendas": vendas, "Amigos": lista_amigos,
             "Radar": lista_radar, "Caixa": lista_caixa, "Metas": lista_metas, "Exclusões": excl}
 
@@ -844,15 +867,44 @@ def reconstruir(abas):
     return meses, amigos, radar, excl_cfg, caixa
 
 
+def _campos_stop(detalhes):
+    """Campos de uma meta de stop lidos dos Detalhes da planilha; None se faltam ou estão malformados."""
+    try:
+        campos = {"gatilho": "stop", "stop_inicial": float(detalhes["stop_inicial"]),
+                  "stop_atual": float(detalhes["stop_atual"]), "movel": bool(detalhes.get("movel")),
+                  "niveis": [{"desde": str(n["desde"]), "stop": float(n["stop"]),
+                              "calc_em": str(n.get("calc_em", n["desde"]))} for n in detalhes["niveis"]]}
+    except (KeyError, ValueError, TypeError, AttributeError):
+        return None
+    return campos
+
+
 def reconstruir_metas(abas):
-    """Metas da aba "Metas" da planilha (fora de reconstruir para não mudar o que ele devolve)."""
+    """Metas da aba "Metas" da planilha (fora de reconstruir para não mudar o que ele devolve). A linha só é um
+    stop quando os Detalhes são desta linha e trazem os campos do stop; do contrário vale o Preço-alvo (se
+    também não for um número, a linha é descartada)."""
     metas = []
     for row in abas.get("Metas", []):
-        row = (list(row) + [""] * 12)[:12]
+        row = (list(row) + [""] * 14)[:14]
+        detalhes = {}
+        if row[13]:
+            try:
+                lido = json.loads(str(row[13]))
+                # os detalhes só valem se são desta linha (a planilha pode ter sido reordenada à mão)
+                if isinstance(lido, dict) and lido.get("id") == str(row[0]).strip():
+                    detalhes = lido
+            except ValueError:
+                pass
+        campos_stop = _campos_stop(detalhes) if detalhes else None
+        stop = campos_stop is not None and (str(row[12]).strip() == "stop" or detalhes.get("gatilho") == "stop")
         try:
             m = {"id": str(row[0]).strip(), "ticker": str(row[1]).strip().upper(), "tipo": str(row[2]),
-                 "lote_id": str(row[3]), "qtd": int(row[4]), "preco_alvo": float(row[5]),
+                 "lote_id": str(row[3]), "qtd": int(row[4]),
                  "criada_em": str(row[7]), "status": str(row[8]) or "ativa", "mod": _num(row[11])}
+            if stop:
+                m.update(campos_stop)
+            else:
+                m["preco_alvo"] = float(row[5])
             datetime.fromisoformat(m["criada_em"])
         except (ValueError, TypeError):
             continue
@@ -867,6 +919,11 @@ def reconstruir_metas(abas):
                 m["execucao"] = json.loads(str(row[10]))
             except ValueError:
                 pass
+        for k in ("oco", "cancelada_por", "cancelada_detalhe"):
+            if detalhes.get(k):
+                m[k] = str(detalhes[k])
+        if isinstance(detalhes.get("sugestao"), dict):
+            m["sugestao"] = detalhes["sugestao"]
         metas.append(m)
     return metas
 
@@ -944,24 +1001,133 @@ def mesclar_lista(local, remoto, chave, excl, prefixo):
     return [x for k, x in itens.items() if excl.get(f"{prefixo}:{k}", -1) < x.get("mod", 0)]
 
 
+def _unir_niveis(a, b):
+    """Níveis de dois aparelhos: um por data ("desde"), com o maior stop."""
+    por_data = {}
+    for n in list(a or []) + list(b or []):
+        o = por_data.get(n["desde"])
+        if o is None or n["stop"] > o["stop"]:
+            por_data[n["desde"]] = dict(n)
+    return [por_data[d] for d in sorted(por_data)]
+
+
+CAMPOS_STOP = ("gatilho", "stop_inicial", "stop_atual", "movel", "niveis")
+CAMPOS_NOVOS = CAMPOS_STOP + ("oco", "cancelada_por", "cancelada_detalhe", "sugestao")    # só a versão nova grava
+
+
+def _completar_meta(vencedora, perdedora):
+    """União de campos novos: o aparelho antigo reescreve só as 12 primeiras colunas, e o registro dele pode
+    vencer por "mod" sem oco, níveis do stop etc. Os campos que a vencedora não tem e a perdedora tem são
+    copiados. Os do stop só vêm de um stop (e nunca para uma meta com preço-alvo), e o motivo do cancelamento
+    só para uma meta cancelada."""
+    extra = {}
+    for k in CAMPOS_NOVOS:
+        if k in vencedora or perdedora.get(k) in (None, ""):
+            continue
+        if k in CAMPOS_STOP and (perdedora.get("gatilho") != "stop" or "preco_alvo" in vencedora):
+            continue
+        if k in ("cancelada_por", "cancelada_detalhe") and vencedora.get("status") != "cancelada":
+            continue
+        extra[k] = perdedora[k]
+    return {**vencedora, **extra} if extra else vencedora
+
+
+def _precedencia(m):
+    """Status que não se desfaz: "executada" (a venda já foi registrada) e "cancelada" (ninguém reativa)."""
+    return {"executada": 2, "cancelada": 1}.get(m.get("status"), 0)
+
+
 def mesclar_metas(local, remoto):
-    """Metas pelo id: "executada" vence qualquer outro status (a venda já foi registrada); nos demais casos vale
-    a alteração mais recente. A venda automática tem id fixo (auto-<meta>), então nunca duplica."""
+    """Metas pelo id: "executada" vence qualquer outro status (a venda já foi registrada), "cancelada" vence
+    "ativa" (um stop móvel que subiu em outro aparelho não ressuscita a meta); nos demais casos vale a
+    alteração mais recente. A venda automática tem id fixo (auto-<meta>), então nunca duplica.
+    Campos que só a versão nova conhece (oco, níveis...) que faltam no registro vencedor vêm do outro.
+    Stop móvel presente nos dois aparelhos sem ter sido executado: vale o maior stop e a união dos níveis (o stop
+    só sobe, então cada aparelho pode ter calculado níveis diferentes)."""
     itens = {m["id"]: m for m in remoto}
     for m in local:
         o = itens.get(m["id"])
         if o is None:
             itens[m["id"]] = m
-        elif (m.get("status") == "executada") != (o.get("status") == "executada"):
-            itens[m["id"]] = m if m.get("status") == "executada" else o
+            continue
+        if _precedencia(m) != _precedencia(o):
+            vencedora, perdedora = (m, o) if _precedencia(m) > _precedencia(o) else (o, m)
         else:
-            itens[m["id"]] = _escolher(m, o)
+            vencedora = _escolher(m, o)
+            perdedora = o if vencedora is m else m
+        itens[m["id"]] = _completar_meta(vencedora, perdedora)
+        if (m.get("gatilho") == "stop" and o.get("gatilho") == "stop" and m.get("movel") and o.get("movel")
+                and m.get("status") != "executada" and o.get("status") != "executada"):
+            niveis = _unir_niveis(m.get("niveis"), o.get("niveis"))
+            itens[m["id"]] = {**itens[m["id"]], "niveis": niveis,
+                              "stop_atual": max([n["stop"] for n in niveis] + [m["stop_atual"], o["stop_atual"]])}
     return sorted(itens.values(), key=lambda m: (m["criada_em"], m["id"]))
 
 
-def mesclar_tudo(remoto, cfg, metas_r=None):
+def _execucao_antes(a, b):
+    """Ordem (-1, 0 ou 1) das execuções de duas metas do mesmo OCO: a data; na mesma data, o horário da barra
+    (barra_ts quando as duas têm, senão a hora, se as duas têm); persistindo o empate, o stop vence (é o
+    cenário conservador) e por fim o id."""
+    ea, eb = a.get("execucao") or {}, b.get("execucao") or {}
+    ta, tb = ea.get("barra_ts") or 0, eb.get("barra_ts") or 0
+    ha, hb = ea.get("hora") or "", eb.get("hora") or ""
+    for x, y in ((ea.get("data", ""), eb.get("data", "")), (ta, tb) if ta > 0 and tb > 0 else (0, 0),
+                 (ha, hb) if ha and hb else ("", ""),
+                 (0 if a.get("gatilho") == "stop" else 1, 0 if b.get("gatilho") == "stop" else 1), (a["id"], b["id"])):
+        if x != y:
+            return -1 if x < y else 1
+    return 0
+
+
+def resolver_oco(meses, metas, avisos=None):
+    """Dois aparelhos podem executar lados opostos do mesmo OCO. Se as duas metas do grupo estão "executada",
+    fica a de execução mais cedo (empate: o stop); a outra vira "cancelada" (com mod novo, para valer na
+    sincronização) e a venda automática dela é removida, com registro de exclusão. Se essa venda está num mês
+    fechado ela fica, a meta é cancelada com a explicação e o texto vai para `avisos` (lista, se dada): o ajuste
+    é manual. meses: {mês: dados}; altera meses e metas no lugar. Retorna o conjunto de meses alterados."""
+    grupos = defaultdict(list)
+    for m in metas:
+        if m.get("oco") and m.get("status") == "executada":
+            grupos[m["oco"]].append(m)
+    alterados = set()
+    for membros in grupos.values():
+        if len(membros) < 2:
+            continue
+        membros.sort(key=cmp_to_key(_execucao_antes))
+        vencedora = membros[0]
+        for perdedora in membros[1:]:
+            ex = vencedora.get("execucao") or {}
+            quando = f"{ex['data'][8:10]}/{ex['data'][5:7]}" if ex.get("data") else "?"
+            detalhe = ("Cancelada automaticamente (OCO): "
+                       f"{'stop' if vencedora.get('gatilho') == 'stop' else 'alvo'} executado em {quando}")
+            vid = "auto-" + perdedora["id"]
+            for mes, d in meses.items():
+                for l in d["lotes"]:
+                    if not any(v["id"] == vid for v in l["vendas"]):
+                        continue
+                    if d.get("fechado"):
+                        detalhe += (f". A venda duplicada ficou em {fmt_mes(mes)}, mês fechado, e precisa de ajuste "
+                                    "manual")
+                        if avisos is not None:
+                            avisos.append(f"{perdedora['ticker']}: a venda automática duplicada ficou no mês "
+                                          f"fechado {fmt_mes(mes)} e não foi removida. Ajuste manual necessário.")
+                        continue
+                    l["vendas"] = [v for v in l["vendas"] if v["id"] != vid]
+                    d.setdefault("excluidos", {})[vid] = agora()
+                    alterados.add(mes)
+            perdedora["status"] = "cancelada"
+            perdedora.pop("ultimo_erro", None)
+            perdedora.pop("execucao", None)
+            perdedora["cancelada_por"] = vencedora["id"]
+            perdedora["cancelada_detalhe"] = detalhe
+            perdedora["mod"] = agora()
+    return alterados
+
+
+def mesclar_tudo(remoto, cfg, metas_r=None, avisos=None):
     """Mescla os dados da planilha com os locais e grava o resultado. Retorna True se algo local mudou.
-    metas_r: metas da planilha (reconstruir_metas)."""
+    metas_r: metas da planilha (reconstruir_metas). avisos: lista que recebe os textos para o usuário (venda
+    duplicada de OCO em mês fechado, que precisa de ajuste manual)."""
     meses_r, amigos_r, radar_r, excl_r = remoto[:4]
     caixa_r = remoto[4] if len(remoto) > 4 else None
     mudou = False
@@ -971,7 +1137,11 @@ def mesclar_tudo(remoto, cfg, metas_r=None):
             local = carregar(mes) if arquivo(mes).exists() else None
             texto_local = json.dumps(local, sort_keys=True) if local is not None else None
             mesclados[mes] = (texto_local, mesclar_mes(local, meses_r.get(mes)))
+        metas_l = sorted(cfg.get("metas", []), key=lambda m: (m["criada_em"], m["id"]))
+        texto_metas = json.dumps(metas_l, sort_keys=True)
+        metas = mesclar_metas(metas_l, metas_r or [])
         deduplicar_auto({mes: novo for mes, (_, novo) in mesclados.items()})
+        resolver_oco({mes: novo for mes, (_, novo) in mesclados.items()}, metas, avisos)
         for mes, (texto_local, novo) in mesclados.items():
             if texto_local is None or json.dumps(novo, sort_keys=True) != texto_local:
                 salvar(novo, carimbar=False)
@@ -985,9 +1155,7 @@ def mesclar_tudo(remoto, cfg, metas_r=None):
         cfg["amigos"], cfg["radar"], cfg["excluidos"] = amigos, radar, excl
         if json.dumps([amigos, radar, excl], sort_keys=True) != antes:
             mudou = True
-        metas_l = sorted(cfg.get("metas", []), key=lambda m: (m["criada_em"], m["id"]))
-        metas = mesclar_metas(metas_l, metas_r or [])
-        if json.dumps(metas, sort_keys=True) != json.dumps(metas_l, sort_keys=True):
+        if json.dumps(metas, sort_keys=True) != texto_metas:
             mudou = True
         cfg["metas"] = metas
         if caixa_r and caixa_r.get("mod", 0) > (cfg.get("caixa") or {}).get("mod", 0):

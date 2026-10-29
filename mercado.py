@@ -1,7 +1,7 @@
 import math
 import threading
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 TTL_HISTORICO = 30 * 60     # segundos
 DIAS_HISTORICO = 180
@@ -29,6 +29,42 @@ def calcular_atr(maximas, minimas, fechamentos, n=PERIODOS_ATR):
     for tr in trs[n:]:
         atr = (atr * (n - 1) + tr) / n
     return atr
+
+
+def calcular_pivos(alta, baixa, fech):
+    """Pontos de pivô clássicos do pregão: PP=(H+L+C)/3, R1=2·PP−L (resistência), S1=2·PP−H (suporte)."""
+    pp = (alta + baixa + fech) / 3
+    return {"pp": pp, "r1": 2 * pp - baixa, "s1": 2 * pp - alta}
+
+
+def calcular_chandelier(barras, n=22, mult=3):
+    """Chandelier Exit: máxima das últimas n barras − mult × ATR(n) de Wilder. barras: dicts com alta, baixa e
+    fech, em ordem. Retorna None com menos de n+1 barras."""
+    if len(barras) < n + 1:
+        return None
+    atr = calcular_atr([b["alta"] for b in barras], [b["baixa"] for b in barras], [b["fech"] for b in barras], n)
+    if atr is None:
+        return None
+    return max(b["alta"] for b in barras[-n:]) - mult * atr
+
+
+def serie_chandelier(barras, n=22, mult=3):
+    """Chandelier Exit de cada prefixo de barras em uma só passada: o item i é igual a
+    calcular_chandelier(barras[:i + 1], n, mult) (None enquanto faltam barras)."""
+    saida = [None] * len(barras)
+    atr, trs, anterior = None, [], None
+    for i, b in enumerate(barras):
+        if i >= 1:
+            tr = max(b["alta"] - b["baixa"], abs(b["alta"] - anterior["fech"]), abs(b["baixa"] - anterior["fech"]))
+            trs.append(tr)
+            if i == n:
+                atr = sum(trs) / n      # a mesma semente de calcular_atr (média simples dos n primeiros)
+            elif i > n:
+                atr = (atr * (n - 1) + tr) / n
+        anterior = b
+        if atr is not None:
+            saida[i] = max(x["alta"] for x in barras[i - n + 1:i + 1]) - mult * atr
+    return saida
 
 
 def classificar_risco(atr_pct):
@@ -93,9 +129,10 @@ def intervalos_historico(dias):
 
 
 def historico_desde(ticker, desde, agora=None):
-    """Máximas das barras do Yahoo desde `desde` (datetime; sem fuso vale Brasília), no intervalo mais fino
-    disponível. Retorna {"barras": [{"ts", "dt" (datetime com fuso), "alta"}], "fonte", "intervalo"}.
-    Levanta SemDados se não houver nenhuma barra. Executar fora da thread da interface."""
+    """Máximas, mínimas e aberturas das barras do Yahoo desde `desde` (datetime; sem fuso vale Brasília), no
+    intervalo mais fino disponível. Retorna {"barras": [{"ts", "dt" (datetime com fuso), "alta", "baixa", "abre"}],
+    "fonte", "intervalo"}; baixa e abre ficam None quando o Yahoo não as informa. Levanta SemDados se não houver
+    nenhuma barra. Executar fora da thread da interface."""
     from datetime import datetime, timezone
     fuso_padrao = timezone(timedelta(hours=-3))
     if desde.tzinfo is None:
@@ -113,11 +150,71 @@ def historico_desde(ticker, desde, agora=None):
             continue
         tz = timezone(timedelta(seconds=(res.get("meta") or {}).get("gmtoffset") or -10800))
         q = ((res.get("indicators") or {}).get("quote") or [{}])[0]
-        barras = [{"ts": ts, "dt": datetime.fromtimestamp(ts, tz), "alta": float(a)}
-                  for ts, a in zip(res.get("timestamp") or [], q.get("high") or []) if _valido(a)]
+        baixas, aberturas = q.get("low") or [], q.get("open") or []
+
+        def campo(lista, i):
+            return float(lista[i]) if i < len(lista) and _valido(lista[i]) else None
+        barras = [{"ts": ts, "dt": datetime.fromtimestamp(ts, tz), "alta": float(a), "baixa": campo(baixas, i),
+                   "abre": campo(aberturas, i)}
+                  for i, (ts, a) in enumerate(zip(res.get("timestamp") or [], q.get("high") or [])) if _valido(a)]
         if barras:
             return {"barras": barras, "fonte": "Yahoo Finance", "intervalo": intervalo}
     raise ultimo or SemDados(f"Sem histórico de {ticker} desde {desde:%d/%m/%Y %H:%M}.")
+
+
+_DIARIAS = {}                  # (ticker, range) -> (hora, resultado)
+_TRAVA_DIARIAS = threading.Lock()
+VALIDADE_DIARIAS = 15 * 60     # segundos
+
+
+def _range_diarias(desde):
+    """Menor range do Yahoo que cobre `desde` com 60 dias de folga (para o ATR e o Chandelier)."""
+    if desde is None:
+        return "6mo"
+    if isinstance(desde, datetime):
+        desde = desde.date()
+    dias = (date.today() - desde).days + 60
+    for limite, alcance in ((180, "6mo"), (365, "1y"), (730, "2y")):
+        if dias <= limite:
+            return alcance
+    return "5y"
+
+
+def barras_diarias(ticker, desde=None):
+    """Barras diárias (ordem crescente) do Yahoo, a mesma fonte no Windows e no Android. `desde` (date ou
+    datetime) amplia o período para cobrir a data. Retorna {"barras": [{"data": date, "abre", "alta", "baixa",
+    "fech"}], "hoje" (data do último pregão em andamento), "preco", "fonte"}; as barras incluem a de hoje, ainda
+    parcial, quando existe. Cache de 15 minutos. Levanta SemDados. Executar fora da thread da interface."""
+    alcance = _range_diarias(desde)
+    chave = (ticker, alcance)
+    agora = time.time()
+    with _TRAVA_DIARIAS:
+        c = _DIARIAS.get(chave)
+        if c and agora - c[0] < VALIDADE_DIARIAS:
+            return c[1]
+    from datetime import datetime, timezone
+    res = _get_chart(ticker, {"range": alcance, "interval": "1d", "includePrePost": "false"})
+    meta = res.get("meta") or {}
+    desvio = meta.get("gmtoffset") or 0
+    q = ((res.get("indicators") or {}).get("quote") or [{}])[0]
+    listas = [q.get(k) or [] for k in ("open", "high", "low", "close")]
+    barras = []
+    for i, ts in enumerate(res.get("timestamp") or []):
+        abre, alta, baixa, fech = (float(l[i]) if i < len(l) and _valido(l[i]) else None for l in listas)
+        if alta is None or baixa is None or fech is None:
+            continue
+        barras.append({"data": datetime.fromtimestamp(ts + desvio, timezone.utc).date(), "abre": abre,
+                       "alta": alta, "baixa": baixa, "fech": fech})
+    if not barras:
+        raise SemDados(f"Sem dados para {ticker} no Yahoo Finance.")
+    t_mercado = meta.get("regularMarketTime")
+    hoje = datetime.fromtimestamp(t_mercado + desvio, timezone.utc).date() if t_mercado else barras[-1]["data"]
+    preco = meta.get("regularMarketPrice")
+    out = {"barras": barras, "hoje": hoje, "preco": float(preco) if _valido(preco) else barras[-1]["fech"],
+           "fonte": "Yahoo Finance"}
+    with _TRAVA_DIARIAS:
+        _DIARIAS[chave] = (agora, out)
+    return out
 
 
 def _extras(dados, hi, lo, cl, anterior, mercado=None):
