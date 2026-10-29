@@ -345,8 +345,10 @@ class FormVenda(FormBase):
                                     wraplength=self.LARGURA)
         self.lb_info.pack(anchor="w", padx=24, pady=(6, 0))
         self.rotulo("DATA DA VENDA")
+        self.meses_livres = {}
         self.data = CampoData(self.caixa, minimo=self.inicio_mes, maximo=min(self.fim_mes, date.today()),
-                              ao_mudar=lambda d: (self.sugerir_preco(), self.atualizar_resumo()))
+                              ao_mudar=lambda d: (self.sugerir_preco(), self.atualizar_resumo()),
+                              filtro=self.data_permitida)
         self.data.pack(fill="x", padx=24)
         self.lb_qtd = self.rotulo("QUANTIDADE")
         self.en_qtd = self.entrada()
@@ -412,7 +414,9 @@ class FormVenda(FormBase):
             return
         self.lote = l
         disp = restante(l)
-        minimo = max(date.fromisoformat(l["data_compra"]), self.inicio_mes)
+        minimo = date.fromisoformat(l["data_compra"])
+        if self.editar:
+            minimo = max(minimo, self.inicio_mes)
         maximo = min(self.fim_mes, date.today())
         info = f"{l['tipo']}  ·  Custo {brl(l['preco'])}  ·  Disponível: {disp}"
         if minimo > maximo:
@@ -427,6 +431,17 @@ class FormVenda(FormBase):
             self.data.set(hoje)
         self.sugerir_preco()
         self.atualizar_resumo()
+
+    def data_permitida(self, d):
+        """Dias do mês aberto, ou de meses anteriores que aceitam venda retroativa (sem arquivo próprio)."""
+        if d >= self.inicio_mes:
+            return True
+        if self.editar:
+            return False
+        mes = d.strftime("%Y-%m")
+        if mes not in self.meses_livres:
+            self.meses_livres[mes] = nc.mes_aceita_venda_retroativa(mes, self.inicio_mes.strftime("%Y-%m"))
+        return self.meses_livres[mes]
 
     def atualizar_resumo(self):
         if not hasattr(self, "rs_impacto"):
@@ -493,6 +508,8 @@ class FormVenda(FormBase):
         dv = self.data.valor
         if not dv:
             return self.erro("Selecione a data da venda.")
+        if not self.data_permitida(dv) or dv < date.fromisoformat(self.lote["data_compra"]):
+            return self.erro("Data da venda inválida para essa compra.")
         try:
             q = parse_qtd(self.en_qtd.get())
         except ValueError:
@@ -504,6 +521,14 @@ class FormVenda(FormBase):
             p = parse_num(self.en_preco.get())
         except ValueError:
             return self.erro("Preço inválido.")
+        if dv < self.inicio_mes:
+            if self.lote["vendas"]:
+                return self.erro("Essa compra já tem venda neste mês. Para registrar uma venda de mês anterior, "
+                                 "exclua a venda deste mês, registre a antiga e depois registre de novo a deste mês.")
+            livre = disp - ms.reservado(getattr(self.master, "cfg", {}), self.lote["id"])
+            if q > livre:
+                return self.erro(f"Há metas de venda ativas nessa compra. Quantidade livre: {max(livre, 0)}. "
+                                 "Cancele ou ajuste a meta antes.")
         self.resultado = {"lote_id": self.lote["id"], "data": dv.isoformat(), "qtd": q, "preco": p}
         self.destroy()
 
@@ -1625,6 +1650,27 @@ class App(ctk.CTk):
             return
         r = dict(f.resultado)
         lote_id = r.pop("lote_id")
+        if r["data"][:7] < self.d["mes"]:
+            try:
+                mes = nc.registrar_venda_retroativa(self.d, lote_id, r)
+            except ValueError as e:
+                avisar(self, "Registrar venda", str(e))
+                return
+            self.gravar()
+            darf = nc.carregar(mes)["resumo"]["darf"]
+            if darf >= DARF_MINIMO:
+                venc = nc.proximo_mes(mes)
+                prazo = ("já vencida: pague com multa e juros" if venc < date.today().strftime("%Y-%m")
+                         else f"vence no último dia útil de {nc.fmt_mes(venc)}")
+                txt_darf = f"DARF de {nc.fmt_mes(mes)}: {brl(darf)} (código 6015, {prazo})."
+            elif darf > 0:
+                txt_darf = f"A DARF de {brl(darf)} é menor que R$ 10 e foi somada a {nc.fmt_mes(self.d['mes'])}."
+            else:
+                txt_darf = "Não há DARF a pagar por essa venda."
+            avisar(self, "Venda registrada",
+                   f"A venda foi gravada em {nc.fmt_mes(mes)}, que ficou fechado com a apuração própria. "
+                   f"A quantidade vendida saiu da compra em {nc.fmt_mes(self.d['mes'])}.\n\n{txt_darf}")
+            return
         alvo = next(l for l in self.d["lotes"] if l["id"] == lote_id)
         alvo["vendas"].append({"id": uuid.uuid4().hex, **r})
         self.gravar()

@@ -69,9 +69,9 @@ class Popup(ctk.CTkToplevel):
 
 
 class Calendario(Popup):
-    def __init__(self, ancora, valor, minimo, maximo, ao_escolher):
+    def __init__(self, ancora, valor, minimo, maximo, ao_escolher, filtro=None):
         super().__init__(ancora)
-        self.minimo, self.maximo, self.cb = minimo, maximo, ao_escolher
+        self.minimo, self.maximo, self.cb, self.filtro = minimo, maximo, ao_escolher, filtro
         self.sel = valor
         hoje = date.today()
         base = valor or (min(hoje, maximo) if maximo else hoje)
@@ -114,7 +114,9 @@ class Calendario(Popup):
         self.abrir()
 
     def permitido(self, d):
-        return not ((self.minimo and d < self.minimo) or (self.maximo and d > self.maximo))
+        if (self.minimo and d < self.minimo) or (self.maximo and d > self.maximo):
+            return False
+        return self.filtro is None or self.filtro(d)
 
     def mover(self, passo):
         m = self.mes + passo
@@ -156,9 +158,10 @@ class Calendario(Popup):
 class CampoData(ctk.CTkFrame):
     """Campo de data que abre um calendário. Não aceita digitação; get() devolve dd/mm/aaaa."""
 
-    def __init__(self, pai, valor=None, minimo=None, maximo=None, ao_mudar=None):
+    def __init__(self, pai, valor=None, minimo=None, maximo=None, ao_mudar=None, filtro=None):
         super().__init__(pai, fg_color="transparent")
         self.valor, self.minimo, self.maximo, self.ao_mudar = valor, minimo, maximo, ao_mudar
+        self.filtro = filtro  # data -> bool: bloqueia dias dentro dos limites
         self.en = ctk.CTkEntry(self, height=38, font=F(13), corner_radius=8, border_color=C["borda"],
                                fg_color=C["card2"], text_color=C["texto"], placeholder_text="Selecione a data")
         self.en.pack(side="left", fill="x", expand=True)
@@ -181,7 +184,7 @@ class CampoData(ctk.CTkFrame):
             self.en.insert(0, self.valor.strftime("%d/%m/%Y"))
 
     def abrir(self):
-        Calendario(self.en, self.valor, self.minimo, self.maximo, self.set)
+        Calendario(self.en, self.valor, self.minimo, self.maximo, self.set, self.filtro)
 
     def set(self, d):
         self.valor = d

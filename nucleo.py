@@ -397,6 +397,50 @@ def fechar_mes(d):
         return r, prox
 
 
+def mes_aceita_venda_retroativa(mes, mes_atual):
+    """Venda de um mês anterior ao aberto: só em mês sem arquivo ou fechado sem nenhuma compra em aberto (caso dos
+    meses criados por venda retroativa; a marcação "retroativo" não vai para a planilha)."""
+    if mes >= mes_atual:
+        return False
+    if not arquivo(mes).exists():
+        return True
+    d = carregar(mes)
+    return bool(d.get("retroativo")) or (d["fechado"] and all(restante(l) == 0 for l in d["lotes"]))
+
+
+def registrar_venda_retroativa(d, lote_id, venda):
+    """Grava a venda no mês em que ela ocorreu (fechado, com a apuração própria) e tira a quantidade vendida da
+    compra do mês atual d. DARF abaixo do mínimo do mês da venda passa para o darf_anterior de d.
+    Retorna o mês da venda."""
+    with TRAVA:
+        mes = venda["data"][:7]
+        lote = next(l for l in d["lotes"] if l["id"] == lote_id)
+        if lote["vendas"]:
+            # a corretagem das vendas é rateada por lote["qtd"]; reduzir a quantidade mudaria a DARF delas
+            raise ValueError("Essa compra já tem venda neste mês. Registre a venda antiga antes das vendas do mês.")
+        dm = carregar(mes)
+        darf_ant = dm.get("resumo", {}).get("darf", 0.0)
+        levada_ant = darf_ant if darf_ant < DARF_MINIMO else 0.0
+        dm["retroativo"] = True
+        dm["fechado"] = True
+        dm["mod"] = agora()
+        novo = {"id": novo_id(), "ticker": lote["ticker"], "tipo": lote["tipo"], "data_compra": lote["data_compra"],
+                "qtd": venda["qtd"], "preco": lote["preco"], "vendas": [{"id": novo_id(), **venda}]}
+        if lote.get("origem"):
+            novo["origem"] = lote["origem"]   # compra já debitada no mês de origem: não gera novo débito no caixa
+        dm["lotes"].append(novo)
+        r = apurar(dm)
+        dm["resumo"] = {k: v for k, v in r.items() if k != "ops"}
+        salvar(dm)
+        levada = r["darf"] if r["darf"] < DARF_MINIMO else 0.0
+        d["darf_anterior"] = max(d.get("darf_anterior", 0.0) - levada_ant + levada, 0.0)
+        lote["qtd"] -= venda["qtd"]
+        if lote["qtd"] <= 0:
+            d["lotes"] = [l for l in d["lotes"] if l["id"] != lote_id]
+        salvar(d)
+        return mes
+
+
 def mensagem_fechamento(r, prox):
     if r["darf"] >= DARF_MINIMO:
         msg = (f"DARF a pagar: {brl(r['darf'])}\nCódigo: 6015\n"
