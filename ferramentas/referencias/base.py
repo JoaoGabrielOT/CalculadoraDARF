@@ -50,13 +50,14 @@ def congelar():
 @contextlib.contextmanager
 def pasta_dados():
     """Pasta temporária configurada como pasta de dados do núcleo."""
-    antes = nc.DADOS
+    # Restaura por atribuição: nc.configurar() faria mkdir da pasta anterior (relativa) no diretório atual.
+    antes = (nc.DADOS, nc.CONFIG)
     with tempfile.TemporaryDirectory() as tmp:
         nc.configurar(tmp)
         try:
             yield Path(tmp)
         finally:
-            nc.configurar(antes)
+            nc.DADOS, nc.CONFIG = antes
 
 
 def js(obj):
