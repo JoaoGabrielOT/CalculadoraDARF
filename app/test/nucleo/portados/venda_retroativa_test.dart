@@ -3,6 +3,8 @@
 import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/apuracao.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
+import 'package:calculadoradarf/nucleo/caixa.dart';
+import 'package:calculadoradarf/nucleo/compat/numeros.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/erros.dart';
 import 'package:calculadoradarf/nucleo/fechamento.dart';
@@ -154,21 +156,24 @@ void main() {
     expect(repo.carregar('2026-10').darfAnterior, _quase(0.0));
   });
 
+  double somaCompras() => somaPython([
+    for (final i in lancamentosCaixa(repo.carregarMeses()))
+      if (i.tipo == 'Compra') i.valor,
+  ]);
+
   test('TestVendaRetroativa.test_lote_levado_nao_gera_novo_debito', () {
     d.lotes[0].origem = 'L0';
     repo.salvar(d);
-    // TODO Tarefa 10: `lancamentosCaixa` ainda não existe. Corpo do Python:
-    //   antes = soma dos lancamentosCaixa(repo) com tipo 'Compra' (valor)
-    //   registrarVendaRetroativa(repo, d, 'L1', venda('2026-07-15', 20, 10.0))
-    //   depois = a mesma soma
-    //   expect(antes, _quase(depois))
-  }, skip: 'Tarefa 10');
+    final antes = somaCompras();
+    registrarVendaRetroativa(repo, d, 'L1', venda('2026-07-15', 20, 10.0));
+    final depois = somaCompras();
+    expect(antes, _quase(depois));
+  });
 
   test('TestVendaRetroativa.test_caixa_nao_duplica_compra', () {
-    // TODO Tarefa 10: `lancamentosCaixa` ainda não existe. Corpo do Python:
-    //   antes = soma dos lancamentosCaixa(repo) com tipo 'Compra' (valor)
-    //   registrarVendaRetroativa(repo, d, 'L1', venda('2026-07-15', 20, 10.0))
-    //   depois = a mesma soma
-    //   expect(antes, _quase(depois))
-  }, skip: 'Tarefa 10');
+    final antes = somaCompras();
+    registrarVendaRetroativa(repo, d, 'L1', venda('2026-07-15', 20, 10.0));
+    final depois = somaCompras();
+    expect(antes, _quase(depois));
+  });
 }
