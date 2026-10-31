@@ -7,6 +7,7 @@ import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/datas.dart';
 import 'package:calculadoradarf/nucleo/metas/criacao.dart';
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
+import 'package:calculadoradarf/nucleo/modelos/barras.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
 import 'package:calculadoradarf/nucleo/modelos/meta.dart';
@@ -38,6 +39,44 @@ const Map<String, Object?> baseStop = {
   'niveis': <Object?>[],
   'criada_em': '2026-10-20T11:00:00-03:00',
 };
+
+/// `dt` (tests/test_metas.py:12): texto sem fuso vale Brasília.
+DataHora dt(String texto) => DataHora.parse(texto);
+
+/// `barra` (tests/test_metas.py:16-18): barra horária só com a máxima.
+Barra barra(String texto, double alta) {
+  final d = dt(texto);
+  return Barra(ts: d.utc.millisecondsSinceEpoch ~/ 1000, dt: d, alta: alta);
+}
+
+/// `barra_s` (tests/test_metas.py:480-482): barra com máxima, mínima e
+/// abertura.
+Barra barraS(String texto, double alta, double? baixa, [double? abre]) {
+  final d = dt(texto);
+  return Barra(
+    ts: d.utc.millisecondsSinceEpoch ~/ 1000,
+    dt: d,
+    alta: alta,
+    baixa: baixa,
+    abre: abre,
+  );
+}
+
+/// `dia` (tests/test_metas.py:485-487): pregão diário; a abertura padrão é o
+/// fechamento.
+BarraDiaria dia(
+  String texto,
+  double alta,
+  double baixa,
+  double fech, [
+  double? abre,
+]) => BarraDiaria(
+  data: texto,
+  abre: abre ?? fech,
+  alta: alta,
+  baixa: baixa,
+  fech: fech,
+);
 
 /// `Base.setUp`: relógio e ids congelados, armazenamento em memória, a
 /// configuração padrão e o mês 2026-10 com o lote L1 (PETR4, 100 a R$ 10).
