@@ -60,4 +60,45 @@ void main() {
       }, caso.saida);
     });
   }
+
+  // O Python segue com inteiro grande (sem referência: não cabe em int64).
+  test(
+    'radar com Posição >= 2^63 reconstrói com pos nulo, demais intactos',
+    () {
+      final dados = reconstruir({
+        'Radar': [
+          ['PETR4', 'Petrobras', 46000, 71.5, 3],
+          ['VALE3', 'Vale', 46001, 72.5, '1e19'],
+          ['ITUB4', 'Itaú', 46002, 73.5, -1e30],
+          ['WEGE3', 'Weg', 46003, 74.5, 7],
+        ],
+      });
+      expect(dados.radar.map((r) => r.ticker), [
+        'PETR4',
+        'VALE3',
+        'ITUB4',
+        'WEGE3',
+      ]);
+      expect(dados.radar.map((r) => r.pos), [3, null, null, 7]);
+      expect(dados.radar[1].mod, 72.5);
+      expect(dados.radar[3].nome, 'Weg');
+    },
+  );
+
+  test(
+    'radar com Posição NaN ou infinita continua lançando (como o Python)',
+    () {
+      for (final p in ['nan', 'inf']) {
+        expect(
+          () => reconstruir({
+            'Radar': [
+              ['PETR4', 'P', 46000, 1, p],
+            ],
+          }),
+          throwsFormatException,
+          reason: p,
+        );
+      }
+    },
+  );
 }

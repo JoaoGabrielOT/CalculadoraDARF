@@ -159,9 +159,7 @@ DadosPlanilha reconstruir(Map<String, List<Linha>> abas) {
           desde: desde,
           mod: numOuPadrao(row[3]),
           // planilhas antigas não têm a coluna Posição
-          pos: strPython(row[4]).trim() != ''
-              ? intPython(numOuPadrao(row[4]))
-              : null,
+          pos: _posicao(row[4]),
         ),
       );
     }
@@ -189,6 +187,19 @@ DadosPlanilha reconstruir(Map<String, List<Linha>> abas) {
     excluidos: exclCfg,
     caixa: caixa,
   );
+}
+
+/// Posição do radar (nucleo.py:900-901). Posição que não cabe em int64 (o
+/// Python segue com inteiro grande) fica nula, como a de um item sem Posição,
+/// em vez de derrubar a planilha; NaN e infinito continuam lançando, como no
+/// Python.
+int? _posicao(Object? v) {
+  if (strPython(v).trim() == '') return null;
+  final n = numOuPadrao(v);
+  if (n.isFinite && (n >= 9.223372036854776e18 || n < -9.223372036854776e18)) {
+    return null;
+  }
+  return intPython(n);
 }
 
 String _dataOuHoje(Object? v) {

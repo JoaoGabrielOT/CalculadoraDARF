@@ -55,9 +55,10 @@ DateTime _foraDoIntervalo(DateTime d) => d.year < 1 || d.year > 9999
 String somarDias(String iso, int dias) =>
     _formatarData(_foraDoIntervalo(_lerIso(iso).add(_duracaoEmDias(dias))));
 
-/// Dias além do intervalo de datas (anos 1 a 9999 cabem em ~3,7 milhões)
-/// estourariam o `Duration` (int64 em microssegundos) e dariam a volta; o
-/// Python lança `OverflowError` aqui.
+/// O `Duration` (int64 em microssegundos) estoura perto de 1,07e8 dias e dá a
+/// volta, podendo cair numa data válida. 4000000 é uma guarda conservadora,
+/// acima do intervalo 0001-9999 (~3,65 milhões de dias); o Python lança
+/// `OverflowError` aqui.
 Duration _duracaoEmDias(int dias) {
   if (dias.abs() > 4000000) {
     throw FormatException('dias fora do intervalo de datas: $dias');

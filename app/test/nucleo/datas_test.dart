@@ -113,7 +113,9 @@ void main() {
 
   // O Python lança OverflowError nestes casos, por isso não há referência.
   test('deSerial rejeita serial gigante em vez de dar a volta no int64', () {
-    for (final v in [1e300, 1e16, 2e13, -1e9, 4000001, -4000001]) {
+    // 1e300, 1e16, 2e13 e -1e9 estouram o Duration sem a guarda; 1e8 e
+    // ±4000001 já falhariam em _foraDoIntervalo e fixam o limite da guarda.
+    for (final v in [1e300, 1e16, 2e13, -1e9, 1e8, 4000001, -4000001]) {
       expect(() => deSerial(v), throwsFormatException, reason: '$v');
     }
   });

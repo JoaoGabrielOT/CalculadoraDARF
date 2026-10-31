@@ -58,7 +58,7 @@ int intPython(Object? v) {
       throw FormatException('int() não aceita $v');
     }
     // fora do int64 o truncate() satura em silêncio; o Python tem inteiro grande
-    if (v.abs() >= 9.223372036854776e18) {
+    if (v >= 9.223372036854776e18 || v < -9.223372036854776e18) {
       throw FormatException('int() fora do intervalo de int64: $v');
     }
     return v.truncate();
