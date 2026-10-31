@@ -5,7 +5,9 @@ import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/datas.dart';
+import 'package:calculadoradarf/nucleo/erros.dart';
 import 'package:calculadoradarf/nucleo/metas/criacao.dart';
+import 'package:calculadoradarf/nucleo/metas/verificacao.dart' as ver;
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
 import 'package:calculadoradarf/nucleo/modelos/barras.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
@@ -78,6 +80,18 @@ BarraDiaria dia(
   fech: fech,
 );
 
+/// `historico_fixo` (tests/test_metas.py:21-22): sempre as mesmas barras.
+ver.BuscarHistorico historicoFixo(List<Barra> barras) =>
+    (ticker, desde) async => HistoricoIntradiario(
+      barras: barras,
+      fonte: 'Yahoo Finance',
+      intervalo: '1m',
+    );
+
+/// `historico_erro` (tests/test_metas.py:25-26): a consulta falha sem dados.
+Future<HistoricoIntradiario> historicoErro(String ticker, DataHora desde) =>
+    throw SemDados('Sem dados para PETR4 no Yahoo Finance.');
+
 /// `Base.setUp`: relógio e ids congelados, armazenamento em memória, a
 /// configuração padrão e o mês 2026-10 com o lote L1 (PETR4, 100 a R$ 10).
 class BaseMetas {
@@ -113,6 +127,18 @@ class BaseMetas {
   /// `Base.criar`: meta de alvo sobre o L1, com lucro desejado de R$ 1000.
   Meta criar({int qtd = 100, double alvo = 21.78}) =>
       criarMeta(repo, cfg, 'L1', qtd, alvo, lucroDesejado: 1000, agora: criada);
+
+  /// `Base.verificar` (tests/test_metas.py:55-56): verifica com as [barras]
+  /// fixas; o relógio padrão é 25/10/2026 18:00.
+  Future<ver.RelatorioMetas?> verificar(
+    List<Barra> barras, {
+    DataHora? agora,
+  }) => ver.verificar(
+    repo,
+    cfg,
+    historicoFixo(barras),
+    agora: agora ?? dt('2026-10-25T18:00:00'),
+  );
 
   /// `Base.lote`: o lote gravado no mês.
   Lote lote({String mes = '2026-10', String lid = 'L1'}) =>
