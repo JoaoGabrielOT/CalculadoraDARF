@@ -5,9 +5,11 @@ import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/datas.dart';
+import 'package:calculadoradarf/nucleo/metas/criacao.dart';
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
+import 'package:calculadoradarf/nucleo/modelos/meta.dart';
 import 'package:calculadoradarf/nucleo/repositorio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -68,6 +70,10 @@ class BaseMetas {
     );
     repo.salvar(d);
   }
+
+  /// `Base.criar`: meta de alvo sobre o L1, com lucro desejado de R$ 1000.
+  Meta criar({int qtd = 100, double alvo = 21.78}) =>
+      criarMeta(repo, cfg, 'L1', qtd, alvo, lucroDesejado: 1000, agora: criada);
 
   /// `Base.lote`: o lote gravado no mês.
   Lote lote({String mes = '2026-10', String lid = 'L1'}) =>
