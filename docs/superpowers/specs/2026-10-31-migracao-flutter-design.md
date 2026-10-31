@@ -149,6 +149,8 @@ Fonte detalhada: `2026-10-31-inventario-python.md` (nesta pasta). Tudo abaixo ex
 
 Comportamento a reproduzir como está, salvo bug evidente de travamento ou crash (CONTEXTO_SESSAO.md): barras anteriores à criação da meta ignoradas; IRRF projetado por operação e apurado por dia; editar compra abaixo da reserva de metas não bloqueado; sem exclusão de metas. O bug do Android em que `verificar_metas` devolve None e mostra "Verificação já em andamento" deve ser corrigido.
 
+**Compensação de prejuízo entre meses (decisão de 31/10/2026):** a 1.12.x só compensa prejuízo dentro do mês (nucleo.py:330-335), e a Receita permite levar o prejuízo para os meses seguintes. O dono autorizou corrigir. A correção sai **depois** da migração, como mudança própria (2.1), quando nenhum aparelho usar mais a versão Python. Motivo: durante a convivência, as duas versões regravariam a aba Resumo com totais diferentes para os mesmos dados, e a 2.0 deixaria de poder ser validada contra o Python ao centavo.
+
 ## 10. O que fica com o construtor
 
 - Arquitetura interna do app Flutter (gerenciamento de estado, pacotes, organização de pastas).
