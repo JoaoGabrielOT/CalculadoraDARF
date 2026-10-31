@@ -57,6 +57,10 @@ int intPython(Object? v) {
     if (v.isNaN || v.isInfinite) {
       throw FormatException('int() não aceita $v');
     }
+    // fora do int64 o truncate() satura em silêncio; o Python tem inteiro grande
+    if (v.abs() >= 9.223372036854776e18) {
+      throw FormatException('int() fora do intervalo de int64: $v');
+    }
     return v.truncate();
   }
   if (v is! String) {

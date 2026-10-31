@@ -34,7 +34,9 @@ class DadosPlanilha {
   final Caixa? caixa;
 }
 
-/// Onde o Python captura `(ValueError, TypeError[, IndexError])`.
+/// Onde o Python captura `(ValueError, TypeError[, IndexError])`. `TypeError`
+/// fica por paridade com o `except TypeError` do Python (as conversões de
+/// compat já lançam `FormatException` onde o Python lançaria `TypeError`).
 bool _erroDeLeitura(Object e) =>
     e is FormatException || e is RangeError || e is TypeError;
 

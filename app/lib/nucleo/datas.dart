@@ -53,7 +53,17 @@ DateTime _foraDoIntervalo(DateTime d) => d.year < 1 || d.year > 9999
 
 /// `iso` mais [dias] dias.
 String somarDias(String iso, int dias) =>
-    _formatarData(_foraDoIntervalo(_lerIso(iso).add(Duration(days: dias))));
+    _formatarData(_foraDoIntervalo(_lerIso(iso).add(_duracaoEmDias(dias))));
+
+/// Dias além do intervalo de datas (anos 1 a 9999 cabem em ~3,7 milhões)
+/// estourariam o `Duration` (int64 em microssegundos) e dariam a volta; o
+/// Python lança `OverflowError` aqui.
+Duration _duracaoEmDias(int dias) {
+  if (dias.abs() > 4000000) {
+    throw FormatException('dias fora do intervalo de datas: $dias');
+  }
+  return Duration(days: dias);
+}
 
 /// `(ate - de).days`.
 int diasEntre(String de, String ate) =>
@@ -126,7 +136,7 @@ int serial(String iso) => _lerIso(iso).difference(_epoca).inDays;
 String deSerial(Object? v) {
   if (v is num) {
     final dias = intPython(v);
-    return _formatarData(_foraDoIntervalo(_epoca.add(Duration(days: dias))));
+    return _formatarData(_foraDoIntervalo(_epoca.add(_duracaoEmDias(dias))));
   }
   final s = strPython(v).trim();
   try {

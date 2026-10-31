@@ -3,7 +3,8 @@
 Cada caso: entrada = {aba: linhas lidas}; saída = {"dados": reconstruir(abas) como objeto, "metas": reconstruir_metas(abas)}.
 `dados` = {"meses": {mês: json do mês}, "amigos": [...], "radar": [...], "excluidos": {...}, "caixa": {...} | null}.
 Relógio, ids (id0001...) e "hoje" congelados. Os casos de ida e volta usam a saída de `montar_linhas` como entrada.
-Não há caso com número gigante em data (OverflowError não capturado no Python) nem NaN/infinito.
+Não há caso com número gigante em data nem NaN/infinito. Divergência aceita: serial gigante faz o Python travar
+(OverflowError não capturado) e o Dart pula a linha (FormatException); coberto por testes diretos em datas_test.
 """
 from . import base
 from .planilha_montagem import _cfg_completa, _lote, _mes, _venda

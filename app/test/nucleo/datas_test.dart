@@ -110,4 +110,26 @@ void main() {
     expect(a >= b && a <= b, isTrue);
     expect(a.compareTo(b), 0);
   });
+
+  // O Python lança OverflowError nestes casos, por isso não há referência.
+  test('deSerial rejeita serial gigante em vez de dar a volta no int64', () {
+    for (final v in [1e300, 1e16, 2e13, -1e9, 4000001, -4000001]) {
+      expect(() => deSerial(v), throwsFormatException, reason: '$v');
+    }
+  });
+
+  test('somarDias rejeita dias gigantes e mantém os válidos', () {
+    expect(() => somarDias('2026-10-28', 5000000), throwsFormatException);
+    expect(
+      () => somarDias('2026-10-28', -1000000000000),
+      throwsFormatException,
+    );
+    expect(somarDias('2026-10-28', 3), '2026-10-31');
+  });
+
+  test('deSerial: valores válidos de borda continuam iguais', () {
+    expect(deSerial(0), '1899-12-30');
+    expect(deSerial(46300.7), deSerial(46300));
+    expect(deSerial(2958465), '9999-12-31');
+  });
 }

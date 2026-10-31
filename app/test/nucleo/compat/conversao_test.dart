@@ -109,4 +109,13 @@ void main() {
     expect(() => intPython(double.infinity), throwsFormatException);
     expect(() => intPython(double.nan), throwsFormatException);
   });
+
+  test('int fora do int64 lança FormatException (sem saturar)', () {
+    expect(() => intPython(1e300), throwsFormatException);
+    expect(() => intPython(-1e19), throwsFormatException);
+    expect(() => intPython(9.223372036854776e18), throwsFormatException);
+    expect(() => intPython('99999999999999999999'), throwsFormatException);
+    expect(intPython(9.0e18), 9000000000000000000);
+    expect(intPython(-5.9), -5);
+  });
 }
