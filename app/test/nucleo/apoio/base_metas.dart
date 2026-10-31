@@ -1,0 +1,75 @@
+// Apoio dos testes portados de tests/test_metas.py: `Base` (linhas 33-56) e as
+// metas-base de `BASE_ALVO` e `BASE_STOP` (linhas 836-839).
+
+import 'package:calculadoradarf/nucleo/ambiente.dart';
+import 'package:calculadoradarf/nucleo/armazenamento.dart';
+import 'package:calculadoradarf/nucleo/constantes.dart';
+import 'package:calculadoradarf/nucleo/datas.dart';
+import 'package:calculadoradarf/nucleo/modelos/config.dart';
+import 'package:calculadoradarf/nucleo/modelos/lote.dart';
+import 'package:calculadoradarf/nucleo/modelos/mes.dart';
+import 'package:calculadoradarf/nucleo/repositorio.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// `BASE_ALVO`: JSON de uma meta de preço-alvo.
+const Map<String, Object?> baseAlvo = {
+  'id': 'meta-a',
+  'ticker': 'PETR4',
+  'tipo': 'Ação',
+  'lote_id': 'L1',
+  'qtd': 100,
+  'preco_alvo': 20.0,
+  'criada_em': '2026-10-20T11:00:00-03:00',
+};
+
+/// `BASE_STOP`: JSON de uma meta de stop móvel.
+const Map<String, Object?> baseStop = {
+  'id': 'meta-s',
+  'ticker': 'PETR4',
+  'tipo': 'Ação',
+  'lote_id': 'L1',
+  'qtd': 100,
+  'gatilho': 'stop',
+  'stop_inicial': 5.0,
+  'stop_atual': 5.0,
+  'movel': true,
+  'niveis': <Object?>[],
+  'criada_em': '2026-10-20T11:00:00-03:00',
+};
+
+/// `Base.setUp`: relógio e ids congelados, armazenamento em memória, a
+/// configuração padrão e o mês 2026-10 com o lote L1 (PETR4, 100 a R$ 10).
+class BaseMetas {
+  late Repositorio repo;
+  late Config cfg;
+  final DataHora criada = DataHora.parse('2026-10-20T11:00:00-03:00');
+
+  /// Chamar no `setUp` do teste. Restaura a corretagem e o ambiente no
+  /// tearDown (`Base.tearDown`).
+  void preparar() {
+    final corretagem = corretagemPorOrdem;
+    addTearDown(() {
+      corretagemPorOrdem = corretagem;
+      ambiente = Ambiente.sistema();
+    });
+    ambiente = Ambiente.fixo();
+    repo = Repositorio(ArmazenamentoMemoria());
+    cfg = repo.lerConfig();
+    final d = mesVazio('2026-10');
+    d.lotes.add(
+      Lote(
+        id: 'L1',
+        ticker: 'PETR4',
+        tipo: 'Ação',
+        dataCompra: '2026-10-01',
+        qtd: 100,
+        preco: 10.0,
+      ),
+    );
+    repo.salvar(d);
+  }
+
+  /// `Base.lote`: o lote gravado no mês.
+  Lote lote({String mes = '2026-10', String lid = 'L1'}) =>
+      repo.carregar(mes).lotes.firstWhere((l) => l.id == lid);
+}
