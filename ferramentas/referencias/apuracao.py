@@ -138,6 +138,15 @@ def casos():
     ops = [o for c in out for o in c["saida"]["apuracao"]["ops"]]
     assert any(o["regime"] == "Day trade" for o in ops) and any(o["regime"] == "Swing (isento)" for o in ops)
     assert any(c["saida"]["apuracao"]["irrf"] > 0 for c in out)
+    assert any(c["entrada"]["corretagem"] > 0 for c in out)
+    # swing com IRRF do dia entre 0 e R$ 1: rejeitado pelo filtro `> 1`
+    def _dia_irrf_baixo(c):
+        por_dia = {}
+        for o in c["saida"]["apuracao"]["ops"]:
+            if not o["dt"]:
+                por_dia[o["data"]] = por_dia.get(o["data"], 0.0) + o["venda"] * nc.IRRF_SWING
+        return any(0 < x <= 1 for x in por_dia.values())
+    assert any(_dia_irrf_baixo(c) for c in out if c["funcao"] == "apurar")
 
     # calcular_venda, com e sem corretagem, day trade e swing, quantidade inteira e fracionária
     for i in range(80):

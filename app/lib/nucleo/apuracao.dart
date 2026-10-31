@@ -2,6 +2,7 @@
 // 459-485, 520-524). A ordem das operações aritméticas é a do Python.
 
 import 'compat/numeros.dart';
+import 'compat/ordenacao.dart';
 import 'constantes.dart';
 import 'datas.dart';
 import 'formatacao.dart';
@@ -31,25 +32,13 @@ String? erroEdicaoLote(Lote lote, Lote novo) {
   if (lote.vendas.isNotEmpty) {
     final primeira = lote.vendas
         .map((v) => v.data)
-        .reduce((a, b) => _compararTexto(b, a) < 0 ? b : a);
-    if (_compararTexto(novo.dataCompra, primeira) > 0) {
+        .reduce((a, b) => compararTexto(b, a) < 0 ? b : a);
+    if (compararTexto(novo.dataCompra, primeira) > 0) {
       return 'A data da compra não pode ser depois da primeira venda '
           '(${fmtData(primeira)}).';
     }
   }
   return null;
-}
-
-/// Compara por ponto de código, como o `str` do Python.
-int _compararTexto(String a, String b) {
-  final ra = a.runes.iterator;
-  final rb = b.runes.iterator;
-  while (true) {
-    final temA = ra.moveNext();
-    final temB = rb.moveNext();
-    if (!temA || !temB) return temA == temB ? 0 : (temA ? 1 : -1);
-    if (ra.current != rb.current) return ra.current.compareTo(rb.current);
-  }
 }
 
 String statusLote(Lote l) {

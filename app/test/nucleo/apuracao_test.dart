@@ -114,11 +114,14 @@ void main() {
         ),
       ],
     );
+    final antes = apurar(lucro).toJson();
     final a = apurar(prejuizo);
     expect(a.lucroLiquido, lessThan(0));
     expect(a.darf, 0.0);
     // O imposto do mês seguinte é só 15% do lucro dele: nada é abatido.
     final b = apurar(lucro);
+    conferir(b.toJson(), antes);
+    expect(b.irrf, 0.0);
     expect(b.ops.single.regime, 'Swing');
     expect(b.impSt, b.ops.single.liquido * aliqSwing);
     expect(b.darf, b.impSt);

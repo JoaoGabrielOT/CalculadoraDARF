@@ -4,9 +4,7 @@
 /// Ordena [itens] (cópia) por [comparar], mantendo a ordem original nos
 /// empates.
 List<T> ordenadoCom<T>(Iterable<T> itens, int Function(T a, T b) comparar) {
-  final decorados = [
-    for (final (i, item) in itens.indexed) (i, item),
-  ];
+  final decorados = [for (final (i, item) in itens.indexed) (i, item)];
   decorados.sort((a, b) {
     final c = comparar(a.$2, b.$2);
     return c != 0 ? c : a.$1.compareTo(b.$1);
@@ -46,7 +44,7 @@ int compararChaves(List<Object> a, List<Object> b) {
 num _comoNumero(Object v) => v is bool ? (v ? 1 : 0) : v as num;
 
 int _compararElemento(Object a, Object b) {
-  if (a is String && b is String) return _compararTexto(a, b);
+  if (a is String && b is String) return compararTexto(a, b);
   if (a is String || b is String) {
     throw ArgumentError('Chaves incomparáveis: $a e $b');
   }
@@ -57,7 +55,7 @@ int _compararElemento(Object a, Object b) {
 
 /// Compara por ponto de código, como o `str` do Python (não por unidade
 /// UTF-16, que inverte a ordem de caracteres fora do plano básico).
-int _compararTexto(String a, String b) {
+int compararTexto(String a, String b) {
   final ra = a.runes.iterator;
   final rb = b.runes.iterator;
   while (true) {
