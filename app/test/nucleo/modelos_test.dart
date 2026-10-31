@@ -1,4 +1,5 @@
 import 'package:calculadoradarf/nucleo/ambiente.dart';
+import 'package:calculadoradarf/nucleo/compat/numeros.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/datas.dart';
 import 'package:calculadoradarf/nucleo/erros.dart';
@@ -302,7 +303,7 @@ void main() {
       final t = a.agora();
       expect(t, greaterThanOrEqualTo(antes - 1));
       expect(t, lessThan(antes + 5));
-      expect((t * 1000) == (t * 1000).truncateToDouble(), true);
+      expect(arredondar(t, 3), t);
       final id = a.novoId();
       expect(RegExp(r'^[0-9a-f]{32}$').hasMatch(id), true);
       expect(a.novoId(), isNot(id));
