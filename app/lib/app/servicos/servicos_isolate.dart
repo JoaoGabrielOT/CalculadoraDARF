@@ -6,7 +6,8 @@
 //   interface -> isolate: ['chamar', id, função], ['url', id, abriu]
 //   isolate -> interface: ['pronto', porta], ['falha', erro, pilha],
 //                         ['res', id, valor], ['err', id, erro, pilha],
-//                         ['ev', evento], ['url', id, uri]
+//                         ['ev', evento], ['url', id, uri],
+//                         ['morte', texto] (erro assíncrono solto)
 // A interface relança o mesmo objeto de erro, com a pilha do isolate.
 
 import 'dart:async';
@@ -230,7 +231,16 @@ void _enviarSeguro(SendPort porta, List<Object?> msg) {
   }
 }
 
-Future<void> _principal((ParametrosServicos, SendPort) args) async {
+/// Erro assíncrono solto vira a mensagem `morte` (na mesma porta das demais,
+/// então a causa chega antes de qualquer fechamento); a interface encerra.
+void _principal((ParametrosServicos, SendPort) args) {
+  runZonedGuarded(
+    () => _executar(args),
+    (e, pilha) => _enviarSeguro(args.$2, ['morte', _textoDe(e)]),
+  );
+}
+
+Future<void> _executar((ParametrosServicos, SendPort) args) async {
   final (p, interface) = args;
   final porta = ReceivePort();
   final urls = <int, Completer<bool>>{};
@@ -282,7 +292,6 @@ class ServicosIsolate implements ServicosApp {
     this._enviar,
     this._recebe,
     this._saida,
-    this._erros,
     this._causa,
     this._abrirUrl,
   ) {
@@ -298,7 +307,6 @@ class ServicosIsolate implements ServicosApp {
   }) async {
     final recebe = ReceivePort();
     final saida = ReceivePort();
-    final erros = ReceivePort();
     final pronto = Completer<SendPort>();
     ServicosIsolate? proxy;
     // mensagens que chegam antes do proxy existir (eventos da montagem)
@@ -308,6 +316,12 @@ class ServicosIsolate implements ServicosApp {
     recebe.listen((msg) {
       final m = msg as List<Object?>;
       switch (m[0]) {
+        case 'morte':
+          causa.add(m[1]! as String);
+          if (!pronto.isCompleted) {
+            pronto.completeError(StateError(_mensagemEncerrado(causa)));
+          }
+          proxy?._fechar();
         case 'pronto':
           pronto.complete(m[1] as SendPort);
         case 'falha':
@@ -322,12 +336,10 @@ class ServicosIsolate implements ServicosApp {
           }
       }
     });
-    erros.listen((e) => causa.add((e as List<Object?>)[0].toString()));
     final isolate = await Isolate.spawn<(ParametrosServicos, SendPort)>(
       _principal,
       (p, recebe.sendPort),
       onExit: saida.sendPort,
-      onError: erros.sendPort,
     );
     saida.listen((_) {
       if (!pronto.isCompleted) {
@@ -342,14 +354,12 @@ class ServicosIsolate implements ServicosApp {
         enviar,
         recebe,
         saida,
-        erros,
         causa,
         abrirUrl,
       );
       antes.forEach(novo._tratar);
       return novo;
     } catch (_) {
-      erros.close();
       isolate.kill(priority: Isolate.immediate);
       recebe.close();
       saida.close();
@@ -361,14 +371,17 @@ class ServicosIsolate implements ServicosApp {
   final SendPort _enviar;
   final ReceivePort _recebe;
   final ReceivePort _saida;
-  final ReceivePort _erros;
   final List<String> _causa;
   final Future<bool> Function(Uri) _abrirUrl;
   final Map<int, Completer<Object?>> _pendentes = {};
 
   /// Broadcast descartaria o que chega sem ouvinte: até a primeira assinatura
-  /// os eventos esperam em [_buffer] e saem na ordem.
+  /// os eventos esperam em [_buffer] e saem na ordem. O buffer guarda no
+  /// máximo [_limiteBuffer] eventos (os mais antigos são descartados) e só
+  /// vale até a primeira assinatura: depois dela os eventos vão direto ao
+  /// stream e quem assina mais tarde não recebe o passado.
   late final StreamController<EventoServico> _eventos;
+  static const _limiteBuffer = 256;
   final List<EventoServico> _buffer = [];
   bool _ouvido = false;
   int _proximo = 0;
@@ -390,6 +403,7 @@ class ServicosIsolate implements ServicosApp {
       _eventos.add(e);
     } else {
       _buffer.add(e);
+      if (_buffer.length > _limiteBuffer) _buffer.removeAt(0);
     }
   }
 
@@ -424,7 +438,6 @@ class ServicosIsolate implements ServicosApp {
     _isolate.kill(priority: Isolate.immediate);
     _recebe.close();
     _saida.close();
-    _erros.close();
     final erro = _mensagemEncerrado(_causa);
     for (final c in _pendentes.values) {
       c.completeError(StateError(erro));
@@ -463,6 +476,9 @@ class ServicosIsolate implements ServicosApp {
     if (!_aberto) return;
     try {
       await _chamar((s) => s.encerrar());
+    } on StateError {
+      // o isolate morreu durante o encerramento: já está encerrado
+      if (_aberto) rethrow;
     } finally {
       _fechar();
     }

@@ -252,16 +252,57 @@ void main() {
     );
     try {
       await cedo.conta(); // a interface já conversou com o isolate
-      final vistos = await cedo.eventos
-          .take(2)
-          .map((e) => (e as EventoAviso).texto)
-          .toList()
-          .timeout(const Duration(seconds: 5));
-      expect(vistos, ['primeiro', 'segundo']);
+      // dois assinantes juntos: cada um recebe exatamente os dois, sem repetir
+      final a = <String>[], b = <String>[];
+      cedo.eventos.listen((e) => a.add((e as EventoAviso).texto));
+      cedo.eventos.listen((e) => b.add((e as EventoAviso).texto));
+      await Future<void>.delayed(Duration.zero);
+      await cedo.conta();
+      await Future<void>.delayed(Duration.zero);
+      expect(a, ['primeiro', 'segundo']);
+      expect(b, ['primeiro', 'segundo']);
+
+      // quem assina depois da descarga não recebe o passado (o buffer só vale
+      // até a primeira assinatura)
+      final tarde = <String>[];
+      cedo.eventos.listen((e) => tarde.add((e as EventoAviso).texto));
+      await Future<void>.delayed(Duration.zero);
+      expect(tarde, isEmpty);
     } finally {
       await cedo.encerrar();
     }
   });
+
+  test('buffer de eventos guarda só os 256 últimos, na ordem', () async {
+    final muitos = await ServicosIsolate.criar(
+      ParametrosServicos(
+        pastaDados: '',
+        pastaTemporaria: 'muitos',
+        windows: true,
+        criarServicos: criarServicosEco,
+        timers: false,
+      ),
+      abrirUrl: (_) async => true,
+    );
+    try {
+      await muitos.conta();
+      final vistos = <String>[];
+      muitos.eventos.listen((e) => vistos.add((e as EventoAviso).texto));
+      await Future<void>.delayed(Duration.zero);
+      expect(vistos, [for (var i = 44; i < 300; i++) '$i']);
+    } finally {
+      await muitos.encerrar();
+    }
+  });
+
+  test(
+    'encerrar em cache conclui normalmente se o isolate morre no meio',
+    () async {
+      await s.removerAmigo('morreaoencerrar@exemplo.com');
+      await s.encerrar();
+      await s.encerrar();
+    },
+  );
 
   test('erro não enviável chega com o texto, sem pendurar o pedido', () async {
     await expectLater(
@@ -371,6 +412,7 @@ void main() {
         tamanho: 1,
         sha256: '',
       );
+      final progresso = s.eventos.firstWhere((e) => e is EventoProgresso);
       final baixando = s.baixarAtualizacao(info);
       final falha = expectLater(
         baixando,
@@ -382,7 +424,7 @@ void main() {
           ),
         ),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await progresso; // o download já começou no isolate
       await s.cancelarDownload();
       await falha;
     },

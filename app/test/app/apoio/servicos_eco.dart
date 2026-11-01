@@ -24,12 +24,18 @@ ServicosApp criarServicosEco(
     emitir(const EventoAviso('cedo', 'primeiro'));
     emitir(const EventoAviso('cedo', 'segundo'));
   }
+  if (p.pastaTemporaria == 'muitos') {
+    for (var i = 0; i < 300; i++) {
+      emitir(EventoAviso('muitos', '$i'));
+    }
+  }
   return ServicosEco(abrirUrl, emitir);
 }
 
 /// Erro com um campo que não viaja entre isolates.
 class ErroNaoEnviavel implements Exception {
-  ErroNaoEnviavel(this.texto) : porta = ReceivePort();
+  // a porta só existe para tornar o erro não enviável; fechada, não vaza
+  ErroNaoEnviavel(this.texto) : porta = ReceivePort()..close();
 
   final String texto;
   final ReceivePort porta;
@@ -87,8 +93,16 @@ class ServicosEco implements ServicosApp {
     temCredencial: true,
   );
 
+  bool _morrerAoEncerrar = false;
+
+  /// Com [_morrerAoEncerrar], um erro assíncrono solto derruba o isolate no
+  /// meio do encerramento.
   @override
-  Future<void> encerrar() async {}
+  Future<void> encerrar() async {
+    if (!_morrerAoEncerrar) return;
+    Timer.run(() => throw StateError('morreu ao encerrar'));
+    await Completer<void>().future;
+  }
 
   @override
   Future<void> salvarPreferencias(Preferencias p) async {
@@ -203,6 +217,7 @@ class ServicosEco implements ServicosApp {
   Future<void> removerAmigo(String email) async {
     if (email.contains('falha')) throw ErroGoogle('O Google recusou.', 403);
     if (email.contains('pendura')) await Completer<void>().future;
+    if (email.contains('morreaoencerrar')) _morrerAoEncerrar = true;
   }
 
   @override
@@ -377,6 +392,7 @@ class ServicosEco implements ServicosApp {
     }
     if (info.versao == 'longo') {
       final c = _cancelado = Completer<void>();
+      _emitir(const EventoProgresso(1, 10)); // o teste cancela depois deste
       await c.future;
       throw ErroAtualizacao('Atualização cancelada.');
     }
