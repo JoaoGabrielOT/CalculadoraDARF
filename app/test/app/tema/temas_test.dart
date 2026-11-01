@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:calculadoradarf/app/tema/temas.dart';
@@ -42,7 +44,7 @@ void main() {
     expect(t.cartaoBorda, const Color(0xFF30363D));
     expect(t.linha, const Color(0xFF21262D));
     expect(t.texto, const Color(0xFFE6EDF3));
-    expect(t.textoSuave, const Color(0xFF7D8590));
+    expect(t.textoSuave, const Color(0xFF8B949E));
     expect(t.chipAtivoBorda, const Color(0xFF2EA043));
     expect(t.chipAtivoTexto, const Color(0xFF3FB950));
     expect(t.destaque, const Color(0xFF2EA043));
@@ -119,5 +121,184 @@ void main() {
     expect(corVariacao(ctx, -0.1), cores.queda);
     expect(corVariacao(ctx, 0), cores.textoSuave);
     expect(corVariacao(ctx, null), cores.textoSuave);
+  });
+
+  test('temaDe(automatico) cai no Claro sem assert', () {
+    final t = temaDe(TemaVisual.automatico).extension<CoresApp>()!;
+    expect(t.fundo, const Color(0xFFF6F7FB));
+  });
+
+  group('contraste WCAG AA (4,5:1 em texto normal)', () {
+    double razao(Color a, Color b) {
+      final la = a.computeLuminance();
+      final lb = b.computeLuminance();
+      final claro = la > lb ? la : lb;
+      final escuro = la > lb ? lb : la;
+      return (claro + 0.05) / (escuro + 0.05);
+    }
+
+    for (final tema in [
+      TemaVisual.terminal,
+      TemaVisual.claro,
+      TemaVisual.moderno,
+    ]) {
+      test(tema.rotulo, () {
+        final th = temaDe(tema);
+        final c = th.extension<CoresApp>()!;
+        // Fundos em que o texto aparece: fundo, cartão sobre o fundo e, no
+        // Moderno, o cartão sobre o ponto mais claro do gradiente.
+        final base = <Color>[c.fundo];
+        final grad = c.fundoGradiente;
+        if (grad is LinearGradient) base.addAll(grad.colors);
+        final fundos = [
+          for (final b in base) ...[b, Color.alphaBlend(c.cartao, b)],
+          th.colorScheme.surface,
+          th.colorScheme.surfaceContainerHigh,
+          th.colorScheme.surfaceContainerHighest,
+        ];
+        final pares = <String, Color>{
+          'texto': c.texto,
+          'textoSuave': c.textoSuave,
+          'aviso': c.aviso,
+          'alta': c.alta,
+          'queda': c.queda,
+        };
+        for (final f in fundos) {
+          pares.forEach((nome, cor) {
+            expect(
+              razao(cor, f),
+              greaterThanOrEqualTo(4.5),
+              reason: '$nome sobre $f',
+            );
+          });
+        }
+        final chip = Color.alphaBlend(c.chipFundo, c.fundo);
+        expect(razao(c.chipTexto, chip), greaterThanOrEqualTo(4.5));
+        expect(
+          razao(c.navAtivo, th.colorScheme.surfaceContainerLow),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(
+          razao(th.colorScheme.onPrimary, c.destaque),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(
+          razao(c.chipAtivoTexto, c.chipAtivoFundo),
+          greaterThanOrEqualTo(4.5),
+        );
+        // Fixados no spec e fora desta checagem: selo de alta do Claro
+        // (#14833b sobre #e3f6ea, 4,3:1) e texto branco sobre o fim do
+        // degradê do chip ativo do Moderno (#00b894).
+        if (tema != TemaVisual.claro) {
+          expect(
+            razao(c.alta, Color.alphaBlend(c.seloAltaFundo, c.fundo)),
+            greaterThanOrEqualTo(4.5),
+          );
+        }
+        expect(
+          razao(c.queda, Color.alphaBlend(c.seloQuedaFundo, c.fundo)),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+    }
+  });
+
+  group('componentes usam as cores do tema', () {
+    for (final tema in [
+      TemaVisual.terminal,
+      TemaVisual.claro,
+      TemaVisual.moderno,
+    ]) {
+      testWidgets(tema.rotulo, (tester) async {
+        final th = temaDe(tema);
+        final c = th.extension<CoresApp>()!;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: th,
+            home: Scaffold(
+              body: Column(
+                children: [
+                  const TextField(
+                    decoration: InputDecoration(labelText: 'Nome'),
+                  ),
+                  NavigationBar(
+                    selectedIndex: 0,
+                    destinations: const [
+                      NavigationDestination(icon: Icon(Icons.home), label: 'A'),
+                      NavigationDestination(icon: Icon(Icons.list), label: 'B'),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 200,
+                    child: NavigationRail(
+                      selectedIndex: 0,
+                      destinations: const [
+                        NavigationRailDestination(
+                          icon: Icon(Icons.home),
+                          label: Text('A'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.list),
+                          label: Text('B'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  DataTable(
+                    columns: const [DataColumn(label: Text('Col'))],
+                    rows: const [
+                      DataRow(cells: [DataCell(Text('Valor'))]),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        Color? corDoTexto(String t) =>
+            DefaultTextStyle.of(tester.element(find.text(t))).style.color;
+        expect(corDoTexto('Col'), c.textoSuave);
+        expect(corDoTexto('Valor'), c.texto);
+        final barra = tester.widget<Material>(
+          find
+              .descendant(
+                of: find.byType(NavigationBar),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        expect(barra.color, th.colorScheme.surfaceContainerLow);
+        expect(barra.color!.a, 1);
+        final rail = tester.widget<Material>(
+          find
+              .descendant(
+                of: find.byType(NavigationRail),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        expect(rail.color, th.colorScheme.surfaceContainerLow);
+
+        unawaited(
+          showDialog<void>(
+            context: tester.element(find.byType(Scaffold)),
+            builder: (_) => const AlertDialog(title: Text('Titulo')),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final dialogo = tester.widget<Material>(
+          find
+              .descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(Material),
+              )
+              .first,
+        );
+        expect(dialogo.color, th.colorScheme.surfaceContainerHigh);
+        expect(dialogo.color!.a, 1);
+        expect(th.colorScheme.surface.a, 1);
+        expect(th.colorScheme.surfaceTint, Colors.transparent);
+      });
+    }
   });
 }

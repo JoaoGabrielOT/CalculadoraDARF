@@ -25,7 +25,7 @@ const _terminal = CoresApp(
   sombraCartao: [],
   raioCartao: 6,
   texto: Color(0xFFE6EDF3),
-  textoSuave: Color(0xFF7D8590),
+  textoSuave: Color(0xFF8B949E),
   alta: Color(0xFF3FB950),
   queda: Color(0xFFF85149),
   seloAltaFundo: Color(0x00000000),
@@ -56,12 +56,12 @@ const _claro = CoresApp(
   ],
   raioCartao: 16,
   texto: Color(0xFF1B1F2A),
-  textoSuave: Color(0xFF8A90A6),
+  textoSuave: Color(0xFF5F657D),
   alta: Color(0xFF14833B),
   queda: Color(0xFFC62828),
   seloAltaFundo: Color(0xFFE3F6EA),
   seloQuedaFundo: Color(0xFFFDE8E8),
-  aviso: Color(0xFFB26A00),
+  aviso: Color(0xFF9A5B00),
   destaque: Color(0xFF1B1F2A),
   chipFundo: Color(0xFFE8EAF2),
   chipTexto: Color(0xFF4A5068),
@@ -87,7 +87,7 @@ const _moderno = CoresApp(
   sombraCartao: [],
   raioCartao: 18,
   texto: Color(0xFFF1F3FB),
-  textoSuave: Color(0xFF7C84A8),
+  textoSuave: Color(0xFF8F97BA),
   alta: Color(0xFF55EFC4),
   queda: Color(0xFFFF7675),
   seloAltaFundo: Color.fromRGBO(0, 184, 148, .18),
@@ -107,36 +107,244 @@ const _moderno = CoresApp(
   densa: false,
 );
 
-/// Tema Material 3 para um tema já resolvido (nunca `automatico`).
+/// Superfícies opacas de cada tema (a translucidez fica só em `CoresApp.cartao`).
+class _Superficies {
+  const _Superficies(
+    this.surface,
+    this.lowest,
+    this.low,
+    this.mid,
+    this.high,
+    this.highest,
+  );
+  final Color surface, lowest, low, mid, high, highest;
+}
+
+const _supTerminal = _Superficies(
+  Color(0xFF161B22),
+  Color(0xFF0D1117),
+  Color(0xFF12171E),
+  Color(0xFF161B22),
+  Color(0xFF1C2128),
+  Color(0xFF21262D),
+);
+const _supClaro = _Superficies(
+  Color(0xFFFFFFFF),
+  Color(0xFFFFFFFF),
+  Color(0xFFF6F7FB),
+  Color(0xFFEEF0F7),
+  Color(0xFFFFFFFF),
+  Color(0xFFF6F7FB),
+);
+// Cartão (branco 5%) composto sobre #0b0e1a.
+const _supModerno = _Superficies(
+  Color(0xFF171A26),
+  Color(0xFF0B0E1A),
+  Color(0xFF111422),
+  Color(0xFF171A26),
+  Color(0xFF1E2232),
+  Color(0xFF262B3E),
+);
+
+/// Tema Material 3 para um tema já resolvido. `automatico` (sem sistema para
+/// consultar) cai no Claro.
 ThemeData temaDe(TemaVisual resolvido) {
-  assert(resolvido != TemaVisual.automatico, 'resolva o automático antes');
-  final cores = switch (resolvido) {
-    TemaVisual.terminal => _terminal,
-    TemaVisual.moderno => _moderno,
-    _ => _claro,
+  return switch (resolvido) {
+    // Terminal: texto escuro sobre o verde de destaque (contraste AA).
+    TemaVisual.terminal => _montar(
+      _terminal,
+      _supTerminal,
+      Brightness.dark,
+      _terminal.fundo,
+    ),
+    TemaVisual.moderno => _montar(
+      _moderno,
+      _supModerno,
+      Brightness.dark,
+      Colors.white,
+    ),
+    _ => _montar(_claro, _supClaro, Brightness.light, Colors.white),
   };
-  final escuro = cores != _claro;
-  final base = ColorScheme.fromSeed(
-    seedColor: cores.destaque,
-    brightness: escuro ? Brightness.dark : Brightness.light,
+}
+
+ThemeData _montar(
+  CoresApp c,
+  _Superficies s,
+  Brightness brilho,
+  Color onPrimary,
+) {
+  final borda = c.cartaoBorda.a == 0 ? c.linha : c.cartaoBorda;
+  final forma = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(c.raioCartao),
+    side: BorderSide(color: borda),
   );
-  final esquema = base.copyWith(
-    primary: cores.destaque,
-    onPrimary: Colors.white,
-    surface: cores.cartao,
-    onSurface: cores.texto,
-    error: cores.queda,
-    outline: cores.cartaoBorda,
-    outlineVariant: cores.linha,
+  final formaSemBorda = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(c.raioCartao),
   );
-  return ThemeData(
+  final esquema =
+      ColorScheme.fromSeed(seedColor: c.destaque, brightness: brilho).copyWith(
+        primary: c.destaque,
+        onPrimary: onPrimary,
+        surface: s.surface,
+        onSurface: c.texto,
+        onSurfaceVariant: c.textoSuave,
+        surfaceTint: Colors.transparent,
+        surfaceContainerLowest: s.lowest,
+        surfaceContainerLow: s.low,
+        surfaceContainer: s.mid,
+        surfaceContainerHigh: s.high,
+        surfaceContainerHighest: s.highest,
+        error: c.queda,
+        outline: borda,
+        outlineVariant: c.linha,
+      );
+  final base = ThemeData(
     useMaterial3: true,
     fontFamily: 'Roboto',
     colorScheme: esquema,
-    scaffoldBackgroundColor: cores.fundo,
-    canvasColor: cores.fundo,
-    dividerColor: cores.linha,
-    visualDensity: cores.densa ? VisualDensity.compact : VisualDensity.standard,
-    extensions: [cores],
+    brightness: brilho,
+  );
+  final estadoNav = WidgetStateProperty.resolveWith<Color>(
+    (e) => e.contains(WidgetState.selected) ? c.navAtivo : c.textoSuave,
+  );
+  final estiloBotao = ButtonStyle(shape: WidgetStatePropertyAll(formaSemBorda));
+  OutlineInputBorder campo(Color cor, [double largura = 1]) =>
+      OutlineInputBorder(
+        borderRadius: BorderRadius.circular(c.raioCartao),
+        borderSide: BorderSide(color: cor, width: largura),
+      );
+  return base.copyWith(
+    scaffoldBackgroundColor: c.fundo,
+    canvasColor: c.fundo,
+    dividerColor: c.linha,
+    dividerTheme: DividerThemeData(color: c.linha),
+    visualDensity: c.densa ? VisualDensity.compact : VisualDensity.standard,
+    textTheme: base.textTheme.apply(
+      bodyColor: c.texto,
+      displayColor: c.texto,
+      fontFamily: 'Roboto',
+    ),
+    extensions: [c],
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: s.lowest,
+      labelStyle: TextStyle(color: c.textoSuave),
+      hintStyle: TextStyle(color: c.textoSuave),
+      border: campo(borda),
+      enabledBorder: campo(borda),
+      focusedBorder: campo(c.destaque, 2),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: s.high,
+      surfaceTintColor: Colors.transparent,
+      shape: forma,
+      titleTextStyle: TextStyle(
+        color: c.texto,
+        fontFamily: 'Roboto',
+        fontSize: 20,
+        fontWeight: FontWeight.w500,
+      ),
+      contentTextStyle: TextStyle(
+        color: c.texto,
+        fontFamily: 'Roboto',
+        fontSize: 14,
+      ),
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: c.fundo,
+      foregroundColor: c.texto,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: s.low,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: Colors.transparent,
+      iconTheme: WidgetStateProperty.resolveWith(
+        (e) => IconThemeData(color: estadoNav.resolve(e)),
+      ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (e) => TextStyle(color: estadoNav.resolve(e), fontSize: 12),
+      ),
+    ),
+    navigationRailTheme: NavigationRailThemeData(
+      backgroundColor: s.low,
+      indicatorColor: Colors.transparent,
+      selectedIconTheme: IconThemeData(color: c.navAtivo),
+      unselectedIconTheme: IconThemeData(color: c.textoSuave),
+      selectedLabelTextStyle: TextStyle(color: c.navAtivo),
+      unselectedLabelTextStyle: TextStyle(color: c.textoSuave),
+    ),
+    cardTheme: CardThemeData(
+      color: s.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: forma,
+    ),
+    dataTableTheme: DataTableThemeData(
+      headingRowColor: const WidgetStatePropertyAll(Colors.transparent),
+      dataRowColor: const WidgetStatePropertyAll(Colors.transparent),
+      headingTextStyle: TextStyle(
+        color: c.textoSuave,
+        fontFamily: 'Roboto',
+        fontWeight: FontWeight.w500,
+      ),
+      dataTextStyle: TextStyle(color: c.texto, fontFamily: 'Roboto'),
+      dividerThickness: 1,
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: Color.alphaBlend(c.chipFundo, c.fundo),
+      selectedColor: c.chipAtivoFundo,
+      labelStyle: TextStyle(color: c.chipTexto),
+      secondaryLabelStyle: TextStyle(color: c.chipAtivoTexto),
+      side: BorderSide(color: c.chipAtivoBorda ?? c.linha),
+      shape: formaSemBorda,
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: s.high,
+      surfaceTintColor: Colors.transparent,
+      shape: forma,
+      textStyle: TextStyle(color: c.texto, fontFamily: 'Roboto'),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: s.high,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(c.raioCartao)),
+      ),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: s.highest,
+      contentTextStyle: TextStyle(color: c.texto, fontFamily: 'Roboto'),
+      actionTextColor: c.navAtivo,
+      shape: formaSemBorda,
+      behavior: SnackBarBehavior.floating,
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: estiloBotao.copyWith(
+        backgroundColor: WidgetStatePropertyAll(c.destaque),
+        foregroundColor: WidgetStatePropertyAll(onPrimary),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: estiloBotao.copyWith(
+        backgroundColor: WidgetStatePropertyAll(s.highest),
+        foregroundColor: WidgetStatePropertyAll(c.texto),
+        elevation: const WidgetStatePropertyAll(0),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: estiloBotao.copyWith(
+        foregroundColor: WidgetStatePropertyAll(c.texto),
+        side: WidgetStatePropertyAll(BorderSide(color: borda)),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: estiloBotao.copyWith(
+        foregroundColor: WidgetStatePropertyAll(c.navAtivo),
+      ),
+    ),
   );
 }
