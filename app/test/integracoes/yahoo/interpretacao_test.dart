@@ -73,6 +73,14 @@ void main() {
   });
 
   group('cotacao', () {
+    test('há casos', () {
+      expect(
+        carregarCasos('yahoo_rede')
+            .where((c) => c.funcao == 'cotacao')
+            .where(_status200ComResultado),
+        isNotEmpty,
+      );
+    });
     for (final caso in carregarCasos(
       'yahoo_rede',
     ).where((c) => c.funcao == 'cotacao').where(_status200ComResultado)) {
@@ -94,6 +102,14 @@ void main() {
   });
 
   group('fechamento', () {
+    test('há casos', () {
+      expect(
+        carregarCasos('yahoo_rede')
+            .where((c) => c.funcao == 'fechamento' || c.funcao == 'preco_venda')
+            .where(_status200ComResultado),
+        isNotEmpty,
+      );
+    });
     for (final caso
         in carregarCasos('yahoo_rede')
             .where((c) => c.funcao == 'fechamento' || c.funcao == 'preco_venda')
@@ -130,6 +146,14 @@ void main() {
   });
 
   group('grafico', () {
+    test('há casos', () {
+      expect(
+        carregarCasos('yahoo_rede')
+            .where((c) => c.funcao == 'grafico')
+            .where(_status200ComResultado),
+        isNotEmpty,
+      );
+    });
     for (final caso in carregarCasos(
       'yahoo_rede',
     ).where((c) => c.funcao == 'grafico').where(_status200ComResultado)) {

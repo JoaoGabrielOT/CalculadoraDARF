@@ -22,7 +22,9 @@ class Timeout(RequestException):
 
 
 class HTTPError(RequestException):
-    pass
+    def __init__(self, *args, response=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.response = response
 
 
 class _Cabecalhos(dict):
@@ -77,9 +79,14 @@ class Resposta:
             return self._json
         return _json.loads(self.text)
 
-    def iter_content(self, n=1):
-        for i in range(0, len(self.content), n):
-            yield self.content[i:i + n]
+    def iter_content(self, chunk_size=1, decode_unicode=False):
+        """Blocos do corpo; `None` entrega o corpo inteiro em um bloco (como o requests)."""
+        if chunk_size is None:
+            if self.content:
+                yield self.content
+            return
+        for i in range(0, len(self.content), chunk_size):
+            yield self.content[i:i + chunk_size]
 
     def raise_for_status(self):
         """Mesmo texto do requests: '<status> Client|Server Error: <motivo> for url: <url>'."""
@@ -89,7 +96,7 @@ class Resposta:
             tipo = "Server Error"
         else:
             return
-        raise HTTPError(f"{self.status_code} {tipo}: {self.reason} for url: {self.url}")
+        raise HTTPError(f"{self.status_code} {tipo}: {self.reason} for url: {self.url}", response=self)
 
     def close(self):
         pass
@@ -99,6 +106,13 @@ class Resposta:
 
     def __exit__(self, *args):
         return False
+
+
+def _itens(params):
+    """`params` como dict ou lista de tuplas -> lista de pares."""
+    if params is None:
+        return []
+    return list(params.items()) if isinstance(params, dict) else list(params)
 
 
 def _lista_de_texto(valor):
@@ -116,12 +130,14 @@ class _Rede:
         self._usadas = 0
         self._antes = None
 
-    def _servir(self, metodo, url, params=None, headers=None, data=None, json=None, **_):
-        params = params or {}
+    def _servir(self, metodo, url, params=None, headers=None, data=None, json=None, timeout=None, stream=None, **_):
+        itens = _itens(params)
+        parametros = {}
+        for k, v in itens:
+            parametros.setdefault(str(k), []).extend(_lista_de_texto(v))
         self._pedidos.append({
-            "metodo": metodo, "url": url,
-            "params": {str(k): _lista_de_texto(v) for k, v in params.items()},
-            "cabecalhos": dict(headers or {}), "dados": data, "json": json})
+            "metodo": metodo, "url": url, "params": parametros,
+            "cabecalhos": dict(headers or {}), "dados": data, "json": json, "timeout": timeout, "stream": stream})
         if not self._respostas:
             raise AssertionError(f"pedido sem resposta programada: {metodo} {url}")
         item = self._respostas[min(self._usadas, len(self._respostas) - 1)]
@@ -129,7 +145,7 @@ class _Rede:
         if isinstance(item, BaseException):
             raise item
         if item.url is None:
-            item.url = url + (("?" + urlencode(params, doseq=True)) if params else "")
+            item.url = url + (("?" + urlencode(itens, doseq=True)) if itens else "")
         return item
 
     def _modulo(self):
@@ -158,7 +174,7 @@ class _Rede:
 def rede(respostas):
     """(context manager, pedidos). `respostas`: lista de Resposta (ou exceção, que é lançada) servidas na ordem;
     esgotada, repete a última. Cada pedido gravado é
-    {"metodo", "url", "params": {k: [str]}, "cabecalhos", "dados", "json"}."""
+    {"metodo", "url", "params": {k: [str]}, "cabecalhos", "dados", "json", "timeout", "stream"}."""
     pedidos = []
     return _Rede(respostas, pedidos), pedidos
 
