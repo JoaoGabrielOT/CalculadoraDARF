@@ -124,7 +124,10 @@ class _GuardaDigest implements Sink<Digest> {
 
 /// Baixa a atualização para [destino]. O corpo vai para um `.tmp` ao lado e só
 /// vira [destino] depois de conferido; qualquer falha (inclusive cancelamento)
-/// apaga o parcial e o [destino], e a exceção é relançada.
+/// apaga só o parcial e relança o erro original. O [destino] não é apagado em
+/// falha: ele só é tocado no rename final, e um instalador válido baixado antes
+/// não deve ser descartado por uma tentativa que falhou. A limpeza é
+/// melhor-esforço e nunca substitui o erro original.
 Future<File> baixarAtualizacao(
   ClienteHttp http,
   InfoAtualizacao info,
@@ -137,7 +140,6 @@ Future<File> baixarAtualizacao(
     return await _baixar(http, info, destino, parcial, progresso, cancelado);
   } catch (_) {
     await _apagar(parcial);
-    await _apagar(destino);
     rethrow;
   }
 }
@@ -145,8 +147,8 @@ Future<File> baixarAtualizacao(
 Future<void> _apagar(File arquivo) async {
   try {
     await arquivo.delete();
-  } on PathNotFoundException {
-    // Já não existe.
+  } on FileSystemException {
+    // Melhor-esforço (já não existe, ou o antivírus o segura): não esconde o erro original.
   }
 }
 
@@ -174,44 +176,57 @@ Future<File> _baixar(
   );
   try {
     conferirStatus(resposta.status, url, motivo: resposta.motivo);
+    final total =
+        int.tryParse(_cabecalho(resposta.cabecalhos, 'content-length')) ??
+        (info.tamanho > 0 ? info.tamanho : 0);
+
+    final guarda = _GuardaDigest();
+    final hash = sha256.startChunkedConversion(guarda);
+    var baixado = 0;
+    final arquivo = await parcial.open(mode: FileMode.write);
+    try {
+      await for (final bloco in resposta.blocos) {
+        if (bloco.isEmpty) continue;
+        if (cancelado?.call() ?? false) {
+          throw ErroAtualizacao('Atualização cancelada.');
+        }
+        await arquivo.writeFrom(bloco);
+        hash.add(bloco);
+        baixado += bloco.length;
+        progresso?.call(baixado, total);
+      }
+    } finally {
+      await arquivo.close();
+    }
+    hash.close();
+    conferirCancelado();
+
+    if (info.tamanho > 0 && baixado != info.tamanho) {
+      throw ErroAtualizacao('O download ficou incompleto.');
+    }
+    if (info.sha256.isNotEmpty &&
+        guarda.valor.toString().toLowerCase() != info.sha256.toLowerCase()) {
+      throw ErroAtualizacao('O arquivo baixado não confere com o publicado.');
+    }
+    return await parcial.rename(destino.path);
+  } on FileSystemException {
+    await _soltar(resposta);
+    throw ErroAtualizacao(
+      'Não foi possível gravar a atualização no disco. Verifique o espaço livre.',
+    );
   } catch (_) {
-    await resposta.cancelar();
+    // Também solta o socket quando o erro é de escrita ou do próprio fluxo.
+    await _soltar(resposta);
     rethrow;
   }
-  final total =
-      int.tryParse(_cabecalho(resposta.cabecalhos, 'content-length')) ??
-      (info.tamanho > 0 ? info.tamanho : 0);
+}
 
-  final guarda = _GuardaDigest();
-  final hash = sha256.startChunkedConversion(guarda);
-  var baixado = 0;
-  final arquivo = await parcial.open(mode: FileMode.write);
+Future<void> _soltar(RespostaContinua resposta) async {
   try {
-    await for (final bloco in resposta.blocos) {
-      if (bloco.isEmpty) continue;
-      if (cancelado?.call() ?? false) {
-        await resposta.cancelar();
-        throw ErroAtualizacao('Atualização cancelada.');
-      }
-      await arquivo.writeFrom(bloco);
-      hash.add(bloco);
-      baixado += bloco.length;
-      progresso?.call(baixado, total);
-    }
-  } finally {
-    await arquivo.close();
+    await resposta.cancelar();
+  } catch (_) {
+    // Melhor-esforço.
   }
-  hash.close();
-  conferirCancelado();
-
-  if (info.tamanho > 0 && baixado != info.tamanho) {
-    throw ErroAtualizacao('O download ficou incompleto.');
-  }
-  if (info.sha256.isNotEmpty &&
-      guarda.valor.toString().toLowerCase() != info.sha256.toLowerCase()) {
-    throw ErroAtualizacao('O arquivo baixado não confere com o publicado.');
-  }
-  return parcial.rename(destino.path);
 }
 
 String _cabecalho(Map<String, String> cabecalhos, String nome) {

@@ -137,6 +137,8 @@ void main() {
     expect(versaoMaisNova('v2.0.0', '2.0.0'), isFalse);
     expect(versaoMaisNova('v1.12.1', '2.0.0'), isFalse);
     expect(versaoMaisNova('v1.12.1', '1.12.0'), isTrue);
+    expect(versaoMaisNova('2.0.10', '2.0.9'), isTrue);
+    expect(versaoMaisNova('2.0.9', '2.0.10'), isFalse);
     expect(versaoApp, '2.0.0');
   });
 
@@ -370,7 +372,7 @@ void main() {
       naoSobraNada();
     });
 
-    test('falha ao baixar apaga um destino que já existia', () async {
+    test('falha não remove um destino que já existia', () async {
       destino.writeAsBytesSync([1, 2, 3]);
       final falso = ClienteFalso.fila([RespostaFalsa(200, blocos: blocos)]);
       await expectLater(
@@ -381,7 +383,28 @@ void main() {
         ),
         throwsA(isA<ErroAtualizacao>()),
       );
-      naoSobraNada();
+      expect(destino.readAsBytesSync(), [1, 2, 3]);
+      expect(pasta.listSync(), hasLength(1));
+    });
+
+    test('limpeza que falha não esconde o erro original', () async {
+      // O parcial é uma pasta não vazia: abrir falha (erro de escrita) e
+      // apagar também falha.
+      final bloqueio = Directory('${destino.path}.tmp')..createSync();
+      File('${bloqueio.path}/x').writeAsBytesSync([1]);
+      final falso = ClienteFalso.fila([RespostaFalsa(200, blocos: blocos)]);
+      await expectLater(
+        baixarAtualizacao(_cliente(falso), _info(conteudo), destino),
+        throwsA(
+          isA<ErroAtualizacao>().having(
+            (e) => e.toString(),
+            'mensagem',
+            contains('gravar a atualização no disco'),
+          ),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(falso.abortados, 1);
     });
   });
 }
