@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +20,8 @@ class ContaGoogleFalsa implements ContaGoogle {
   Object? falhaLer;
   Object? falhaEscrever;
   Future<void> Function()? aoEscrever;
+  Future<void> Function()? aoCriar;
+  Future<void> Function()? aoLer;
   bool existe = true;
   String? achada;
   String criada = 'sid-criada';
@@ -64,6 +68,7 @@ class ContaGoogleFalsa implements ContaGoogle {
   @override
   Future<String> criarPlanilha() async {
     chamadas.add('criar');
+    await aoCriar?.call();
     return criada;
   }
 
@@ -71,6 +76,7 @@ class ContaGoogleFalsa implements ContaGoogle {
   Future<Map<String, List<Linha>>> ler(String sid) async {
     chamadas.add('ler:$sid');
     leituras++;
+    await aoLer?.call();
     if (falhaLer != null) throw falhaLer!;
     return normalizarLeitura({});
   }
@@ -438,4 +444,115 @@ void main() {
       expect(c.cfg.planilhas, isEmpty);
     },
   );
+
+  test('pedido que chega ao limpar o pendente refaz o ciclo', () async {
+    late _Cenario c;
+    var primeira = true;
+    c = _Cenario(
+      dados: (r) => DadosJanela(r, () async {
+        if (primeira) {
+          primeira = false;
+          await c.sync.sincronizar();
+        }
+      }),
+    )..comPlanilha();
+    await c.sync.sincronizar();
+    expect(c.conta.leituras, 2);
+    expect(c.conta.escritas, hasLength(2));
+    expect(c.sync.status, StatusSync.ok);
+  });
+
+  test('agendar: falha ao gravar pendente vira erro, sem exceção', () async {
+    final c = _Cenario(dados: (r) => DadosJanela(r, null, falha: true))
+      ..comPlanilha();
+    await c.sync.agendar();
+    expect(c.sync.status, StatusSync.erro);
+    expect(c.sync.ultimoErro, 'disco cheio');
+  });
+
+  test('callback que lança não derruba o ciclo', () async {
+    final conta = ContaGoogleFalsa();
+    final repo = Repositorio(ArmazenamentoMemoria());
+    final s = Sincronizador(
+      conta: conta,
+      dados: DadosSincronizacaoLocal(repo),
+      aoMudarStatus: (_) => throw StateError('ui'),
+      aoAvisar: (_) => throw StateError('ui'),
+    );
+    final cfg = repo.lerConfig()..planilhas['ana@gmail.com'] = 's';
+    repo.gravarConfig(cfg, carimbar: false);
+    await s.sincronizar();
+    expect(s.status, StatusSync.ok);
+  });
+
+  test('conectar e tick simultâneos criam uma só planilha', () async {
+    final c = _Cenario(conta: ContaGoogleFalsa(email: null));
+    final liberar = Completer<void>();
+    c.conta.aoCriar = () => liberar.future;
+    final conectando = c.sync.conectar((_) async {});
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final tick = c.sync.tick(); // com conta agora: atrasada, sem planilha
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    liberar.complete();
+    await Future.wait([conectando, tick]);
+    expect(c.conta.chamadas.where((x) => x == 'criar'), hasLength(1));
+    expect(c.cfg.planilhas['ana@gmail.com'], 'sid-criada');
+    expect(c.sync.status, StatusSync.ok);
+  });
+
+  test('conectarComToken: erro que não é de sessão mantém o token', () async {
+    final a = _Cenario(conta: ContaGoogleFalsa(email: null));
+    a.conta.falhaCarregar = ErroGoogle('falhou', 500);
+    await a.sync.conectarComToken();
+    expect(a.sync.status, StatusSync.erro);
+    expect(a.sync.ultimoErro, 'falhou');
+    expect(a.conta.chamadas, ['carregarToken']);
+  });
+
+  test('sair durante a sincronização descarta o resultado', () async {
+    final c = _Cenario()..comPlanilha();
+    final liberar = Completer<void>();
+    c.conta.aoLer = () => liberar.future;
+    final rodada = c.sync.sincronizar();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    c.sync.sair();
+    liberar.complete();
+    await rodada;
+    expect(c.sync.status, StatusSync.off);
+    expect(c.conta.escritas, isEmpty);
+    expect(c.sync.rodando, isFalse);
+  });
+
+  test(
+    'sair durante a sincronização: erro da rodada velha é ignorado',
+    () async {
+      final c = _Cenario()..comPlanilha();
+      final liberar = Completer<void>();
+      c.conta.aoLer = () async {
+        await liberar.future;
+        throw ErroGoogle('tarde', 500);
+      };
+      final rodada = c.sync.sincronizar();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      c.sync.sair();
+      liberar.complete();
+      await rodada;
+      expect(c.sync.status, StatusSync.off);
+      expect(c.sync.ultimoErro, '');
+    },
+  );
+}
+
+class DadosJanela extends DadosSincronizacaoLocal {
+  DadosJanela(super.repo, this.aoLimpar, {this.falha = false});
+
+  final Future<void> Function()? aoLimpar;
+  final bool falha;
+
+  @override
+  Future<void> definirPendente(bool valor) async {
+    if (falha) throw ErroValidacao('disco cheio');
+    if (!valor) await aoLimpar?.call();
+    await super.definirPendente(valor);
+  }
 }
