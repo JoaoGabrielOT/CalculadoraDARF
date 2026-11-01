@@ -330,22 +330,53 @@ void main() {
     expect((await s.conta()).email, 'eco@exemplo.com');
   });
 
-  test('pedido em voo quando o isolate morre falha com a causa', () async {
+  test('pedido em voo quando o isolate morre de verdade falha', () async {
     final preso = s.removerAmigo('pendura@exemplo.com');
     final morre = s.adicionarAmigo('morre@exemplo.com');
-    final f1 = expectLater(
-      preso,
+    Matcher encerrado() => throwsA(
+      isA<StateError>().having(
+        (e) => e.message,
+        'message',
+        'Serviços encerrados.',
+      ),
+    );
+    await Future.wait([
+      expectLater(preso, encerrado()),
+      expectLater(morre, encerrado()),
+    ]).timeout(const Duration(seconds: 10));
+    await expectLater(s.conta(), encerrado());
+  });
+
+  test('erro assíncrono solto vira aviso e os serviços seguem vivos', () async {
+    final aviso = s.eventos
+        .firstWhere((e) => e is EventoAviso && e.texto.contains('erro solto'))
+        .timeout(const Duration(seconds: 5));
+    await s.adicionarAmigo('solta@exemplo.com');
+    final e = await aviso as EventoAviso;
+    expect(e.texto, contains('erro solto do eco'));
+    expect((await s.conta()).email, 'eco@exemplo.com');
+  });
+
+  test('falha de montagem não enviável chega com o texto real', () async {
+    await expectLater(
+      ServicosIsolate.criar(
+        ParametrosServicos(
+          pastaDados: '',
+          pastaTemporaria: '',
+          windows: true,
+          criarServicos: criarServicosFalha,
+          timers: false,
+        ),
+        abrirUrl: (_) async => true,
+      ).timeout(const Duration(seconds: 5)),
       throwsA(
-        isA<StateError>().having(
-          (e) => e.message,
-          'message',
-          contains('boom do isolate'),
+        isA<Exception>().having(
+          (e) => e.toString(),
+          'texto',
+          contains('texto da montagem'),
         ),
       ),
     );
-    final f2 = expectLater(morre, throwsA(isA<StateError>()));
-    await Future.wait([f1, f2]).timeout(const Duration(seconds: 10));
-    await expectLater(s.conta(), throwsA(isA<StateError>()));
   });
 
   test(
@@ -412,7 +443,9 @@ void main() {
         tamanho: 1,
         sha256: '',
       );
-      final progresso = s.eventos.firstWhere((e) => e is EventoProgresso);
+      final progresso = s.eventos
+          .firstWhere((e) => e is EventoProgresso)
+          .timeout(const Duration(seconds: 5));
       final baixando = s.baixarAtualizacao(info);
       final falha = expectLater(
         baixando,

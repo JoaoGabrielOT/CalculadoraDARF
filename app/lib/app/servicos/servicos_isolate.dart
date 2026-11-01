@@ -6,8 +6,7 @@
 //   interface -> isolate: ['chamar', id, função], ['url', id, abriu]
 //   isolate -> interface: ['pronto', porta], ['falha', erro, pilha],
 //                         ['res', id, valor], ['err', id, erro, pilha],
-//                         ['ev', evento], ['url', id, uri],
-//                         ['morte', texto] (erro assíncrono solto)
+//                         ['ev', evento], ['url', id, uri]
 // A interface relança o mesmo objeto de erro, com a pilha do isolate.
 
 import 'dart:async';
@@ -26,8 +25,6 @@ import 'parametros.dart';
 import 'servicos_locais.dart';
 
 const _msgEncerrado = 'Serviços encerrados.';
-String _mensagemEncerrado(List<String> causa) =>
-    causa.isEmpty ? _msgEncerrado : 'Serviços encerrados: ${causa.first}';
 
 const _msgNavegador = 'Não foi possível abrir o navegador.';
 
@@ -221,6 +218,7 @@ void _enviarSeguro(SendPort porta, List<Object?> msg) {
       StackTrace.current.toString(),
     ],
     'err' => ['err', msg[1], ErroRemoto(_textoDe(msg[2])), msg[3]],
+    'falha' => ['falha', ErroRemoto(_textoDe(msg[1])), msg[2]],
     _ => null, // evento ou url: nada espera por eles
   };
   if (troca == null) return;
@@ -231,12 +229,16 @@ void _enviarSeguro(SendPort porta, List<Object?> msg) {
   }
 }
 
-/// Erro assíncrono solto vira a mensagem `morte` (na mesma porta das demais,
-/// então a causa chega antes de qualquer fechamento); a interface encerra.
+/// Erro assíncrono solto dentro da zona não derruba os serviços: vira um
+/// aviso para a interface e o isolate segue atendendo os pedidos. Só a morte
+/// real do isolate (`onExit`, inclusive kill externo) encerra o proxy.
 void _principal((ParametrosServicos, SendPort) args) {
   runZonedGuarded(
     () => _executar(args),
-    (e, pilha) => _enviarSeguro(args.$2, ['morte', _textoDe(e)]),
+    (e, pilha) => _enviarSeguro(args.$2, [
+      'ev',
+      EventoAviso('Erro inesperado', _textoDe(e)),
+    ]),
   );
 }
 
@@ -292,7 +294,6 @@ class ServicosIsolate implements ServicosApp {
     this._enviar,
     this._recebe,
     this._saida,
-    this._causa,
     this._abrirUrl,
   ) {
     _eventos = StreamController<EventoServico>.broadcast(
@@ -311,17 +312,9 @@ class ServicosIsolate implements ServicosApp {
     ServicosIsolate? proxy;
     // mensagens que chegam antes do proxy existir (eventos da montagem)
     final antes = <List<Object?>>[];
-    // causa da morte do isolate (erro assíncrono solto), se houver
-    final causa = <String>[];
     recebe.listen((msg) {
       final m = msg as List<Object?>;
       switch (m[0]) {
-        case 'morte':
-          causa.add(m[1]! as String);
-          if (!pronto.isCompleted) {
-            pronto.completeError(StateError(_mensagemEncerrado(causa)));
-          }
-          proxy?._fechar();
         case 'pronto':
           pronto.complete(m[1] as SendPort);
         case 'falha':
@@ -343,7 +336,7 @@ class ServicosIsolate implements ServicosApp {
     );
     saida.listen((_) {
       if (!pronto.isCompleted) {
-        pronto.completeError(StateError(_mensagemEncerrado(causa)));
+        pronto.completeError(StateError(_msgEncerrado));
       }
       proxy?._fechar();
     });
@@ -354,7 +347,6 @@ class ServicosIsolate implements ServicosApp {
         enviar,
         recebe,
         saida,
-        causa,
         abrirUrl,
       );
       antes.forEach(novo._tratar);
@@ -371,7 +363,6 @@ class ServicosIsolate implements ServicosApp {
   final SendPort _enviar;
   final ReceivePort _recebe;
   final ReceivePort _saida;
-  final List<String> _causa;
   final Future<bool> Function(Uri) _abrirUrl;
   final Map<int, Completer<Object?>> _pendentes = {};
 
@@ -438,9 +429,8 @@ class ServicosIsolate implements ServicosApp {
     _isolate.kill(priority: Isolate.immediate);
     _recebe.close();
     _saida.close();
-    final erro = _mensagemEncerrado(_causa);
     for (final c in _pendentes.values) {
-      c.completeError(StateError(erro));
+      c.completeError(StateError(_msgEncerrado));
     }
     _pendentes.clear();
     unawaited(_eventos.close());

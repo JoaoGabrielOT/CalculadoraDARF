@@ -32,6 +32,13 @@ ServicosApp criarServicosEco(
   return ServicosEco(abrirUrl, emitir);
 }
 
+/// Falha de montagem com um erro que não viaja entre isolates.
+ServicosApp criarServicosFalha(
+  ParametrosServicos p,
+  AbrirUrl abrirUrl,
+  void Function(EventoServico) emitir,
+) => throw ErroNaoEnviavel('texto da montagem');
+
 /// Erro com um campo que não viaja entre isolates.
 class ErroNaoEnviavel implements Exception {
   // a porta só existe para tornar o erro não enviável; fechada, não vaza
@@ -95,13 +102,10 @@ class ServicosEco implements ServicosApp {
 
   bool _morrerAoEncerrar = false;
 
-  /// Com [_morrerAoEncerrar], um erro assíncrono solto derruba o isolate no
-  /// meio do encerramento.
+  /// Com [_morrerAoEncerrar], o isolate morre no meio do encerramento.
   @override
   Future<void> encerrar() async {
-    if (!_morrerAoEncerrar) return;
-    Timer.run(() => throw StateError('morreu ao encerrar'));
-    await Completer<void>().future;
+    if (_morrerAoEncerrar) Isolate.exit();
   }
 
   @override
@@ -207,9 +211,11 @@ class ServicosEco implements ServicosApp {
   Future<void> adicionarAmigo(String email) async {
     if (email.contains('invalido')) throw ErroValidacao('Amigo inválido.');
     if (email.contains('naoenviavel')) throw ErroNaoEnviavel('texto do erro');
-    if (email.contains('morre')) {
-      Timer.run(() => throw StateError('boom do isolate'));
-      await Completer<void>().future;
+    // morte real do isolate, com pedidos em voo
+    if (email.contains('morre')) Isolate.exit();
+    // erro assíncrono solto: o isolate segue vivo
+    if (email.contains('solta')) {
+      Timer.run(() => throw StateError('erro solto do eco'));
     }
   }
 
