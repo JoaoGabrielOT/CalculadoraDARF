@@ -67,9 +67,12 @@ void main() {
           'cfg': cfg.toJson(),
         },
       };
-      File(
-        '${pasta.path}/${caso.nome}.json',
-      ).writeAsStringSync(jsonPython(doc), encoding: utf8);
+      File('${pasta.path}/${caso.nome}.json')
+          .writeAsStringSync(jsonPython(doc), encoding: utf8);
     }
+    // um arquivo por caso: o conferidor Python recusa pasta parcial
+    expect(pasta.listSync().map((f) => f.uri.pathSegments.last).toSet(), {
+      for (final c in casos) '${c.nome}.json',
+    });
   });
 }

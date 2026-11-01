@@ -36,7 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   collection: ^1.19.1
   meta: ^1.19.0
-  unorm_dart: ^0.3.3
+  unorm_dart: 0.3.3
 
 dev_dependencies:
   flutter_test:

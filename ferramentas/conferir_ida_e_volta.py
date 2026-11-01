@@ -19,6 +19,7 @@ from ferramentas.referencias import base  # noqa: E402
 import google_sync  # noqa: E402
 
 nc = base.nc
+REFERENCIA = RAIZ / "app" / "test" / "referencias" / "sincronizacao.json"
 
 
 def igual(a, b, caminho, difs):
@@ -90,7 +91,8 @@ def conferir(arquivo):
     for mes in meses.values():
         for lote in mes["lotes"]:
             lote["vendas"].sort(key=lambda v: v["id"])
-    cfg["radar"] = [{**r, "pos": r.get("pos", i)} for i, r in enumerate(cfg["radar"])]
+    # (montar_linhas ordena o radar com ordenar_radar antes de completar `pos` pelo índice)
+    cfg["radar"] = [{**r, "pos": r.get("pos", i)} for i, r in enumerate(nc.ordenar_radar(cfg["radar"]))]
     chave_meta = lambda m: (m["criada_em"], m["id"])  # noqa: E731 (a aba Metas sai ordenada assim)
     igual(meses, estado["meses"], "meses", difs)
     igual(amigos, cfg["amigos"], "amigos", difs)
@@ -106,6 +108,17 @@ def main():
     arquivos = sorted(pasta.glob("*.json"))
     if not arquivos:
         print(f"nenhum arquivo em {pasta}")
+        return 1
+    # a pasta tem de ter exatamente um arquivo por caso de sincronizacao.json (nada a mais, nada a menos)
+    casos = json.loads(REFERENCIA.read_text(encoding="utf-8"))["casos"]
+    esperados = sorted(c["nome"] for c in casos)
+    achados = sorted(a.stem for a in arquivos)
+    if achados != esperados:
+        print(f"a pasta {pasta} não bate com {REFERENCIA.name}: {len(achados)} arquivos para {len(esperados)} casos")
+        for nome in sorted(set(esperados) - set(achados)):
+            print(f"  falta {nome}")
+        for nome in sorted(set(achados) - set(esperados)):
+            print(f"  sobra {nome}")
         return 1
     falhas = 0
     for arq in arquivos:

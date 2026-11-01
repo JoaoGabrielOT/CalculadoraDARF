@@ -1,2 +1,44 @@
-﻿// Barril de exports do núcleo de cálculo.
+// Barril de exports do núcleo de cálculo (API pública de lib/nucleo).
 
+export 'ambiente.dart';
+export 'apuracao.dart';
+export 'armazenamento.dart';
+export 'armazenamento_arquivos.dart';
+export 'caixa.dart';
+export 'compat/conversao.dart';
+export 'compat/json_python.dart';
+export 'compat/numeros.dart';
+export 'compat/ordenacao.dart';
+export 'constantes.dart';
+export 'datas.dart';
+export 'erros.dart';
+export 'fechamento.dart';
+export 'formatacao.dart';
+export 'mercado/chart.dart';
+export 'mercado/dados_ativo.dart';
+export 'mercado/indicadores.dart';
+export 'metas/cadeia.dart';
+export 'metas/criacao.dart';
+export 'metas/descricao.dart';
+export 'metas/deteccao.dart';
+export 'metas/preco_alvo.dart';
+export 'metas/verificacao.dart';
+export 'modelos/barras.dart';
+export 'modelos/com_mod.dart';
+export 'modelos/config.dart';
+export 'modelos/lote.dart';
+export 'modelos/mes.dart';
+export 'modelos/meta.dart';
+export 'noticias/estado.dart';
+export 'noticias/texto.dart';
+export 'planilha/abas.dart';
+export 'planilha/celula.dart';
+export 'planilha/mesclagem.dart';
+export 'planilha/montagem.dart';
+export 'planilha/reconstrucao.dart';
+export 'planilha/sincronizacao.dart';
+export 'radar.dart';
+export 'repositorio.dart';
+export 'sugestoes/patrimonio.dart';
+export 'sugestoes/sugestoes.dart';
+export 'sugestoes/textos.dart';
