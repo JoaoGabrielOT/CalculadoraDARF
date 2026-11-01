@@ -14,10 +14,12 @@ Funções (campo `funcao` de cada caso):
 - quote: entrada {texto, seguro}; saída `urllib.parse.quote(texto, safe=seguro)`.
 - decodificar_link: entrada {link, respostas: [{status, texto}]}; saída {pedidos, resultado} ou, em falha,
   {pedidos, erro, mensagem}. Cada pedido: {metodo, url, params, cabecalhos, dados, json, timeout, stream}.
+- arquivo_favicon: entrada domínio; saída nome do arquivo do favicon (noticias.py:511: o que não é letra, dígito, "_", "." ou "-" vira "_", mais ".png").
 """
 import http
 import html as pyhtml
 import json
+import re
 import types
 from email.utils import parsedate_to_datetime
 from html.entities import html5
@@ -354,6 +356,9 @@ def _data(txt):
     return ... if d.tzinfo is None else d.timestamp()
 
 
+FAVICONS = ["g1.globo.com", "valor.globo.com:8080", "exame.com", "xn--e1afmkfd.xn--p1ai", "notícias.uol.com.br", "a b"]
+
+
 def casos():
     out = [base.caso("tabela", "tabela_html5", None, dict(html5))]
     for nome, entrada in UNESCAPE:
@@ -385,4 +390,6 @@ def casos():
     for nome, link, respostas in DECODIFICAR:
         out.append(base.caso(nome, "decodificar_link", {"link": link, "respostas": respostas},
                              _decodificar(link, respostas)))
+    for d in FAVICONS:
+        out.append(base.caso(d, "arquivo_favicon", d, re.sub(r"[^\w.-]", "_", d) + ".png"))
     return out

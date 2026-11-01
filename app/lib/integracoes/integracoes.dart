@@ -1,3 +1,4 @@
+export 'cache_binario.dart';
 export 'executor.dart';
 export 'google/constantes.dart';
 export 'google/credenciais.dart';
@@ -15,6 +16,8 @@ export 'http/json.dart';
 export 'http/semaforo.dart';
 export 'noticias/google_news.dart';
 export 'noticias/html.dart';
+export 'noticias/imagens.dart';
+export 'noticias/logos.dart';
 export 'noticias/previas.dart';
 export 'noticias/rss.dart';
 export 'noticias/servico.dart';
