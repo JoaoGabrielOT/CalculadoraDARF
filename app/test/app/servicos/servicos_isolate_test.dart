@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
@@ -234,6 +235,156 @@ void main() {
           ),
         ),
       );
+    },
+  );
+
+  test('evento emitido durante criarServicos chega a quem assina depois, '
+      'na ordem', () async {
+    final cedo = await ServicosIsolate.criar(
+      ParametrosServicos(
+        pastaDados: '',
+        pastaTemporaria: 'cedo',
+        windows: true,
+        criarServicos: criarServicosEco,
+        timers: false,
+      ),
+      abrirUrl: (_) async => true,
+    );
+    try {
+      await cedo.conta(); // a interface já conversou com o isolate
+      final vistos = await cedo.eventos
+          .take(2)
+          .map((e) => (e as EventoAviso).texto)
+          .toList()
+          .timeout(const Duration(seconds: 5));
+      expect(vistos, ['primeiro', 'segundo']);
+    } finally {
+      await cedo.encerrar();
+    }
+  });
+
+  test('erro não enviável chega com o texto, sem pendurar o pedido', () async {
+    await expectLater(
+      s
+          .adicionarAmigo('naoenviavel@exemplo.com')
+          .timeout(const Duration(seconds: 5)),
+      throwsA(
+        isA<Exception>().having(
+          (e) => e.toString(),
+          'texto',
+          contains('texto do erro'),
+        ),
+      ),
+    );
+    expect((await s.conta()).email, 'eco@exemplo.com');
+  });
+
+  test('argumento não enviável falha o pedido e o proxy continua', () async {
+    final porta = ReceivePort();
+    await expectLater(
+      s.criarStop('L1', 1, 1, sugestao: {'porta': porta}),
+      throwsA(anything),
+    );
+    porta.close();
+    expect((await s.conta()).email, 'eco@exemplo.com');
+  });
+
+  test('pedido em voo quando o isolate morre falha com a causa', () async {
+    final preso = s.removerAmigo('pendura@exemplo.com');
+    final morre = s.adicionarAmigo('morre@exemplo.com');
+    final f1 = expectLater(
+      preso,
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('boom do isolate'),
+        ),
+      ),
+    );
+    final f2 = expectLater(morre, throwsA(isA<StateError>()));
+    await Future.wait([f1, f2]).timeout(const Duration(seconds: 10));
+    await expectLater(s.conta(), throwsA(isA<StateError>()));
+  });
+
+  test(
+    'pedido em voo quando encerrar é chamado falha com StateError',
+    () async {
+      final preso = s.removerAmigo('pendura@exemplo.com');
+      final falha = expectLater(
+        preso,
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'Serviços encerrados.',
+          ),
+        ),
+      );
+      await s.encerrar();
+      await falha;
+    },
+  );
+
+  test('encerrar concorrente é idempotente', () async {
+    await Future.wait([s.encerrar(), s.encerrar()]);
+    await s.encerrar();
+  });
+
+  test('ErroAtualizacao e erro de rede atravessam com tipo e texto', () async {
+    await expectLater(
+      s.cotacao('REDE'),
+      throwsA(
+        isA<ErroConexao>().having(
+          (e) => e.mensagem,
+          'mensagem',
+          'Sem conexão com o Yahoo.',
+        ),
+      ),
+    );
+    const info = InfoAtualizacao(
+      versao: 'erro',
+      notas: '',
+      url: 'https://exemplo.com/a.exe',
+      tamanho: 1,
+      sha256: '',
+    );
+    await expectLater(
+      s.baixarAtualizacao(info),
+      throwsA(
+        isA<ErroAtualizacao>().having(
+          (e) => e.mensagem,
+          'mensagem',
+          'Resposta inválida do GitHub.',
+        ),
+      ),
+    );
+  });
+
+  test(
+    'download cancelado: cancelarDownload chega durante o download',
+    () async {
+      const info = InfoAtualizacao(
+        versao: 'longo',
+        notas: '',
+        url: 'https://exemplo.com/a.exe',
+        tamanho: 1,
+        sha256: '',
+      );
+      final baixando = s.baixarAtualizacao(info);
+      final falha = expectLater(
+        baixando,
+        throwsA(
+          isA<ErroAtualizacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            'Atualização cancelada.',
+          ),
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await s.cancelarDownload();
+      await falha;
     },
   );
 

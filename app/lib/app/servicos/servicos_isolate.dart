@@ -25,6 +25,9 @@ import 'parametros.dart';
 import 'servicos_locais.dart';
 
 const _msgEncerrado = 'Serviços encerrados.';
+String _mensagemEncerrado(List<String> causa) =>
+    causa.isEmpty ? _msgEncerrado : 'Serviços encerrados: ${causa.first}';
+
 const _msgNavegador = 'Não foi possível abrir o navegador.';
 
 // calculadora_darf.py:1266-1268 e android/main.py:2395.
@@ -147,13 +150,14 @@ ServicosApp criarServicosLocais(
     httpLogin: http30,
     cliente: p.clienteOAuth,
   );
+  final repo = Repositorio(disco);
   final s = _ServicosReais(
-    repo: Repositorio(disco),
+    repo: repo,
     yahoo: ServicoYahoo(ServicoYahoo.clientePadrao(c)),
     conta: google,
     abrirUrl: abrirUrl,
     noticias: (emitirLocal) => NoticiasLocal(
-      repo: Repositorio(disco),
+      repo: repo,
       servico: ServicoNoticias(cliente: c, armazenamento: disco),
       logos: Logos(http: Logos.clientePadrao(c), cache: cache),
       cache: cache,
@@ -182,19 +186,47 @@ ServicosApp criarServicosLocais(
 
 // --- isolate
 
+/// Substituto enviável de um erro que não atravessa o isolate: guarda só o
+/// texto (a pilha segue como texto no protocolo).
+class ErroRemoto implements Exception {
+  const ErroRemoto(this.mensagem);
+
+  final String mensagem;
+
+  @override
+  String toString() => mensagem;
+}
+
+String _textoDe(Object? e) {
+  try {
+    return e.toString();
+  } catch (_) {
+    return e.runtimeType.toString();
+  }
+}
+
 void _enviarSeguro(SendPort porta, List<Object?> msg) {
   try {
     porta.send(msg);
-  } on ArgumentError {
-    // valor não enviável: quem espera uma resposta recebe o erro no lugar
-    if (msg[0] == 'res') {
-      porta.send([
-        'err',
-        msg[1],
-        Exception('Resposta não enviável: ${msg[2].runtimeType}'),
-        StackTrace.current.toString(),
-      ]);
-    }
+    return;
+  } catch (_) {
+    // valor não enviável: quem espera uma resposta recebe um erro no lugar
+  }
+  final List<Object?>? troca = switch (msg[0]) {
+    'res' => [
+      'err',
+      msg[1],
+      ErroRemoto('Resposta não enviável: ${msg[2].runtimeType}'),
+      StackTrace.current.toString(),
+    ],
+    'err' => ['err', msg[1], ErroRemoto(_textoDe(msg[2])), msg[3]],
+    _ => null, // evento ou url: nada espera por eles
+  };
+  if (troca == null) return;
+  try {
+    porta.send(troca);
+  } catch (_) {
+    // texto e ids são sempre enviáveis; sem porta, nada a fazer
   }
 }
 
@@ -250,8 +282,14 @@ class ServicosIsolate implements ServicosApp {
     this._enviar,
     this._recebe,
     this._saida,
+    this._erros,
+    this._causa,
     this._abrirUrl,
-  );
+  ) {
+    _eventos = StreamController<EventoServico>.broadcast(
+      onListen: () => scheduleMicrotask(_descarregar),
+    );
+  }
 
   /// Sobe o isolate; uma exceção em `criarServicos` volta como erro daqui.
   static Future<ServicosIsolate> criar(
@@ -260,8 +298,13 @@ class ServicosIsolate implements ServicosApp {
   }) async {
     final recebe = ReceivePort();
     final saida = ReceivePort();
+    final erros = ReceivePort();
     final pronto = Completer<SendPort>();
     ServicosIsolate? proxy;
+    // mensagens que chegam antes do proxy existir (eventos da montagem)
+    final antes = <List<Object?>>[];
+    // causa da morte do isolate (erro assíncrono solto), se houver
+    final causa = <String>[];
     recebe.listen((msg) {
       final m = msg as List<Object?>;
       switch (m[0]) {
@@ -272,30 +315,41 @@ class ServicosIsolate implements ServicosApp {
             pronto.completeError(m[1]!, StackTrace.fromString(m[2] as String));
           }
         default:
-          proxy?._tratar(m);
+          if (proxy == null) {
+            antes.add(m);
+          } else {
+            proxy._tratar(m);
+          }
       }
     });
+    erros.listen((e) => causa.add((e as List<Object?>)[0].toString()));
     final isolate = await Isolate.spawn<(ParametrosServicos, SendPort)>(
       _principal,
       (p, recebe.sendPort),
       onExit: saida.sendPort,
+      onError: erros.sendPort,
     );
     saida.listen((_) {
       if (!pronto.isCompleted) {
-        pronto.completeError(StateError(_msgEncerrado));
+        pronto.completeError(StateError(_mensagemEncerrado(causa)));
       }
       proxy?._fechar();
     });
     try {
       final enviar = await pronto.future;
-      return proxy = ServicosIsolate._(
+      final novo = proxy = ServicosIsolate._(
         isolate,
         enviar,
         recebe,
         saida,
+        erros,
+        causa,
         abrirUrl,
       );
+      antes.forEach(novo._tratar);
+      return novo;
     } catch (_) {
+      erros.close();
       isolate.kill(priority: Isolate.immediate);
       recebe.close();
       saida.close();
@@ -307,12 +361,37 @@ class ServicosIsolate implements ServicosApp {
   final SendPort _enviar;
   final ReceivePort _recebe;
   final ReceivePort _saida;
+  final ReceivePort _erros;
+  final List<String> _causa;
   final Future<bool> Function(Uri) _abrirUrl;
   final Map<int, Completer<Object?>> _pendentes = {};
-  final StreamController<EventoServico> _eventos =
-      StreamController<EventoServico>.broadcast();
+
+  /// Broadcast descartaria o que chega sem ouvinte: até a primeira assinatura
+  /// os eventos esperam em [_buffer] e saem na ordem.
+  late final StreamController<EventoServico> _eventos;
+  final List<EventoServico> _buffer = [];
+  bool _ouvido = false;
   int _proximo = 0;
   bool _aberto = true;
+  Future<void>? _encerrando;
+
+  void _descarregar() {
+    _ouvido = true;
+    if (_eventos.isClosed) return;
+    for (final e in _buffer) {
+      _eventos.add(e);
+    }
+    _buffer.clear();
+  }
+
+  void _publicar(EventoServico e) {
+    if (_eventos.isClosed) return;
+    if (_ouvido && _buffer.isEmpty) {
+      _eventos.add(e);
+    } else {
+      _buffer.add(e);
+    }
+  }
 
   void _tratar(List<Object?> m) {
     switch (m[0]) {
@@ -323,7 +402,7 @@ class ServicosIsolate implements ServicosApp {
             .remove(m[1])
             ?.completeError(m[2]!, StackTrace.fromString(m[3] as String));
       case 'ev':
-        if (!_eventos.isClosed) _eventos.add(m[1] as EventoServico);
+        _publicar(m[1] as EventoServico);
       case 'url':
         unawaited(_abrir(m[1] as int, m[2] as Uri));
     }
@@ -345,8 +424,10 @@ class ServicosIsolate implements ServicosApp {
     _isolate.kill(priority: Isolate.immediate);
     _recebe.close();
     _saida.close();
+    _erros.close();
+    final erro = _mensagemEncerrado(_causa);
     for (final c in _pendentes.values) {
-      c.completeError(StateError(_msgEncerrado));
+      c.completeError(StateError(erro));
     }
     _pendentes.clear();
     unawaited(_eventos.close());
@@ -358,7 +439,13 @@ class ServicosIsolate implements ServicosApp {
     if (!_aberto) throw StateError(_msgEncerrado);
     final id = _proximo++;
     final resposta = _pendentes[id] = Completer<Object?>();
-    _enviar.send(['chamar', id, funcao]);
+    try {
+      _enviar.send(['chamar', id, funcao]);
+    } catch (_) {
+      // argumento não enviável: o pedido não saiu, não fica pendurado
+      _pendentes.remove(id);
+      rethrow;
+    }
     return await resposta.future as T;
   }
 
@@ -370,7 +457,9 @@ class ServicosIsolate implements ServicosApp {
   Future<EstadoInicial> iniciar() => _chamar((s) => s.iniciar());
 
   @override
-  Future<void> encerrar() async {
+  Future<void> encerrar() => _encerrando ??= _encerrar();
+
+  Future<void> _encerrar() async {
     if (!_aberto) return;
     try {
       await _chamar((s) => s.encerrar());

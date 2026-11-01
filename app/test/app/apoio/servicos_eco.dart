@@ -3,6 +3,7 @@
 // isolate inteira. Roda dentro do isolate (função de nível superior).
 
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:calculadoradarf/app/servicos/api.dart';
@@ -17,7 +18,25 @@ ServicosApp criarServicosEco(
   ParametrosServicos p,
   AbrirUrl abrirUrl,
   void Function(EventoServico) emitir,
-) => ServicosEco(abrirUrl, emitir);
+) {
+  // eventos emitidos durante a montagem, antes de a interface assinar
+  if (p.pastaTemporaria == 'cedo') {
+    emitir(const EventoAviso('cedo', 'primeiro'));
+    emitir(const EventoAviso('cedo', 'segundo'));
+  }
+  return ServicosEco(abrirUrl, emitir);
+}
+
+/// Erro com um campo que não viaja entre isolates.
+class ErroNaoEnviavel implements Exception {
+  ErroNaoEnviavel(this.texto) : porta = ReceivePort();
+
+  final String texto;
+  final ReceivePort porta;
+
+  @override
+  String toString() => texto;
+}
 
 ResultadoVenda _resultado() => ResultadoVenda(
   dt: false,
@@ -173,11 +192,17 @@ class ServicosEco implements ServicosApp {
   @override
   Future<void> adicionarAmigo(String email) async {
     if (email.contains('invalido')) throw ErroValidacao('Amigo inválido.');
+    if (email.contains('naoenviavel')) throw ErroNaoEnviavel('texto do erro');
+    if (email.contains('morre')) {
+      Timer.run(() => throw StateError('boom do isolate'));
+      await Completer<void>().future;
+    }
   }
 
   @override
   Future<void> removerAmigo(String email) async {
     if (email.contains('falha')) throw ErroGoogle('O Google recusou.', 403);
+    if (email.contains('pendura')) await Completer<void>().future;
   }
 
   @override
@@ -215,8 +240,10 @@ class ServicosEco implements ServicosApp {
   Future<void> limparCacheCotacoes() async {}
 
   @override
-  Future<CotacaoRadar> cotacao(String ticker, {String nome = ''}) async =>
-      CotacaoErro(ticker, 'eco:$nome');
+  Future<CotacaoRadar> cotacao(String ticker, {String nome = ''}) async {
+    if (ticker == 'REDE') throw ErroConexao('Sem conexão com o Yahoo.');
+    return CotacaoErro(ticker, 'eco:$nome');
+  }
 
   @override
   Future<Grafico> grafico(String ticker, String periodo) async => Grafico(
@@ -344,9 +371,23 @@ class ServicosEco implements ServicosApp {
       );
 
   @override
-  Future<String> baixarAtualizacao(InfoAtualizacao info) async =>
-      'baixou ${info.versao}';
+  Future<String> baixarAtualizacao(InfoAtualizacao info) async {
+    if (info.versao == 'erro') {
+      throw ErroAtualizacao('Resposta inválida do GitHub.');
+    }
+    if (info.versao == 'longo') {
+      final c = _cancelado = Completer<void>();
+      await c.future;
+      throw ErroAtualizacao('Atualização cancelada.');
+    }
+    return 'baixou ${info.versao}';
+  }
+
+  Completer<void>? _cancelado;
 
   @override
-  Future<void> cancelarDownload() async {}
+  Future<void> cancelarDownload() async {
+    final c = _cancelado;
+    if (c != null && !c.isCompleted) c.complete();
+  }
 }
