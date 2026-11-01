@@ -92,9 +92,16 @@ double _finito(double v) {
   return v;
 }
 
-double _piso(double v) => pisoCentavo(_finito(v));
+/// O Python lança em `math.floor(round(v * 100, 6))`; o produto também pode
+/// estourar para infinito com [v] finito.
+double _finitoCentavos(double v) {
+  _finito(v * 100);
+  return v;
+}
 
-double _teto(double v) => tetoCentavo(_finito(v));
+double _piso(double v) => pisoCentavo(_finitoCentavos(v));
+
+double _teto(double v) => tetoCentavo(_finitoCentavos(v));
 
 /// Stop e alvo de swing trade a partir de pregões fechados. Lança
 /// [SemSugestao] sem dados ou sem volatilidade.
