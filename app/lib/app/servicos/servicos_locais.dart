@@ -127,6 +127,7 @@ class ServicosLocais implements ServicosApp {
 
   @override
   Future<void> encerrar() async {
+    _conta.encerrar();
     if (!_eventos.isClosed) await _eventos.close();
   }
 

@@ -57,6 +57,9 @@ class ContaLocal {
   late final Sincronizador _sync;
 
   AmigoCarregado? _amigo;
+
+  /// Aumenta a cada pedido de amigo e a cada limpeza: só o último vale.
+  int _geracaoAmigo = 0;
   bool _ocupadoEmitido = false;
 
   /// Dados do amigo carregado (somente leitura).
@@ -68,7 +71,10 @@ class ContaLocal {
     _amigo = (email: email, dados: dados);
   }
 
-  void limparAmigo() => _amigo = null;
+  void limparAmigo() {
+    _geracaoAmigo++;
+    _amigo = null;
+  }
 
   // --- estado
 
@@ -128,6 +134,9 @@ class ContaLocal {
       _reconciliar();
     }
   }
+
+  /// Fim do isolate: o timer de `agendar` não pode sincronizar depois.
+  void encerrar() => _sync.encerrar();
 
   Future<void> cancelarLogin() async {
     await _sync.cancelarLogin();
@@ -208,8 +217,13 @@ class ContaLocal {
 
   Future<void> removerAmigo(String email) async {
     lerConfigParaGravar(_repo);
-    final sid = _planilhaPropria();
-    await _conta.descompartilhar(sid, email);
+    // como no Android (main.py:2165-2177): sem conta ou planilha só sai da
+    // config, nada a descompartilhar
+    final minha = _conta.email;
+    final sid = minha == null ? null : _repo.lerConfig().planilhas[minha];
+    if (sid != null && sid.isNotEmpty) {
+      await _conta.descompartilhar(sid, email);
+    }
     final cfg = lerConfigParaGravar(_repo);
     cfg.amigos = [
       for (final a in cfg.amigos)
@@ -230,10 +244,11 @@ class ContaLocal {
         'Conecte sua conta Google para ver os dados dos amigos.',
       );
     }
+    final geracao = ++_geracaoAmigo;
     final dados = await _sync.lerAmigo(email);
-    if (_conta.email != minha) {
-      // saiu da conta enquanto a rede respondia
-      throw ErroGoogle('A conta Google foi desconectada.');
+    if (geracao != _geracaoAmigo || _conta.email != minha) {
+      // vale o último pedido; sair ou novo login durante a rede descarta
+      throw ErroGoogle('O carregamento dos dados do amigo foi cancelado.');
     }
     usarAmigo(email, dados);
     return ResumoAmigo(

@@ -14,6 +14,7 @@ class ContaFalsa implements ContaGoogle {
   final chamadas = <String>[];
   Future<void>? segurarLogin;
   Object? falhaLer;
+  Future<void> Function()? aoLer;
   Object? falhaCompartilhar;
   String? achada;
   String? planilhaAmigo;
@@ -68,6 +69,7 @@ class ContaFalsa implements ContaGoogle {
   @override
   Future<Map<String, List<Linha>>> ler(String sid) async {
     chamadas.add('ler:$sid');
+    await aoLer?.call();
     if (falhaLer != null) throw falhaLer!;
     return sid == 'sid-bia' ? abasAmigo : normalizarLeitura({});
   }

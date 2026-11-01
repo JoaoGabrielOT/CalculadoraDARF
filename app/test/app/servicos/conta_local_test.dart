@@ -410,6 +410,64 @@ void main() {
       },
     );
 
+    test('removerAmigo sem conta/planilha remove só da config', () async {
+      final c = _Cenario(email: null);
+      final cfg = c.repo.lerConfig()
+        ..amigos.add(Amigo(email: 'bia@gmail.com', desde: '2026-10-01'));
+      c.repo.gravarConfig(cfg);
+      await c.local.removerAmigo('bia@gmail.com');
+      expect(c.repo.lerConfig().amigos, isEmpty);
+      expect(c.conta.chamadas, isEmpty);
+
+      // conectado, mas ainda sem planilha
+      final d = _Cenario();
+      final cfg2 = d.repo.lerConfig()
+        ..amigos.add(Amigo(email: 'bia@gmail.com', desde: '2026-10-01'));
+      d.repo.gravarConfig(cfg2);
+      await d.local.removerAmigo('bia@gmail.com');
+      expect(d.repo.lerConfig().amigos, isEmpty);
+      expect(d.conta.chamadas, isEmpty);
+    });
+
+    test(
+      'config ilegível: removerAmigo recusa antes de descompartilhar',
+      () async {
+        final c = _Cenario()..comPlanilha();
+        c.repo.armazenamento.gravar('config.json', '{quebrado');
+        await _espera(
+          c.local.removerAmigo('bia@gmail.com'),
+          'O arquivo config.json está ilegível; nada foi alterado.',
+        );
+        expect(c.conta.chamadas, isEmpty);
+      },
+    );
+
+    test('carregarAmigo: vale o último pedido', () async {
+      final c = _Cenario()..comPlanilha();
+      c.planilhaDaBia();
+      final segura = Completer<void>();
+      var n = 0;
+      c.conta.aoLer = () async {
+        if (n++ == 0) await segura.future;
+      };
+      final primeiro = c.local.carregarAmigo('bia@gmail.com');
+      final erro = expectLater(primeiro, throwsA(isA<ErroGoogle>()));
+      await _pausa(5);
+      await c.local.carregarAmigo('caio@gmail.com');
+      segura.complete();
+      await erro;
+      expect(c.local.amigoCarregado!.email, 'caio@gmail.com');
+    });
+
+    test('encerrar cancela o agendamento pendente', () async {
+      final c = _Cenario()..comPlanilha();
+      c.local.agendar();
+      await _pausa(1);
+      c.local.encerrar();
+      await _pausa();
+      expect(c.conta.chamadas, isEmpty);
+    });
+
     test('removerAmigo do amigo carregado volta para os meus dados', () async {
       final c = _Cenario()..comPlanilha();
       c.planilhaDaBia();

@@ -308,6 +308,15 @@ class Sincronizador {
     _definirStatus(StatusSync.off);
   }
 
+  /// Encerra o ciclo sem sair da conta: cancela o login e o agendamento, e as
+  /// rodadas em andamento são descartadas.
+  void encerrar() {
+    unawaited(cancelarLogin());
+    _geracao++;
+    _timer?.cancel();
+    _timer = null;
+  }
+
   /// Planilha de um amigo, só para leitura.
   Future<DadosPlanilha> lerAmigo(String email) async {
     final sid = await conta.buscarPlanilha(email);
