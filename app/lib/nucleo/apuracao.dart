@@ -5,6 +5,7 @@ import 'compat/numeros.dart';
 import 'compat/ordenacao.dart';
 import 'constantes.dart';
 import 'datas.dart';
+import 'erros.dart';
 import 'formatacao.dart';
 import 'modelos/lote.dart';
 import 'modelos/mes.dart';
@@ -82,6 +83,9 @@ class ResultadoVenda {
 /// `calcular_venda` com a venda dada por quantidade (inteira ou fracionária,
 /// como na calculadora de metas), preço e data.
 ResultadoVenda calcularVendaQtd(Lote lote, num qtd, double preco, String data) {
+  // `q / lote["qtd"]` do Python lança ZeroDivisionError; o Dart devolveria
+  // Infinity/NaN em silêncio.
+  if (lote.qtd == 0) throw DivisaoPorZero();
   final compra = qtd * lote.preco;
   final venda = qtd * preco;
   final dt = data == lote.dataCompra;

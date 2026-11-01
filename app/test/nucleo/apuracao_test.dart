@@ -1,6 +1,7 @@
 import 'package:calculadoradarf/nucleo/apuracao.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/datas.dart';
+import 'package:calculadoradarf/nucleo/erros.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -125,5 +126,25 @@ void main() {
     expect(b.ops.single.regime, 'Swing');
     expect(b.impSt, b.ops.single.liquido * aliqSwing);
     expect(b.darf, b.impSt);
+  });
+
+  test('venda sobre compra de quantidade 0 lança (ZeroDivisionError)', () {
+    final l = Lote(
+      id: 'a',
+      ticker: 'PETR4',
+      tipo: 'Ação',
+      dataCompra: '2026-10-01',
+      qtd: 0,
+      preco: 10.0,
+    );
+    final v = Venda(id: 'v', data: '2026-10-05', qtd: 5, preco: 11.0);
+    l.vendas.add(v);
+    expect(() => calcularVenda(l, v), throwsA(isA<DivisaoPorZero>()));
+    expect(
+      () => calcularVendaQtd(l, 1.5, 11.0, '2026-10-05'),
+      throwsA(isA<DivisaoPorZero>()),
+    );
+    final d = mesVazio('2026-10')..lotes.add(l);
+    expect(() => apurar(d), throwsA(isA<DivisaoPorZero>()));
   });
 }

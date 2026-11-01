@@ -1,11 +1,10 @@
 // Reconstrução dos dados a partir das linhas lidas da planilha, com a
 // compatibilidade de leitura da 1.12 (nucleo.py:837-972).
 
-import 'dart:convert';
-
 import '../ambiente.dart';
 import '../apuracao.dart';
 import '../compat/conversao.dart';
+import '../compat/json_python.dart';
 import '../datas.dart';
 import '../modelos/com_mod.dart';
 import '../modelos/config.dart';
@@ -282,7 +281,7 @@ List<Meta> reconstruirMetas(Map<String, List<Linha>> abas) {
     var detalhes = <String, Object?>{};
     if (verdadeiroPython(row[13])) {
       try {
-        final lido = jsonDecode(strPython(row[13]));
+        final lido = jsonPythonDecode(strPython(row[13]));
         // os detalhes só valem se são desta linha (a planilha pode ter sido
         // reordenada à mão)
         if (lido is Map && lido['id'] == strPython(row[0]).trim()) {
@@ -326,7 +325,7 @@ List<Meta> reconstruirMetas(Map<String, List<Linha>> abas) {
     if (row[6] != '') m.lucroDesejado = numOuPadrao(row[6]);
     if (verdadeiroPython(row[10])) {
       try {
-        final lido = jsonDecode(strPython(row[10]));
+        final lido = jsonPythonDecode(strPython(row[10]));
         // Meta só guarda a execução quando é um objeto
         if (lido is Map) m.execucao = lerMapa(lido);
       } on FormatException {

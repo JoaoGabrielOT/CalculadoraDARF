@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'ambiente.dart';
 import 'armazenamento.dart';
 import 'compat/json_python.dart';
@@ -32,7 +30,7 @@ class Repositorio {
   Map<String, Object?>? _lerObjeto(String nome) {
     final texto = armazenamento.ler(nome);
     if (texto == null) return null;
-    final json = jsonDecode(texto);
+    final json = jsonPythonDecode(texto);
     return json is Map ? lerMapa(json) : null;
   }
 

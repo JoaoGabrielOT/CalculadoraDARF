@@ -14,6 +14,12 @@ class ErroValidacao extends ErroNucleo {
   ErroValidacao(super.mensagem);
 }
 
+/// `ZeroDivisionError`: não é erro de digitação do usuário, é dado
+/// inconsistente (por exemplo, compra com quantidade 0 e uma venda).
+class DivisaoPorZero extends ErroNucleo {
+  DivisaoPorZero([super.mensagem = 'division by zero']);
+}
+
 /// `mercado.SemDados`.
 class SemDados extends ErroNucleo {
   SemDados(super.mensagem);

@@ -1,8 +1,6 @@
 // Notícias: mesclagem, estado local e textos de notificação
 // (noticias.py:17-30, 144-160, 178-195, 209-314).
 
-import 'dart:convert';
-
 import '../ambiente.dart';
 import '../armazenamento.dart';
 import '../compat/json_python.dart';
@@ -166,7 +164,7 @@ EstadoNoticias lerEstado(Armazenamento a) {
   final texto = a.ler(_arquivo);
   if (texto != null) {
     try {
-      final json = jsonDecode(texto);
+      final json = jsonPythonDecode(texto);
       if (json is Map) return EstadoNoticias.fromJson(lerMapa(json));
     } on FormatException {
       // JSON inválido: começa vazio

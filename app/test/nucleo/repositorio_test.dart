@@ -5,6 +5,7 @@ import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/armazenamento_arquivos.dart';
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
+import 'package:calculadoradarf/nucleo/planilha/sincronizacao.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
 import 'package:calculadoradarf/nucleo/repositorio.dart';
@@ -105,6 +106,66 @@ void main() {
   });
 
   group('Repositorio', () {
+    test('mês e config com NaN/Infinity são lidos e regravados iguais', () {
+      const mes =
+          '{"mes": "2026-10", "fechado": false, "darf_anterior": Infinity, '
+          '"lotes": [{"id": "a", "ticker": "X", "tipo": "Ação", '
+          '"data_compra": "2026-10-01", "qtd": 1, "preco": NaN, '
+          '"vendas": [], "mod": 0}], "excluidos": {}}';
+      const cfg = '{"radar": [], "excluidos": {"k": -Infinity}}';
+      final m = ArmazenamentoMemoria()
+        ..gravar('2026-10.json', mes)
+        ..gravar('config.json', cfg);
+      final repo = Repositorio(m);
+      final d = repo.carregar('2026-10');
+      expect(d.darfAnterior, double.infinity);
+      expect(d.lotes.single.preco.isNaN, isTrue);
+      expect(repo.mesInicial(), '2026-10');
+      expect(repo.carregarMeses().keys, ['2026-10']);
+      repo.salvar(d, carimbar: false);
+      expect(m.ler('2026-10.json'), contains('"darf_anterior": Infinity'));
+      expect(m.ler('2026-10.json'), contains('"preco": NaN'));
+      final c = repo.lerConfig();
+      expect(c.excluidos['k'], double.negativeInfinity);
+      repo.gravarConfig(c, carimbar: false);
+      expect(m.ler('config.json'), contains('-Infinity'));
+    });
+
+    test('sincronização com Preço "nan" não deixa o mês ilegível', () {
+      ambiente = Ambiente.fixo(agora: 100.5);
+      final m = ArmazenamentoMemoria();
+      final repo = Repositorio(m);
+      final cfg = repo.lerConfig();
+      final r = sincronizarLinhas(repo, cfg, {
+        'Compras': [
+          [
+            '10/2026',
+            'PETR4',
+            'Ação',
+            46000,
+            10,
+            'nan',
+            '',
+            0,
+            10,
+            '',
+            'c1',
+            '',
+            5,
+          ],
+        ],
+      });
+      expect(r.mudou, isTrue);
+      final d = repo.carregar('2026-10');
+      expect(d.lotes.single.id, 'c1');
+      expect(d.lotes.single.preco.isNaN, isTrue);
+      // relê o que foi gravado (com NaN), em todos os caminhos de leitura
+      expect(repo.mesInicial(), '2026-10');
+      expect(repo.carregarMeses().keys, ['2026-10']);
+      final r2 = sincronizarLinhas(repo, repo.lerConfig(), {});
+      expect(r2.linhas['Compras'], isNotEmpty);
+    });
+
     test('JSON inválido no config.json volta ao padrão e é sobrescrito', () {
       final m = ArmazenamentoMemoria()..gravar('config.json', '{quebrado');
       final repo = Repositorio(m);
