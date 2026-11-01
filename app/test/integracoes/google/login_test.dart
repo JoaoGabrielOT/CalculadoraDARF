@@ -79,11 +79,15 @@ class _Montagem {
 Uri _redirect(Uri auth) => Uri.parse(auth.queryParameters['redirect_uri']!);
 
 /// GET no servidor loopback; devolve (status, corpo).
-Future<(int, String)> _get(Uri url) async {
+Future<(int, String, String?)> _get(Uri url, {String metodo = 'GET'}) async {
   final c = HttpClient();
   try {
-    final r = await (await c.getUrl(url)).close();
-    return (r.statusCode, await utf8.decodeStream(r));
+    final r = await (await c.openUrl(metodo, url)).close();
+    return (
+      r.statusCode,
+      await utf8.decodeStream(r),
+      r.headers.contentType?.toString(),
+    );
   } finally {
     c.close(force: true);
   }
@@ -158,7 +162,7 @@ void main() {
     'fluxo completo: recebe o código em 127.0.0.1, troca e devolve o e-mail',
     () async {
       final m = _Montagem([_tokenOk(), _about()]);
-      final resposta = Completer<(int, String)>();
+      final resposta = Completer<(int, String, String?)>();
       final email = await m.login((url) async {
         final r = _redirect(url);
         expect(r.host, '127.0.0.1');
@@ -169,9 +173,10 @@ void main() {
         );
       });
       expect(email, 'ana@gmail.com');
-      final (status, corpo) = await resposta.future;
+      final (status, corpo, tipo) = await resposta.future;
       expect(status, 200);
       expect(corpo, contains('Login concluído'));
+      expect(tipo, 'text/html; charset=utf-8');
 
       final troca = m.falso.pedidos[0];
       expect(troca.metodo, 'POST');
@@ -318,6 +323,42 @@ void main() {
         _erro<ErroGoogle>('O login não foi concluído: Bad Request'),
       );
       expect(m.armazenamento.existe('token.json'), isFalse);
+    },
+  );
+
+  test('conexão derrubada logo após a requisição: o login conclui', () async {
+    final m = _Montagem([_tokenOk(), _about()]);
+    final email = await m.login((url) async {
+      final r = _redirect(url);
+      final estado = url.queryParameters['state']!;
+      final socket = await Socket.connect(r.host, r.port);
+      socket.write(
+        'GET /?code=abc&state=$estado HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n',
+      );
+      await socket.flush();
+      socket.destroy();
+    });
+    expect(email, 'ana@gmail.com');
+    expect(m.falso.pedidos[0].formulario['code'], 'abc');
+  });
+
+  test(
+    'método que não é GET recebe 501 e o login continua esperando',
+    () async {
+      final m = _Montagem([_tokenOk(), _about()]);
+      final status = Completer<int>();
+      final email = await m.login((url) async {
+        final r = _redirect(url);
+        final estado = url.queryParameters['state']!;
+        final alvo = r.replace(queryParameters: {'code': 'x', 'state': estado});
+        unawaited(() async {
+          status.complete((await _get(alvo, metodo: 'POST')).$1);
+          await _retornarComCodigo(url);
+        }());
+      });
+      expect(await status.future, 501);
+      expect(email, 'ana@gmail.com');
+      expect(m.falso.pedidos[0].formulario['code'], 'abc');
     },
   );
 }

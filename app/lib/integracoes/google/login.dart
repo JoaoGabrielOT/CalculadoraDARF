@@ -76,37 +76,48 @@ Future<String> loginNavegador(
   Esperar? esperar,
 }) async {
   final dormir = esperar ?? Future<void>.delayed;
-  final servidor = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-  final redirect = 'http://127.0.0.1:${servidor.port}/';
   final pkce = gerarPkce();
   final estado = _tokenUrlsafe(Random.secure(), 16);
   final recebido = Completer<Uri>();
-  servidor.listen((pedido) async {
-    final uri = pedido.uri;
-    final resposta = pedido.response;
-    try {
-      if (!uri.toString().contains('code=') &&
-          !uri.toString().contains('error=')) {
-        resposta.statusCode = HttpStatus.notFound;
-        await resposta.close();
-        return;
-      }
-      resposta.statusCode = HttpStatus.ok;
-      resposta.headers.contentType = ContentType(
-        'text',
-        'html',
-        charset: 'utf-8',
-      );
-      resposta.add(utf8.encode(paginaLoginConcluido));
-      await resposta.close();
-      if (!recebido.isCompleted) recebido.complete(uri);
-    } catch (_) {
-      // conexão do navegador interrompida: continua esperando
-    }
-  });
+  final respondido = Completer<void>();
+  HttpServer? servidor;
 
   final Uri retorno;
+  final String redirect;
   try {
+    servidor = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    redirect = 'http://127.0.0.1:${servidor.port}/';
+    servidor.listen((pedido) async {
+      final uri = pedido.uri;
+      final resposta = pedido.response;
+      final ehRetorno =
+          uri.toString().contains('code=') || uri.toString().contains('error=');
+      // o código é guardado antes de responder (google_sync.py:172): o
+      // navegador pode derrubar a conexão sem atrapalhar o login
+      if (pedido.method == 'GET' && ehRetorno && !recebido.isCompleted) {
+        recebido.complete(uri);
+      }
+      try {
+        if (pedido.method != 'GET') {
+          resposta.statusCode = HttpStatus.notImplemented;
+        } else if (!ehRetorno) {
+          resposta.statusCode = HttpStatus.notFound;
+        } else {
+          resposta.statusCode = HttpStatus.ok;
+          resposta.headers.contentType = ContentType(
+            'text',
+            'html',
+            charset: 'utf-8',
+          );
+          resposta.add(utf8.encode(paginaLoginConcluido));
+        }
+        await resposta.close();
+      } catch (_) {
+        // conexão do navegador interrompida
+      } finally {
+        if (ehRetorno && !respondido.isCompleted) respondido.complete();
+      }
+    });
     await abrirUrl(
       urlAutorizacao(
         cliente,
@@ -115,11 +126,18 @@ Future<String> loginNavegador(
         estado: estado,
       ),
     );
-    retorno = await recebido.future.timeout(tempoLimite);
-  } on TimeoutException {
-    throw ErroGoogle(_msgLogin);
+    try {
+      retorno = await recebido.future.timeout(tempoLimite);
+    } on TimeoutException {
+      throw ErroGoogle(_msgLogin);
+    }
+    // deixa a página de "Login concluído" sair antes de fechar o servidor
+    await respondido.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () {},
+    );
   } finally {
-    await servidor.close(force: true);
+    await servidor?.close(force: true);
   }
 
   final q = retorno.queryParametersAll;
