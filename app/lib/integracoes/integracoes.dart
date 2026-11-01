@@ -1,3 +1,4 @@
+export 'atualizador/atualizador.dart';
 export 'cache_binario.dart';
 export 'executor.dart';
 export 'google/constantes.dart';
