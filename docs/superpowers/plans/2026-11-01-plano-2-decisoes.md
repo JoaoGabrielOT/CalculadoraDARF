@@ -1,0 +1,14 @@
+﻿# Plano 2: decisões tomadas na execução
+
+Registro das decisões (\"Ruling\") tomadas pelo controlador durante a execução do plano 2, com o custo se estiverem erradas.
+
+- Ruling: renovação de token com 5xx/429 vira Offline (Python apagaria o token) — decisão do plano, protege contra logout por instabilidade do Google — custo se errado: token inválido mantido até o próximo 400/401.
+- Ruling: implementadores sonnet, revisores sonnet (agentes do projeto), revisão final opus.
+- T6: review 1 → 2 Important plan-mandated (renovação sem scope; token sem expiry tratado como válido). Ruling: seguir o google-auth (enviar scope = escoposGoogle; expiry ausente = vencido) e ignorar token_uri do arquivo (segurança) — spec exige paridade com o Python; brief estava incompleto — custo se errado: nenhum (comportamento igual ao Python 1.12). Fix round 1 enviado.
+- T11: review aprovada; Ruling: corrigir agora 5 minors com impacto no usuário (janela do pendente, agendar sem tratamento, prepararPlanilha em paralelo → planilha duplicada no Drive, conectarComToken saindo da conta em erro transitório, sair() durante sincronização) — duplicar a planilha quebra o compartilhamento com amigos e logout por erro transitório irrita — custo: uma rodada extra. Fix round 1 enviado.
+- T12: Ruling: juntarUrl com Uri.resolve normaliza (host minúsculo, %-encoding, porta padrão) diferente do urljoin — aceito: só afeta o texto do img no cache local de prévias, URL continua funcional; noticias_detalhes.json não é lido pelo Python durante a convivência — custo se errado: cache de imagem refeito.
+- Ruling: teste de URL malformada em Logos removido — Logos não controla host/esquema, nenhuma entrada real faz Uri.parse lançar; catch geral coberto pelo teste de FileSystemException — custo se errado: nenhum (catch continua).
+- T16: review 1 → 2 Important: _apagar mascara o erro original; destino apagado à toa em falha. Ruling: preservar o destino (diverge do Python, que apagava; com .tmp o destino só muda no rename) — custo se errado: um instalador velho fica no disco. Fix round 1 enviado.
+- T17: fix round 1/5 — controlador verificou: regeneração de todas as áreas com git diff --exit-code vazio (exit 0). Ruling: sem re-revisão separada desta correção (gerador + docs; mudança de JSON só na ordem de chaves, suíte verde) — a revisão final do ramo cobre — custo se errado: achado aparece na revisão final.
+- Ruling: ServicoNoticias/enriquecer/Logos/imagens rodam no isolate dono do Repositorio, com http.Client próprio — um único dono dos arquivos evita perda por gravação concorrente — custo se errado: reorganizar no plano 3.
+- Final review: fix wave re-revisada — 6 addressed. Residual parked: sair() durante a troca do código do login regrava o token (Ruling: corrigir na T4 do plano 3 — em Sincronizador.conectar, se a geração mudou após o login, chamar conta.sair() — custo se esquecido: usuário que sai no meio do login continua logado).
