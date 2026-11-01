@@ -283,7 +283,7 @@ class ApuracaoLocal {
         permitida = !edicao && mesAceitaVendaRetroativa(repo, mesVenda, mes);
       } catch (e) {
         if (!_erroDeLeitura(e)) rethrow;
-        permitida = false;
+        throw ErroValidacao(_mensagemMes(mesVenda));
       }
     }
     if (!permitida) throw ErroValidacao(_dataVendaInvalida);
@@ -413,6 +413,8 @@ class ApuracaoLocal {
 
   Future<Fechamento> fecharMes(String mes) async {
     final d = _mesEditavel(mes);
+    // o núcleo grava o mês fechado antes de ler o seguinte: valida antes
+    _lerMes(proximoMes(mes));
     final (r, prox) = nc.fecharMes(repo, d);
     _gravou();
     return Fechamento(

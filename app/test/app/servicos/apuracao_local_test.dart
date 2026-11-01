@@ -134,6 +134,36 @@ void main() {
     });
   });
 
+  group('config ilegível por conteúdo', () {
+    const msg = 'O arquivo config.json está ilegível; nada foi alterado.';
+
+    for (final texto in ['[]', 'null', '123']) {
+      test('raiz que não é objeto ($texto) recusa gravação', () async {
+        disco.gravar('config.json', texto);
+        expect((await servicos.iniciar()).erroConfig, msg);
+        await espera(
+          servicos.salvarPreferencias(
+            const Preferencias(tema: TemaVisual.terminal),
+          ),
+          msg,
+        );
+        await espera(servicos.alterarSaldo(ModoSaldo.definir, 10), msg);
+        expect(disco.ler('config.json'), texto);
+      });
+    }
+
+    test('campo inválido: iniciar abre com o aviso e nada é gravado', () async {
+      const texto = '{"metas": [{"id": "m", "qtd": 1.5}]}';
+      disco.gravar('config.json', texto);
+      gravarMes('2026-10', [compra('L1', ticker: 'AAPL34', tipo: 'Ação')]);
+      final e = await servicos.iniciar();
+      expect(e.erroConfig, msg);
+      expect(e.mesInicial, '2026-10');
+      await espera(servicos.salvarPreferencias(const Preferencias()), msg);
+      expect(disco.ler('config.json'), texto);
+    });
+  });
+
   group('compra', () {
     test('registrarCompra grava com tipo do ticker, id novo, agenda sync e '
         'emite EventoDadosMudaram', () async {
@@ -663,6 +693,52 @@ void main() {
       expect(repo.carregar('2026-11').lotes.single.origem, 'L1');
       expect(agendamentos, 1);
     });
+
+    test('fecharMes com o mês seguinte ilegível não grava nada', () async {
+      gravarMes('2026-10', [compra('L1', qtd: 10)]);
+      disco.gravar('2026-11.json', '{');
+      final antes = disco.ler('2026-10.json');
+      await expectLater(
+        servicos.fecharMes('2026-10'),
+        throwsA(
+          isA<ErroValidacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            startsWith('Não foi possível ler o mês 11/2026'),
+          ),
+        ),
+      );
+      expect(disco.ler('2026-10.json'), antes);
+      expect(agendamentos, 0);
+    });
+
+    test(
+      'venda retroativa para mês de destino corrompido cita o mês',
+      () async {
+        gravarMes('2026-10', [compra('L1', data: '2026-09-01')]);
+        disco.gravar('2026-09.json', '{');
+        final antes = disco.ler('2026-10.json');
+        await expectLater(
+          servicos.registrarVenda(
+            '2026-10',
+            const NovaVenda(
+              loteId: 'L1',
+              data: '2026-09-15',
+              qtd: 10,
+              preco: 11,
+            ),
+          ),
+          throwsA(
+            isA<ErroValidacao>().having(
+              (e) => e.mensagem,
+              'mensagem',
+              startsWith('Não foi possível ler o mês 09/2026'),
+            ),
+          ),
+        );
+        expect(disco.ler('2026-10.json'), antes);
+      },
+    );
 
     test('amigo: meses e mês inicial vêm dos dados carregados', () async {
       gravarMes('2026-10', [compra('L1')]);

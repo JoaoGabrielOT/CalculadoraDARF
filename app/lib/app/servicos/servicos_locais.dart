@@ -79,6 +79,8 @@ class ServicosLocais implements ServicosApp {
       erroConfig = e.mensagem;
     }
 
+    // Com a config ilegível os tipos dos meses ainda são corrigidos, mas
+    // `pendente` não é marcado (nada é gravado na config).
     // Corrige o tipo (Ação/BDR) gravado; um mês ilegível fica como está e a
     // Apuração mostra o aviso dele.
     var mudou = false;
