@@ -158,6 +158,26 @@ void main() {
     expect(nomeAssetDaPlataforma(windows: false), 'CalculadoraDARF.apk');
   });
 
+  for (final corpo in ['<html>erro</html>', '[1, 2]']) {
+    test('verificar: corpo 200 que não é objeto JSON ($corpo)', () async {
+      final falso = ClienteFalso.fila([RespostaFalsa(200, texto: corpo)]);
+      await expectLater(
+        verificarAtualizacao(
+          _cliente(falso),
+          nomeAsset: nomeAssetWindows,
+          executar: executarDireto,
+        ),
+        throwsA(
+          isA<ErroAtualizacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            'Resposta inválida do GitHub.',
+          ),
+        ),
+      );
+    });
+  }
+
   test('verificar: falha de transporte vira ErroConexao', () async {
     final falso = ClienteFalso.fila([
       RespostaFalsa(200, erro: const SocketException('sem rede')),

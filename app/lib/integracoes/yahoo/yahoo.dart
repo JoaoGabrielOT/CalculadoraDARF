@@ -55,7 +55,12 @@ class ServicoYahoo {
     final r = await _http.enviar('GET', url);
     if (r.statusCode == 404) throw SemDados(semDados);
     conferirStatus(r.statusCode, url, motivo: r.reasonPhrase);
-    final corpo = await decodificarJson(r.bodyBytes, _executar);
+    final Object? corpo;
+    try {
+      corpo = await decodificarJson(r.bodyBytes, _executar);
+    } on FormatException {
+      throw SemDados(semDados);
+    }
     final chart = corpo is Map ? corpo['chart'] : null;
     final lista = chart is Map ? chart['result'] : null;
     if (lista is! List || lista.isEmpty || lista.first is! Map) {

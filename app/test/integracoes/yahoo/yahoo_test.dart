@@ -240,6 +240,20 @@ void main() {
       expect(e.toString(), 'Sem dados para PETR4 no Yahoo Finance.');
     });
 
+    for (final corpo in ['<html>erro</html>', '[1, 2]']) {
+      test(
+        '200 com corpo que não é o JSON esperado ($corpo) → SemDados',
+        () async {
+          final yahoo = _servico(
+            ClienteFalso.fila([RespostaFalsa(200, texto: corpo)]),
+          );
+          final e = await _capturar(() => yahoo.obterChart('PETR4', {}));
+          expect(e, isA<SemDados>());
+          expect(e.toString(), 'Sem dados para PETR4 no Yahoo Finance.');
+        },
+      );
+    }
+
     test('429 três vezes: LimiteConsultas e mensagemErro do Yahoo', () async {
       final falso = ClienteFalso.fila([
         RespostaFalsa(429),

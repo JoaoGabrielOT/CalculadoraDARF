@@ -88,7 +88,14 @@ Future<InfoAtualizacao?> verificarAtualizacao(
   );
   if (r.statusCode == 404) return null;
   conferirStatus(r.statusCode, url, motivo: r.reasonPhrase);
-  final rel = await decodificarJson(r.bodyBytes, executar) as Map;
+  final Map rel;
+  try {
+    rel = await decodificarJson(r.bodyBytes, executar) as Map;
+  } on FormatException {
+    throw ErroAtualizacao('Resposta inválida do GitHub.');
+  } on TypeError {
+    throw ErroAtualizacao('Resposta inválida do GitHub.');
+  }
   if (_verdadeiro(rel['draft']) || _verdadeiro(rel['prerelease'])) return null;
   final tag = rel['tag_name'] as String? ?? '';
   if (!versaoMaisNova(tag, versaoAtual)) return null;
