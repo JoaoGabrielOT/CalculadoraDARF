@@ -14,6 +14,7 @@ export 'http/erros.dart';
 export 'http/json.dart';
 export 'http/semaforo.dart';
 export 'noticias/html.dart';
+export 'noticias/rss.dart';
 export 'sincronizacao/dados_sincronizacao.dart';
 export 'sincronizacao/sincronizador.dart';
 export 'yahoo/cotacoes.dart';

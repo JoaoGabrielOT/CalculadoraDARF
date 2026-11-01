@@ -5,10 +5,20 @@ Funções (campo `funcao` de cada caso):
 - tabela_html5: entrada nula; saída o dict `html.entities.html5` inteiro.
 - meta: entrada {html, nomes}; saída texto de `_meta`.
 - ler_previa: entrada {html, url}; saída {img, resumo}.
+- ler_rss: entrada {xml, ticker, nome, agora}; saída lista de itens de `ler_rss` (parser XML; `time.time` congelado).
+- ler_rss_regex: igual, dentro de `sem_modulo("xml.etree.ElementTree")` (leitura por expressões regulares).
+- data_rfc2822: entrada texto; saída timestamp de `parsedate_to_datetime(...).timestamp()` ou nulo quando lança
+  (só datas com fuso explícito: sem fuso o Python usa a hora local da máquina que gerou).
+- url_busca: entrada {ticker, nome}; saída `URL_RSS.format(q=quote(consulta(...)))`.
+- quote: entrada {texto, seguro}; saída `urllib.parse.quote(texto, safe=seguro)`.
 """
 import html as pyhtml
+import types
+from email.utils import parsedate_to_datetime
 from html.entities import html5
+from urllib.parse import quote
 
+from . import _rede_falsa as rede
 from . import base
 
 base.nc  # noqa: B018 (garante o sys.path da raiz)
@@ -102,6 +112,172 @@ METAS = [
 ]
 
 
+def _item(titulo, link="https://news.google.com/rss/articles/CBMiX", guid=None, data="Wed, 28 Oct 2026 10:00:00 GMT",
+          fonte="Valor Econômico", fonte_url="https://valor.globo.com"):
+    partes = []
+    if titulo is not None:
+        partes.append(f"<title>{titulo}</title>")
+    if link is not None:
+        partes.append(f"<link>{link}</link>")
+    if guid is not None:
+        partes.append(f'<guid isPermaLink="false">{guid}</guid>')
+    if data is not None:
+        partes.append(f"<pubDate>{data}</pubDate>")
+    if fonte is not None:
+        partes.append(f'<source url="{fonte_url}">{fonte}</source>')
+    return "<item>" + "".join(partes) + "</item>"
+
+
+def _rss(*itens, fim="</channel></rss>"):
+    return ('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>"PETR4" - Google Notícias</title>'
+            "<link>https://news.google.com/</link>" + "".join(itens) + fim)
+
+
+_T1 = "Petrobras anuncia dividendos extraordinários de R$ 5 bilhões - Valor Econômico"
+_T2 = "Petrobras bate recorde de produção no pré-sal em outubro - Exame"
+_T3 = "Petrobras eleva preço do diesel nas refinarias a partir de amanhã - InfoMoney"
+
+RSS = [
+    ("item completo com fonte no título", "PETR4", "", _rss(_item(_T1, guid="g1"))),
+    ("vários itens na ordem do documento", "PETR4", "", _rss(
+        _item(_T1, guid="g1"),
+        _item(_T2, guid="g2", fonte="Exame", fonte_url="https://exame.com", data="Tue, 27 Oct 2026 08:30:00 -0300"),
+        _item(_T3, guid="g3", fonte="InfoMoney", fonte_url="https://www.infomoney.com.br",
+              data="Mon, 26 Oct 2026 23:59:59 EST"))),
+    ("item sem link é pulado", "PETR4", "", _rss(_item(_T1, link=None), _item(_T2, fonte="Exame"))),
+    ("item sem título é pulado", "PETR4", "", _rss(_item(None), _item("   "), _item(_T2, fonte="Exame"))),
+    ("ruído é descartado", "PETR4", "", _rss(
+        _item("PETR4: cotação e indicadores - Petrobras PN - Investing.com", fonte="Investing.com"),
+        _item("Petrobras: resultados, dividendos, cotação e mais notícias - Fundamentus", fonte="Fundamentus"),
+        _item("PETR4 (PETR4) - TradeMap", fonte="TradeMap"),
+        _item(_T2, fonte="Exame"))),
+    ("título curto é descartado", "PETR4", "", _rss(_item("Petrobras sobe - Exame", fonte="Exame"))),
+    ("sufixo da fonte só sai se for a mesma", "PETR4", "", _rss(
+        _item(_T1, fonte="Exame"),
+        _item("Petrobras anuncia dividendos extraordinários de R$ 5 bilhões - Valor", fonte="Valor Econômico"),
+        _item("Petrobras anuncia dividendos extraordinários de R$ 5 bilhões - ", fonte=""))),
+    ("sufixo com espaços antes", "PETR4", "", _rss(
+        _item("Petrobras anuncia dividendos extraordinários de R$ 5 bilhões   - Valor Econômico"))),
+    ("entidade &amp; no título", "PETR4", "", _rss(
+        _item("Lucro da Petrobras sobe 10% &amp; supera expectativas do mercado - InfoMoney", fonte="InfoMoney"),
+        _item("Petrobras &lt;PETR4&gt; fecha em alta &#8211; analistas veem mais espaço - Exame", fonte="Exame"))),
+    ("CDATA no título", "PETR4", "", _rss(
+        _item("<![CDATA[Petrobras fecha acordo bilionário com a Vale para exploração - Exame]]>", fonte="Exame"))),
+    ("CDATA no link e na fonte", "PETR4", "", _rss(
+        _item(_T2, link="<![CDATA[https://exemplo.com/a?x=1]]>", fonte="<![CDATA[Exame]]>"))),
+    ("pubDate ausente usa agora", "PETR4", "", _rss(_item(_T2, data=None, fonte="Exame"))),
+    ("pubDate inválido usa agora", "PETR4", "", _rss(
+        _item(_T2, data="ontem às 10h", fonte="Exame"), _item(_T3, data="", fonte="InfoMoney"))),
+    ("sem guid o id é o link", "PETR4", "", _rss(_item(_T2, link="  https://x.com/a  ", guid=None, fonte="Exame"))),
+    ("guid com espaços", "PETR4", "", _rss(_item(_T2, guid="  abc-123  ", fonte="Exame"))),
+    ("sem source", "PETR4", "", _rss(_item(_T2, fonte=None))),
+    ("source com url com &amp;", "PETR4", "", _rss(_item(_T2, fonte="Exame", fonte_url="https://exame.com/?a=1&amp;b=2"))),
+    ("source sem url", "PETR4", "", _rss(
+        f"<item><title>{_T2}</title><link>https://x.com/a</link><source>Exame</source></item>")),
+    ("título e fonte com espaços e quebras de linha", "PETR4", "", _rss(
+        f'<item>\n  <title>\n   {_T2}\n  </title>\n  <link>\n   https://x.com/a\n  </link>\n'
+        '  <source url="https://exame.com">\n Exame\n </source>\n</item>')),
+    ("temas reconhecidos", "PETR4", "", _rss(
+        _item("Petrobras anuncia dividendos e JCP após lucro recorde no trimestre - Exame", fonte="Exame"))),
+    ("sem itens", "PETR4", "", _rss()),
+    ("só elementos desconhecidos", "PETR4", "", _rss("<other>x</other>")),
+    ("BDR cita o ticker", "AAPL34", "Apple Inc.", _rss(
+        _item("AAPL34 sobe após lançamento de novo iPhone na Califórnia - Exame", fonte="Exame"))),
+    ("BDR cita o nome", "AAPL34", "Apple Inc.", _rss(
+        _item("Apple lança novo iPhone e ações reagem em Wall Street - InfoMoney", fonte="InfoMoney"))),
+    ("BDR sem relação é descartado", "AAPL34", "Apple Inc.", _rss(
+        _item("Mercado financeiro fecha em alta com dados de emprego dos EUA - InfoMoney", fonte="InfoMoney"))),
+    ("BDR sem nome só aceita o ticker", "AAPL34", "", _rss(
+        _item("Apple lança novo iPhone e ações reagem em Wall Street - InfoMoney", fonte="InfoMoney"),
+        _item("AAPL34 sobe após lançamento de novo iPhone na Califórnia - Exame", fonte="Exame"))),
+    ("BDR com fronteira de palavra no nome", "NVDC34", "Nvidia Corp", _rss(
+        _item("Nvidiana é o apelido de uma cidade fictícia do interior paulista - Exame", fonte="Exame"),
+        _item("Nvidia supera previsões e dispara com demanda por chips de IA - Exame", fonte="Exame"))),
+    ("itens aninhados em outro elemento", "PETR4", "", _rss(
+        f"<group><item><title>{_T2}</title><link>https://x.com/a</link></item></group>")),
+    ("acentos e emoji no título", "PETR4", "", _rss(
+        _item("Petrobras \U0001F680 dispara após descoberta de petróleo em águas profundas - Exame", fonte="Exame"))),
+]
+
+# Documentos malformados: só a leitura por expressões regulares os lê.
+RSS_MALFORMADO = [
+    ("sem fechar o rss", "PETR4", "", _rss(_item(_T1, guid="g1"), _item(_T2, guid="g2", fonte="Exame"), fim="")),
+    ("e comercial solto no título", "PETR4", "", _rss(
+        _item("Lucro & prejuízo da Petrobras surpreendem o mercado nesta semana - Exame", fonte="Exame"))),
+    ("último item cortado", "PETR4", "", _rss(
+        _item(_T1, guid="g1"), f"<item><title>{_T2}</title><link>https://x", fim="")),
+    ("tags desencontradas", "PETR4", "", _rss(f"<item><title>{_T2}</title><link>https://x.com/a</link><b></item>")),
+    ("entidade numérica e CDATA", "PETR4", "", _rss(
+        _item("Petrobras &#8211; lucro recorde no trimestre surpreende analistas - Exame", fonte="Exame"),
+        _item("<![CDATA[Petrobras fecha acordo bilionário com a Vale para exploração - Exame]]>", fonte="Exame"),
+        fim="</channel>")),
+    ("fonte com url", "PETR4", "", _rss(
+        _item(_T2, fonte="Exame", fonte_url="https://exame.com/?a=1&amp;b=2"), fim="</rss")),
+]
+
+DATAS = [
+    "Wed, 28 Oct 2026 10:00:00 GMT", "Wed, 28 Oct 2026 10:00:00 +0000", "Wed, 28 Oct 2026 10:00:00 -0300",
+    "Wed, 28 Oct 2026 10:00:00 +0530", "Wed, 28 Oct 2026 10:00:00 EST", "Wed, 28 Oct 2026 10:00:00 EDT",
+    "Wed, 28 Oct 2026 10:00:00 CST", "Wed, 28 Oct 2026 10:00:00 CDT", "Wed, 28 Oct 2026 10:00:00 MST",
+    "Wed, 28 Oct 2026 10:00:00 MDT", "Wed, 28 Oct 2026 10:00:00 PST", "Wed, 28 Oct 2026 10:00:00 PDT",
+    "Wed, 28 Oct 2026 10:00:00 AST", "Wed, 28 Oct 2026 10:00:00 ADT", "Wed, 28 Oct 2026 10:00:00 UT",
+    "Wed, 28 Oct 2026 10:00:00 UTC", "Wed, 28 Oct 2026 10:00:00 Z", "Wed, 28 Oct 2026 10:00:00 gmt",
+    "28 Oct 2026 10:00:00 GMT", "28 Oct 26 10:00:00 GMT", "28 Oct 99 10:00:00 GMT", "28 Oct 68 10:00:00 GMT",
+    "28 Oct 69 10:00:00 GMT", "28 Oct 00 10:00:00 GMT", "28 Oct 26 10:00 GMT", "Wed, 28 Oct 2026 10:00 -0300",
+    "Wed,28 Oct 2026 10:00:00 GMT", "Wed, 28 October 2026 10:00:00 GMT", "wed, 28 oct 2026 10:00:00 GMT",
+    "Wed 28 Oct 2026 10:00:00 GMT", "Wed, 28-Oct-2026 10:00:00 GMT", "28-Oct-26 10:00:00 GMT",
+    "Wed, 28 Oct 2026 10.00.00 GMT", "Wed, 28 Oct 2026 10.00 GMT", "Oct 28 2026 10:00:00 GMT",
+    "Wed, 28 Oct 2026 10:00:00+0300", "Wed, 28 Oct 2026 10:00:00-0300", "Wed, 28 Oct 10:00:00 2026 GMT",
+    "Wed, 28 Oct 2026, 10:00:00 GMT", "Wed, 28 Oct 2026 10:00:00, GMT", "Wed, 28 Oct 2026 10:00:00 +03",
+    "Wed, 28 Oct 2026 10:00:00 +0075", "Wed, 28 Oct 2026 10:00:00 +2359", "Wed, 28 Oct 2026 10:00:00 -2359",
+    "Wed, 28 Oct 2026 10:00:00 +2400", "Wed, 28 Oct 2026 10:00:00 +2500", "Wed, 28 Oct 2026 10:00:00 GMT+0100",
+    "  Wed,   28  Oct 2026\t10:00:00 \n GMT ", "Wed, 29 Feb 2028 10:00:00 GMT", "Wed, 29 Feb 2026 10:00:00 GMT",
+    "Wed, 31 Apr 2026 10:00:00 GMT", "Wed, 32 Oct 2026 10:00:00 GMT", "Wed, 00 Oct 2026 10:00:00 GMT",
+    "Wed, 28 Oct 2026 24:00:00 GMT", "Wed, 28 Oct 2026 23:60:00 GMT", "Wed, 28 Oct 2026 23:59:60 GMT",
+    "Wed, 28 Oct 2026 23:59:59 GMT", "Wed, 28 Oct 0001 00:00:00 GMT", "Wed, 28 Oct 9999 23:59:59 GMT",
+    "Wed, 28 Oct 10000 10:00:00 GMT", "Wed, 28 Oct 2026 +10:00:00 GMT", "Wed, 28 Oct 2026 1_0:00:00 GMT",
+    "Wed, 28 Oct 2026 10:0a:00 GMT", "Wed, 28 Oct 2026 10 GMT", "Wed, 28 Oct 2026 10:00:00:00 GMT",
+    "Wed, 28 Oct 2026 10.00.00.00 GMT", "Wed, 28 Oct 2026", "Wed, 28 Oct", "Wed, 28 Xyz 2026 10:00:00 GMT",
+    "Wed, 28 2026 Oct 10:00:00 GMT", "ontem às 10h", "lixo", "", "   ", ",", "Wed,",
+    "Mon, 26 Oct 2026 23:59:59 -0200", "Wed, 28 Oct 2026 10:00:00 +0300 (BRT)",
+    "Sun, 01 Jan 2023 00:00:00 +0000", "Sat, 31 Dec 1999 23:59:59 -0100",
+]
+
+BUSCAS = [
+    ("PETR4", ""), ("VALE3", "Vale S.A."), ("TAEE11", ""), ("PETR4F", ""),
+    ("AAPL34", "Apple Inc."), ("JNJB34", "Johnson & Johnson (JNJ)"), ("LORE34", "L'Oréal S.A."),
+    ("PGCO34", "Procter & Gamble Co."), ("ATTB34", "AT&T Inc."), ("MSFT34", "Microsoft Corporation"),
+    ("NVDC34", "NVIDIA Corp - Class A"), ("AMZO34", "Amazon.com, Inc."), ("ITLC34", "Intel (INTC) Corp"),
+    ("BERK34", "Berkshire Hathaway Inc. Class B"), ("COCA34", "Coca-Cola Co"), ("DISB34", "Walt Disney Co (The)"),
+    ("NFLX34", "Ação – Açúcar São João/Ñandú"), ("TSLA34", "Tesla"), ("GOGL34", "ab"), ("MELI34", "MercadoLibre"),
+    ("PETR4", "Petróleo Brasileiro"), ("AAPL34", "Apple! * ~ _ . - Inc"),
+]
+
+QUOTES = [
+    ("abc", "/"), ("a b", "/"), ("a/b", "/"), ("a/b", ""), ("a&b=c?d#e", "/"), ("\"x\" (y) 'z' !*", "/"),
+    ("ção ñ é", "/"), ("\U0001F600", "/"), ("_.-~", "/"), ("%41", "/"), ("a,b;c:d@e", "/"), ("a,b;c", ",;"),
+    ("", "/"), ("(\"PETR4\" OR \"Apple\" ações) when:7d", "/"),
+]
+
+
+def _ler_rss(xml, ticker, nome):
+    antigo = nt.time
+    nt.time = types.SimpleNamespace(time=lambda: base.AGORA)
+    try:
+        return nt.ler_rss(xml.encode("utf-8"), ticker, nome)
+    finally:
+        nt.time = antigo
+
+
+def _data(txt):
+    """Timestamp, nulo se o Python lança, ou `...` se a data é sem fuso (depende da máquina que gerou)."""
+    try:
+        d = parsedate_to_datetime(txt)
+    except (TypeError, ValueError):
+        return None
+    return ... if d.tzinfo is None else d.timestamp()
+
+
 def casos():
     out = [base.caso("tabela", "tabela_html5", None, dict(html5))]
     for nome, entrada in UNESCAPE:
@@ -112,4 +288,22 @@ def casos():
         out.append(base.caso(nome, "ler_previa", {"html": doc, "url": url}, nt.ler_previa(doc, url)))
     for nome, doc, nomes in METAS:
         out.append(base.caso(nome, "meta", {"html": doc, "nomes": nomes}, nt._meta(doc, *nomes)))
+    for nome, ticker, empresa, xml in RSS:
+        entrada = {"xml": xml, "ticker": ticker, "nome": empresa, "agora": base.AGORA}
+        out.append(base.caso(nome, "ler_rss", entrada, _ler_rss(xml, ticker, empresa)))
+    for nome, ticker, empresa, xml in RSS + RSS_MALFORMADO:
+        entrada = {"xml": xml, "ticker": ticker, "nome": empresa, "agora": base.AGORA}
+        with rede.sem_modulo("xml.etree.ElementTree"):
+            saida = _ler_rss(xml, ticker, empresa)
+        sufixo = " (malformado)" if any(nome == m[0] for m in RSS_MALFORMADO) else ""
+        out.append(base.caso(nome + sufixo, "ler_rss_regex", entrada, saida))
+    for txt in DATAS:
+        saida = _data(txt)
+        if saida is not ...:
+            out.append(base.caso(repr(txt), "data_rfc2822", txt, saida))
+    for ticker, empresa in BUSCAS:
+        url = nt.URL_RSS.format(q=quote(nt.consulta(ticker, empresa)))
+        out.append(base.caso(f"{ticker} {empresa}".strip(), "url_busca", {"ticker": ticker, "nome": empresa}, url))
+    for texto, seguro in QUOTES:
+        out.append(base.caso(repr(texto), "quote", {"texto": texto, "seguro": seguro}, quote(texto, safe=seguro)))
     return out
