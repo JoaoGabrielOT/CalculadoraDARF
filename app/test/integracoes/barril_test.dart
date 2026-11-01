@@ -2,7 +2,7 @@ import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('o barril exporta um símbolo de cada arquivo público', () {
+  test('o barril compila com um símbolo de cada arquivo público e a lista não perde nenhum', () {
     final simbolos = <Object>[
       ClienteHttp,
       ServicoYahoo,

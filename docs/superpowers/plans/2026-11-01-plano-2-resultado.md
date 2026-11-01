@@ -9,7 +9,7 @@ Concluído em 01/11/2026 na branch `migracao-flutter` (commits 2ce31ce..da94152,
 - `flutter test --tags ida_e_volta` + `py -3.12 ferramentas/conferir_ida_e_volta.py app/build/ida_e_volta`: `IDA E VOLTA OK (20 roteiros)`.
 - `python -m unittest discover -s tests` (raiz): `Ran 147 tests ... OK` (Python intacto).
 - `git grep -n "http.Client()\|IOClient(" -- app/test`: uma ocorrência, `app/test/integracoes/http/cancelar_test.dart:30`, que fala só com um `HttpServer` em `127.0.0.1` (loopback da Tarefa 8/2). Nenhum teste usa a internet.
-- Referências: `py -3.12 ferramentas/gerar_referencias.py` (todas as áreas) muda 1 linha de `app/test/referencias/repositorio.json`; ver "Gerador do plano 1" abaixo. As demais áreas são idênticas.
+- Referências: `py -3.12 ferramentas/gerar_referencias.py` (todas as áreas) executado duas vezes seguidas, `git diff --exit-code app/test/referencias` vazio nas duas (ver "Gerador do plano 1").
 
 ## Decisões tomadas durante a execução
 - Renovação de token com 5xx/429 vira `Offline` (o Python apagaria o token): protege contra logout por instabilidade do Google. Custo se errado: token inválido mantido até o próximo 400/401.
@@ -41,10 +41,10 @@ Aprendidas na execução:
 - Migrar `token.json` sem conversão (formato authorized_user do google-auth; nomes e chaves do Python também em `noticias_detalhes.json`, `logos/`, `logos/fontes/`, `noticias_img/`).
 - `InstalarAtualizacao` do Windows: instalador em modo silencioso. O asset é `CalculadoraDARF.exe` (Windows) e `CalculadoraDARF.apk` (Android).
 - Teste manual na pré-release, numa planilha real: gravação que encolhe a planilha (sobras limpas, colunas extras e formatação intactas), exercitando `escrever` sem `endRowIndex`.
-- Gerador do plano 1 (ver abaixo) e a validação `fromJson→toJson` dos arquivos migrados, já exigida pelo plano 1.
+- Se o plano 4 acrescentar áreas de referência, qualquer dict derivado de conjunto precisa de ordem explícita no gerador (regra de `js()` em `base.py`); e a validação `fromJson→toJson` dos arquivos migrados, já exigida pelo plano 1.
 
-## Gerador do plano 1 não determinístico (investigado)
-Regenerar todas as áreas muda 1 linha de `app/test/referencias/repositorio.json` (o arquivo tem uma linha só). O mesmo conteúdo, tamanho idêntico (39002 caracteres), só muda a ordem das chaves do objeto `excluidos` do caso de salvar com venda desfeita (`v2, v1, l1` contra `v1, l1, v2`), vinda de iteração de um conjunto de strings no Python (hash de strings é aleatório por execução). Os testes Dart comparam mapas, então a ordem é irrelevante e nada falha; o ruído só aparece no `git diff` ao regenerar. Correção sugerida, fora do escopo do plano 2: ordenar as chaves de `excluidos` no gerador de `ferramentas/referencias/repositorio.py` (ou `PYTHONHASHSEED=0`). O arquivo foi restaurado e não entra no commit.
+## Gerador do plano 1 não determinístico (corrigido)
+Regenerar todas as áreas mudava 1 linha de `app/test/referencias/repositorio.json`: a ordem das chaves do objeto `excluidos` (vinda de iteração de conjunto de strings no Python, hash aleatório por execução). O conteúdo era igual e os testes Dart comparam mapas, mas violava a restrição "regenerar não muda o JSON". Correção na origem: `js()` em `ferramentas/referencias/base.py` ordena as chaves de `excluidos`. Os JSON de 5 áreas (mesclagem, planilha_montagem, planilha_reconstrucao, repositorio, sincronizacao) mudaram só na ordem dessas chaves; suíte Dart, conferir_portados e ida e volta seguem verdes. Depois disso, duas regenerações seguidas deixam o diff vazio.
 
 ## Pendências menores registradas (não bloqueiam), por área
 - Infraestrutura (regras, executor, rede): detector de imports só olha linhas iniciadas por `//` (`.sort (` com espaço e `.roundToDouble(` fora); `Retry-After` enorme estoura `Duration` (comparar antes); `abrir` com erro sem drain deixa a conexão aberta; `utf8.decode` sem remover BOM; faltam teste com `TlsException` e com o texto original; `somaPythonNum` dá a volta em int64 (Python tem inteiros arbitrários).

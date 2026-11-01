@@ -71,7 +71,10 @@ def js(obj):
     if isinstance(obj, date):
         return obj.isoformat()
     if isinstance(obj, dict):
-        return {str(k): js(v) for k, v in obj.items()}
+        # "excluidos" nasce de um conjunto de strings (hash aleatório por execução):
+        # ordenar as chaves mantém o JSON gerado idêntico a cada geração.
+        return {str(k): (js(dict(sorted(v.items()))) if k == "excluidos" and isinstance(v, dict) else js(v))
+                for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [js(v) for v in obj]
     if isinstance(obj, (set, frozenset)):
