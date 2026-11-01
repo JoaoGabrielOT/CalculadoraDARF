@@ -1,6 +1,7 @@
 // Fachada dos serviços no isolate do núcleo: um só `Repositorio`, um só dono.
-// Apuração e caixa vêm de `ApuracaoLocal`; conta, mercado, notícias e
-// atualizador entram nas Tarefas 4 a 6.
+// Apuração e caixa vêm de `ApuracaoLocal`, conta e amigos de `ContaLocal`,
+// mercado, radar e metas de `MercadoLocal`; notícias e atualizador entram na
+// Tarefa 6.
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -13,10 +14,12 @@ import 'eventos.dart';
 import 'locais/apuracao_local.dart';
 import 'locais/config_segura.dart';
 import 'locais/conta_local.dart';
+import 'locais/mercado_local.dart';
 
 class ServicosLocais implements ServicosApp {
   ServicosLocais({
     required this._repo,
+    required ServicoYahoo yahoo,
     required ContaGoogle conta,
     required AbrirUrl abrirUrl,
     Duration atrasoAgendamento = const Duration(milliseconds: 1500),
@@ -34,6 +37,13 @@ class ServicosLocais implements ServicosApp {
       emitir: _emitir,
       amigoAtual: () => _conta.amigoCarregado,
     );
+    _mercado = MercadoLocal(
+      repo: _repo,
+      yahoo: yahoo,
+      agendarSync: _conta.agendar,
+      emitir: _emitir,
+      amigo: () => _conta.amigoCarregado,
+    );
   }
 
   final Repositorio _repo;
@@ -41,6 +51,7 @@ class ServicosLocais implements ServicosApp {
       StreamController<EventoServico>.broadcast();
   late final ContaLocal _conta;
   late final ApuracaoLocal _apuracao;
+  late final MercadoLocal _mercado;
 
   void _emitir(EventoServico e) {
     if (!_eventos.isClosed) _eventos.add(e);
@@ -196,8 +207,8 @@ class ServicosLocais implements ServicosApp {
       _apuracao.reservadoEmMetas(loteId);
 
   @override
-  Future<PreparoFechamento> prepararFechamento(String mes) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<PreparoFechamento> prepararFechamento(String mes) =>
+      _mercado.prepararFechamento(mes);
 
   @override
   Future<Fechamento> fecharMes(String mes) => _apuracao.fecharMes(mes);
@@ -246,66 +257,63 @@ class ServicosLocais implements ServicosApp {
 
   // --- mercado, radar e metas (Tarefa 5)
 
-  @override
-  Future<VisaoRadar> radar({String? amigo}) async =>
-      _faltaImplementar('Tarefa 5');
+  /// Verificação de metas do timer (Tarefa 7).
+  Future<void> verificacaoAutomatica() => _mercado.verificacaoAutomatica();
 
   @override
-  Future<ItemRadar> adicionarRadar(String ticker) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<VisaoRadar> radar({String? amigo}) => _mercado.radar(amigo: amigo);
 
   @override
-  Future<int> importarRadar(List<ItemRadar> itens) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<ItemRadar> adicionarRadar(String ticker) =>
+      _mercado.adicionarRadar(ticker);
 
   @override
-  Future<void> removerRadar(String ticker) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<int> importarRadar(List<ItemRadar> itens) =>
+      _mercado.importarRadar(itens);
 
   @override
-  Future<void> reordenarRadar(List<String> tickers) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<void> removerRadar(String ticker) => _mercado.removerRadar(ticker);
 
   @override
-  Future<void> limparCacheCotacoes() async => _faltaImplementar('Tarefa 5');
+  Future<void> reordenarRadar(List<String> tickers) =>
+      _mercado.reordenarRadar(tickers);
 
   @override
-  Future<CotacaoRadar> cotacao(String ticker, {String nome = ''}) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<void> limparCacheCotacoes() => _mercado.limparCacheCotacoes();
 
   @override
-  Future<Grafico> grafico(String ticker, String periodo) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<CotacaoRadar> cotacao(String ticker, {String nome = ''}) =>
+      _mercado.cotacao(ticker, nome: nome);
 
   @override
-  Future<Map<String, double?>> precosCarteira(Set<String> tickers) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<Grafico> grafico(String ticker, String periodo) =>
+      _mercado.grafico(ticker, periodo);
 
   @override
-  Future<(double, String)> precoVenda(String ticker, String dia) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<Map<String, double?>> precosCarteira(Set<String> tickers) =>
+      _mercado.precosCarteira(tickers);
 
   @override
-  Future<VisaoMetas> metas() async => _faltaImplementar('Tarefa 5');
+  Future<(double, String)> precoVenda(String ticker, String dia) =>
+      _mercado.precoVenda(ticker, dia);
 
   @override
-  Future<VisaoSugestoes> sugestoesMetas() async =>
-      _faltaImplementar('Tarefa 5');
+  Future<VisaoMetas> metas() => _mercado.metas();
 
   @override
-  Future<PrecoAlvo> calcularPrecoAlvo(
-    String loteId,
-    int qtd,
-    double lucro,
-  ) async => _faltaImplementar('Tarefa 5');
+  Future<VisaoSugestoes> sugestoesMetas() => _mercado.sugestoesMetas();
 
   @override
-  Future<Projecao> projetarPreco(String loteId, int qtd, double preco) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<PrecoAlvo> calcularPrecoAlvo(String loteId, int qtd, double lucro) =>
+      _mercado.calcularPrecoAlvo(loteId, qtd, lucro);
 
   @override
-  Future<Meta?> parceiraOco(String loteId, String gatilho) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<Projecao> projetarPreco(String loteId, int qtd, double preco) =>
+      _mercado.projetarPreco(loteId, qtd, preco);
+
+  @override
+  Future<Meta?> parceiraOco(String loteId, String gatilho) =>
+      _mercado.parceiraOco(loteId, gatilho);
 
   @override
   Future<Meta> criarMetaAlvo(
@@ -314,7 +322,13 @@ class ServicosLocais implements ServicosApp {
     double precoAlvo, {
     double? lucroDesejado,
     String? ocoCom,
-  }) async => _faltaImplementar('Tarefa 5');
+  }) => _mercado.criarMetaAlvo(
+    loteId,
+    qtd,
+    precoAlvo,
+    lucroDesejado: lucroDesejado,
+    ocoCom: ocoCom,
+  );
 
   @override
   Future<Meta> criarStop(
@@ -325,15 +339,21 @@ class ServicosLocais implements ServicosApp {
     String? ocoCom,
     double? precoAtual,
     Map<String, Object?>? sugestao,
-  }) async => _faltaImplementar('Tarefa 5');
+  }) => _mercado.criarStop(
+    loteId,
+    qtd,
+    precoStop,
+    movel: movel,
+    ocoCom: ocoCom,
+    precoAtual: precoAtual,
+    sugestao: sugestao,
+  );
 
   @override
-  Future<void> cancelarMeta(String metaId) async =>
-      _faltaImplementar('Tarefa 5');
+  Future<void> cancelarMeta(String metaId) => _mercado.cancelarMeta(metaId);
 
   @override
-  Future<ResultadoVerificacao> verificarMetas() async =>
-      _faltaImplementar('Tarefa 5');
+  Future<ResultadoVerificacao> verificarMetas() => _mercado.verificarMetas();
 
   // --- notícias, imagens e atualizador (Tarefa 6)
 

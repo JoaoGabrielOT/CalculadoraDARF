@@ -536,13 +536,17 @@ void encerrarVerificacao() => _verificando = false;
 
 /// Busca o histórico e executa as metas atingidas. Devolve o relatório de
 /// [aplicar] ou nulo quando outra verificação já está em andamento ou não há
-/// metas ativas. [diarias]: barras diárias para os stops móveis.
+/// metas ativas. [diarias]: barras diárias para os stops móveis. [releitura]:
+/// devolve a config atual do disco; com ela, a config aplicada é a lida depois
+/// da busca (que leva segundos), para não desfazer o que o usuário mudou nesse
+/// intervalo.
 Future<RelatorioMetas?> verificar(
   Repositorio repo,
   Config cfg,
   BuscarHistorico historico, {
   DataHora? agora,
   BuscarDiarias? diarias,
+  Config Function()? releitura,
 }) async {
   if (!tentarIniciarVerificacao()) return null;
   try {
@@ -553,7 +557,12 @@ Future<RelatorioMetas?> verificar(
       historico,
       diarias: diarias,
     );
-    return aplicar(repo, cfg, historicos, agora: agora);
+    return aplicar(
+      repo,
+      releitura != null ? releitura() : cfg,
+      historicos,
+      agora: agora,
+    );
   } finally {
     encerrarVerificacao();
   }
@@ -570,6 +579,7 @@ Future<PreparoFechamento> prepararFechamento(
   BuscarHistorico historico, {
   DataHora? agora,
   BuscarDiarias? diarias,
+  Config Function()? releitura,
 }) async {
   final meses = repo.carregarMeses();
   final doMes = [
@@ -584,6 +594,7 @@ Future<PreparoFechamento> prepararFechamento(
     historico,
     agora: agora,
     diarias: diarias,
+    releitura: releitura,
   );
   if (rel == null) {
     saida.bloqueio =

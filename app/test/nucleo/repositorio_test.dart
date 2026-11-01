@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/armazenamento_arquivos.dart';
+import 'package:calculadoradarf/nucleo/erros.dart';
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
 import 'package:calculadoradarf/nucleo/planilha/sincronizacao.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
@@ -166,17 +167,16 @@ void main() {
       expect(r2.linhas['Compras'], isNotEmpty);
     });
 
-    test('JSON inválido no config.json volta ao padrão e é sobrescrito', () {
+    test('JSON inválido no config.json é lido como padrão, mas gravarConfig '
+        'recusa e não sobrescreve (decisão do app: nunca trocar a config '
+        'do usuário pelo padrão)', () {
       final m = ArmazenamentoMemoria()..gravar('config.json', '{quebrado');
       final repo = Repositorio(m);
       expect(repo.lerConfig().toJson(), Config().toJson());
-      ambiente = Ambiente.fixo(agora: 50.5);
       final cfg = repo.lerConfig()
         ..radar.add(ItemRadar(ticker: 'PETR4', desde: '2026-10-28'));
-      repo.gravarConfig(cfg);
-      final gravado = _mapa(jsonDecode(m.ler('config.json')!));
-      final radar = (gravado['radar']! as List).single as Map;
-      expect(radar['mod'], 50.5);
+      expect(() => repo.gravarConfig(cfg), throwsA(isA<ErroValidacao>()));
+      expect(m.ler('config.json'), '{quebrado');
     });
 
     test('config sem arquivo: existeMes e carregar de mês ausente', () {

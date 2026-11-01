@@ -18,6 +18,9 @@ class CacheCotacoes {
 
   double? preco(String ticker) => _precos[ticker]?.$1;
 
+  /// Já houve ao menos uma tentativa para o ticker (com ou sem preço).
+  bool tentou(String ticker) => _precos.containsKey(ticker);
+
   /// Tickers sem preço ou vencidos há mais de [validade] s, em ordem alfabética.
   List<String> pendentes(Iterable<String> tickers) {
     final agora = ambiente.agora();

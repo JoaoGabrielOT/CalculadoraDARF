@@ -135,15 +135,14 @@ class Repositorio {
   /// amigos, do radar e das metas e registra as exclusões em
   /// `excluidos["<lista>:<chave>"]`. A subida do stop móvel (`niveis` e
   /// `stop_atual`) não carimba (nucleo.py:193-226).
+  ///
+  /// Com o arquivo atual ilegível lança [ErroValidacao] (a guarda de
+  /// [lerConfigParaGravar]) antes de gravar: nunca sobrescreve a config do
+  /// usuário por padrões, mesmo que [cfg] tenha vindo de [lerConfig].
   void gravarConfig(Config cfg, {bool carimbar = true}) {
+    final antigo = lerConfigParaGravar();
     if (carimbar) {
       final t = ambiente.agora();
-      Config antigo;
-      try {
-        antigo = Config.fromJson(_lerObjeto(_arquivoConfig) ?? {});
-      } on FormatException {
-        antigo = Config();
-      }
       void carimbarLista<T extends ComMod>(
         String nome,
         List<T> atuais,

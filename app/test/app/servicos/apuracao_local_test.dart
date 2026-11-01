@@ -7,6 +7,7 @@ import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../apoio/conta_falsa.dart';
+import '../apoio/yahoo_falso.dart';
 
 class _ArmazenamentoQueFalha extends ArmazenamentoMemoria {
   @override
@@ -74,6 +75,7 @@ void main() {
     // o atraso longo mantém a sincronização fora dos testes
     servicos = ServicosLocais(
       repo: repo,
+      yahoo: yahooSemRede(),
       conta: ContaFalsa(email: 'ana@gmail.com'),
       abrirUrl: (_) async {},
       atrasoAgendamento: const Duration(hours: 1),
@@ -186,6 +188,7 @@ void main() {
         final repoFalho = Repositorio(_ArmazenamentoQueFalha());
         final s = ServicosLocais(
           repo: repoFalho,
+          yahoo: yahooSemRede(),
           conta: ContaFalsa(),
           abrirUrl: (_) async {},
         );
