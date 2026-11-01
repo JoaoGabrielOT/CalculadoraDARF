@@ -1,4 +1,5 @@
-"""Referências da parte HTML das notícias (noticias.py:363-381): entidades, `_meta` e `ler_previa`.
+"""Referências da parte HTML das notícias (noticias.py:363-381): entidades, `_meta` e `ler_previa`, e de
+`decodificar_link` (noticias.py:340-360) com a rede falsa.
 
 Funções (campo `funcao` de cada caso):
 - unescape: entrada texto; saída `html.unescape(texto)`.
@@ -11,8 +12,12 @@ Funções (campo `funcao` de cada caso):
   (só datas com fuso explícito: sem fuso o Python usa a hora local da máquina que gerou).
 - url_busca: entrada {ticker, nome}; saída `URL_RSS.format(q=quote(consulta(...)))`.
 - quote: entrada {texto, seguro}; saída `urllib.parse.quote(texto, safe=seguro)`.
+- decodificar_link: entrada {link, respostas: [{status, texto}]}; saída {pedidos, resultado} ou, em falha,
+  {pedidos, erro, mensagem}. Cada pedido: {metodo, url, params, cabecalhos, dados, json, timeout, stream}.
 """
+import http
 import html as pyhtml
+import json
 import types
 from email.utils import parsedate_to_datetime
 from html.entities import html5
@@ -260,6 +265,77 @@ QUOTES = [
 ]
 
 
+_ID = "CBMiXYZ_abc-123"
+_LINK = f"https://news.google.com/rss/articles/{_ID}?oc=5"
+_URL_BATCH = nt.URL_DECODIFICAR
+
+
+def _pagina(sg="SGVAL123", ts="1700000000"):
+    partes = ["<html><body><c-wiz"]
+    if sg is not None:
+        partes.append(f' data-n-a-sg="{sg}"')
+    if ts is not None:
+        partes.append(f' data-n-a-ts="{ts}"')
+    return "".join(partes) + "></c-wiz></body></html>"
+
+
+def _batch(url, extra=""):
+    interno = json.dumps(["garturlres", url, 1])
+    return ")]}'\n\n" + json.dumps([["wrb.fr", "Fbv4je", interno, None, None, None, "generic"],
+                                   ["di", 12], ["af.httprm", 12, "-123", 5]]) + "\n" + extra
+
+
+def _r(status, texto):
+    return {"status": status, "texto": texto}
+
+
+DECODIFICAR = [
+    ("link de fora do Google", "https://exemplo.com/artigo?a=1", []),
+    ("articles fora do Google", "https://exemplo.com/articles/abc", []),
+    ("sem /articles/", "https://news.google.com/home", []),
+    ("página sem data-n-a-sg", _LINK, [_r(200, _pagina(sg=None))]),
+    ("página sem data-n-a-ts", _LINK, [_r(200, _pagina(ts=None))]),
+    ("página vazia", _LINK, [_r(200, "")]),
+    ("página e resposta válidas", _LINK, [_r(200, _pagina()), _r(200, _batch("https://site.com/m"))]),
+    ("sem query nem fragmento", f"https://news.google.com/rss/articles/{_ID}",
+     [_r(200, _pagina()), _r(200, _batch("https://site.com/m"))]),
+    ("com fragmento", f"https://news.google.com/rss/articles/{_ID}#x",
+     [_r(200, _pagina()), _r(200, _batch("https://site.com/m"))]),
+    ("link com articles no meio", f"https://news.google.com/rss/articles/{_ID}/extra?oc=5",
+     [_r(200, _pagina()), _r(200, _batch("https://site.com/m"))]),
+    ("status da página não é conferido", _LINK,
+     [_r(404, _pagina()), _r(200, _batch("https://site.com/m"))]),
+    ("sg com barra, aspas e acentos", _LINK,
+     [_r(200, _pagina(sg="a\\b é\U0001F600\x7f+&=")), _r(200, _batch("https://site.com/m"))]),
+    ("ts não numérico", _LINK, [_r(200, _pagina(ts="abc")), _r(200, _batch("https://site.com/m"))]),
+    ("id com acento", "https://news.google.com/rss/articles/CBMié?oc=5",
+     [_r(200, _pagina()), _r(200, _batch("https://site.com/m"))]),
+    ("resposta com linhas de controle", _LINK,
+     [_r(200, _pagina()), _r(200, _batch("https://site.com/m", '25\n[["e",4,null,null,0]]\n'))]),
+    ("url http simples", _LINK, [_r(200, _pagina()), _r(200, _batch("http://site.com/m"))]),
+    ("url que não começa com http", _LINK, [_r(200, _pagina()), _r(200, _batch("ftp://site.com/m"))]),
+    ("url vazia", _LINK, [_r(200, _pagina()), _r(200, _batch(""))]),
+    ("POST 500", _LINK, [_r(200, _pagina()), _r(500, "erro")]),
+    ("POST 429", _LINK, [_r(200, _pagina()), _r(429, "devagar")]),
+    ("POST 403", _LINK, [_r(200, _pagina()), _r(403, "negado")]),
+    ("resposta sem linha em branco", _LINK, [_r(200, _pagina()), _r(200, ")]}'")]),
+    ("resposta com poucos elementos", _LINK, [_r(200, _pagina()), _r(200, ")]}'\n\n" + json.dumps([["wrb.fr"]]))]),
+]
+
+
+def _decodificar(link, respostas):
+    reais = [rede.Resposta(r["status"], texto=r["texto"], motivo=http.HTTPStatus(r["status"]).phrase)
+             for r in respostas]
+    cm, pedidos = rede.rede(reais)
+    saida = {}
+    with cm:
+        try:
+            saida["resultado"] = nt.decodificar_link(link)
+        except Exception as e:  # noqa: BLE001 (qualquer erro vira o caso de referência)
+            saida.update(rede.erro(e))
+    return {"pedidos": pedidos, **saida}
+
+
 def _ler_rss(xml, ticker, nome):
     antigo = nt.time
     nt.time = types.SimpleNamespace(time=lambda: base.AGORA)
@@ -306,4 +382,7 @@ def casos():
         out.append(base.caso(f"{ticker} {empresa}".strip(), "url_busca", {"ticker": ticker, "nome": empresa}, url))
     for texto, seguro in QUOTES:
         out.append(base.caso(repr(texto), "quote", {"texto": texto, "seguro": seguro}, quote(texto, safe=seguro)))
+    for nome, link, respostas in DECODIFICAR:
+        out.append(base.caso(nome, "decodificar_link", {"link": link, "respostas": respostas},
+                             _decodificar(link, respostas)))
     return out
