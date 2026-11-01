@@ -13,6 +13,7 @@ export 'http/cliente.dart';
 export 'http/erros.dart';
 export 'http/json.dart';
 export 'http/semaforo.dart';
+export 'noticias/html.dart';
 export 'sincronizacao/dados_sincronizacao.dart';
 export 'sincronizacao/sincronizador.dart';
 export 'yahoo/cotacoes.dart';

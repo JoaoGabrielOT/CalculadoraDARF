@@ -9,6 +9,7 @@ export 'compat/conversao.dart';
 export 'compat/json_python.dart';
 export 'compat/numeros.dart';
 export 'compat/ordenacao.dart';
+export 'compat/regex_python.dart';
 export 'constantes.dart';
 export 'datas.dart';
 export 'erros.dart';

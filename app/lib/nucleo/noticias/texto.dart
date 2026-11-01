@@ -7,6 +7,7 @@ import 'package:unorm_dart/unorm_dart.dart' show nfkd;
 import '../ambiente.dart';
 import '../apuracao.dart';
 import '../compat/numeros.dart';
+import '../compat/regex_python.dart';
 import '../datas.dart';
 import 'estado.dart';
 
@@ -133,67 +134,18 @@ const sufixosNome =
 const ruido =
     r'cotacao e indicadores|resultados, dividendos, cotacao|^\S+ \(\w+\) - trademap';
 
-// `\w`, `\d` e `\s` do `re` do Python 3 (Unicode) e `\b` ao lado deles. O
-// `RegExp` do Dart só tem `\b` ASCII, então o `\b` vira uma asserção sobre
-// este mesmo conjunto de letras.
-const _palavra = r'\p{L}\p{N}_';
-const _espaco =
-    r'\t\n\x0b\x0c\r\x1c-\x1f \x85\xa0  -    '
-    r' 　';
-
-/// Traduz uma expressão do `re` do Python para o `RegExp` do Dart
-/// (`unicode: true`): `\w \W \d \s \S \b` Unicode e `.` sem casar só `\n`.
-RegExp _er(String padrao, {bool ignorarCaixa = false}) {
-  final s = StringBuffer();
-  var dentro = false;
-  var anterior = ''; // último caractere do padrão, para decidir o lado do \b
-  for (var i = 0; i < padrao.length; i++) {
-    final c = padrao[i];
-    if (c == r'\') {
-      final n = padrao[++i];
-      switch (n) {
-        case 'b':
-          s.write(
-            anterior == '' || anterior == '(' || anterior == '|'
-                ? '(?<![$_palavra])'
-                : '(?![$_palavra])',
-          );
-        case 'd':
-          s.write(r'\p{Nd}');
-        case 's':
-          s.write(dentro ? _espaco : '[$_espaco]');
-        case 'S':
-          s.write('[^$_espaco]');
-        case 'w':
-          s.write(dentro ? _palavra : '[$_palavra]');
-        case 'W':
-          s.write('[^$_palavra]');
-        default:
-          s.write('\\$n');
-      }
-      anterior = n;
-      continue;
-    }
-    if (c == '[') dentro = true;
-    if (c == ']') dentro = false;
-    s.write(c == '.' && !dentro ? r'[^\n]' : c);
-    anterior = c;
-  }
-  return RegExp(s.toString(), unicode: true, caseSensitive: !ignorarCaixa);
-}
-
 final _temas = [
   for (final (rotulo, padroes) in temasNoticias)
-    (rotulo, [for (final p in padroes) _er(p)]),
+    (rotulo, [for (final p in padroes) erPython(p)]),
 ];
-final _sufixosNome = _er(sufixosNome, ignorarCaixa: true);
-final _ruido = _er(ruido);
-final _divisaoNome = _er(r'\s[-–(]|,');
-final _naoNome = _er(r"[^\w&' .]");
-final _espacos = _er(r'\s+');
-final _naoPalavras = _er(r'\W+');
-final _digitoAteFim = _er(r'\d.*$');
-final _palavraSo = RegExp('^[$_palavra]\$', unicode: true);
+final _sufixosNome = erPython(sufixosNome, ignorarCaixa: true);
+final _ruido = erPython(ruido);
+final _divisaoNome = erPython(r'\s[-–(]|,');
+final _naoNome = erPython(r"[^\w&' .]");
+final _espacos = erPython(r'\s+');
+final _naoPalavras = erPython(r'\W+');
+final _digitoAteFim = erPython(r'\d.*$');
+final _palavraSo = RegExp('^[$palavraPython]\$', unicode: true);
 
 /// Primeiros [n] pontos de código (`s[:n]`).
 String _prefixo(String s, int n) {
@@ -309,11 +261,11 @@ bool pertinente(String titulo, String ticker, {String nome = ''}) {
   final primeiro = String.fromCharCode(n.runes.first);
   final ultimo = String.fromCharCode(n.runes.last);
   final antes = _palavraSo.hasMatch(primeiro)
-      ? '(?<![$_palavra])'
-      : '(?<=[$_palavra])';
+      ? '(?<![$palavraPython])'
+      : '(?<=[$palavraPython])';
   final depois = _palavraSo.hasMatch(ultimo)
-      ? '(?![$_palavra])'
-      : '(?=[$_palavra])';
+      ? '(?![$palavraPython])'
+      : '(?=[$palavraPython])';
   return RegExp('$antes${RegExp.escape(n)}$depois', unicode: true).hasMatch(t);
 }
 
