@@ -39,6 +39,8 @@ class Sincronizador {
   bool _rodando = false;
   bool _resync = false;
   bool _conectandoToken = false;
+  bool _logando = false;
+  Completer<void>? _cancelamento;
   Timer? _timer;
   Future<String>? _preparando;
 
@@ -50,6 +52,16 @@ class Sincronizador {
   double get ultimaPuxada => _ultimaPuxada;
   double? get ultimaSync => _ultimaSync;
   bool get rodando => _rodando;
+
+  /// Login ou reconexão com o token em andamento: a UI não deve iniciar outro.
+  bool get ocupado => _logando || _conectandoToken;
+
+  /// Encerra o login em andamento (fecha o servidor loopback) com
+  /// "O login foi cancelado.".
+  Future<void> cancelarLogin() async {
+    final c = _cancelamento;
+    if (c != null && !c.isCompleted) c.complete();
+  }
 
   // Callbacks da UI nunca derrubam o ciclo.
   void _definirStatus(StatusSync s) {
@@ -98,6 +110,7 @@ class Sincronizador {
   }
 
   Future<void> conectarComToken() async {
+    if (_logando) return;
     final geracao = _geracao;
     _conectandoToken = true;
     try {
@@ -108,7 +121,9 @@ class Sincronizador {
       } on _Descartado {
         return;
       } on LoginNecessario {
-        conta.sair();
+        // renovação de uma conta que já saiu, ou de um login novo em curso
+        if (geracao != _geracao || _logando) return;
+        _sairDaConta();
         _definirStatus(StatusSync.off);
         return;
       } catch (e) {
@@ -117,21 +132,29 @@ class Sincronizador {
       }
       await _prepararESincronizar(geracao);
     } finally {
-      _conectandoToken = false;
+      if (geracao == _geracao) _conectandoToken = false;
     }
   }
 
   Future<void> conectar(AbrirUrl abrirUrl) async {
+    if (ocupado) return;
     final geracao = _geracao;
+    final cancelamento = _cancelamento = Completer<void>();
+    _logando = true;
     _definirStatus(StatusSync.login);
     try {
-      await conta.login(abrirUrl);
+      await conta.login(abrirUrl, cancelar: cancelamento.future);
     } catch (e) {
       if (geracao != _geracao) return;
       _definirStatus(StatusSync.off);
       final texto = e.toString();
       _avisar(texto.isEmpty ? 'O login não foi concluído.' : texto);
       return;
+    } finally {
+      if (geracao == _geracao) {
+        _logando = false;
+        if (identical(_cancelamento, cancelamento)) _cancelamento = null;
+      }
     }
     if (geracao != _geracao) return;
     _avisar('Conectado como ${conta.email}.');
@@ -198,9 +221,9 @@ class Sincronizador {
   }
 
   Future<void> _tratarErro(Object e, int geracao) async {
-    if (e is _Descartado || geracao != _geracao) return;
+    if (e is _Descartado || geracao != _geracao || _logando) return;
     if (e is LoginNecessario) {
-      conta.sair();
+      _sairDaConta();
       _definirStatus(StatusSync.off);
       _avisar('Sessão expirada. Conecte sua conta Google novamente.');
     } else if (e is Offline) {
@@ -240,6 +263,8 @@ class Sincronizador {
 
   /// `tick_sync`/`laco`: puxa o que está pendente ou atrasado.
   Future<void> tick() async {
+    if (_logando) return;
+    final geracao = _geracao;
     try {
       if (conta.email != null) {
         final atrasada = ambiente.agora() - _ultimaPuxada > 300;
@@ -250,13 +275,24 @@ class Sincronizador {
         await conectarComToken();
       }
     } catch (e) {
+      if (geracao != _geracao || _logando) return;
       _ultimoErro = e.toString();
       _definirStatus(StatusSync.erro);
     }
   }
 
+  /// `conta.sair()` não pode derrubar o tratamento de erro.
+  void _sairDaConta() {
+    try {
+      conta.sair();
+    } catch (_) {}
+  }
+
   void sair() {
+    unawaited(cancelarLogin());
     _geracao++;
+    _logando = false;
+    _cancelamento = null;
     _timer?.cancel();
     _timer = null;
     _rodando = false;

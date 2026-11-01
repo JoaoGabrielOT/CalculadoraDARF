@@ -14,6 +14,7 @@ import 'token.dart';
 
 const _msgLogin = 'Faça login com o Google.';
 const _msgSessao = 'Sessão expirada. Faça login novamente.';
+const _msgInvalida = 'Resposta inválida do Google.';
 const _msgNaN =
     'Há um valor inválido (NaN ou infinito) nos dados; nada foi enviado ao Google.';
 
@@ -32,16 +33,22 @@ class SessaoGoogle {
   TokenGoogle? _token;
   String? _email;
 
+  /// Aumenta a cada `sair()`: o que estava em andamento antes não grava mais
+  /// nem repõe token ou e-mail.
+  int _geracao = 0;
+
   String? get email => _email;
 
   bool temToken() => armazenamento.existe(arquivoToken);
 
   /// Lê o `token.json`, renova se preciso (e grava) e abre a sessão.
   Future<String> carregarToken() async {
+    final geracao = _geracao;
     var token = lerToken(armazenamento);
     if (token == null) throw LoginNecessario(_msgLogin);
     if (!token.valido(ambiente.agora())) {
       token = await renovarToken(http, token);
+      if (geracao != _geracao) throw LoginNecessario(_msgLogin);
       gravarToken(armazenamento, token);
     }
     return iniciar(token);
@@ -49,12 +56,14 @@ class SessaoGoogle {
 
   /// Guarda o token e descobre o e-mail da conta.
   Future<String> iniciar(TokenGoogle token) async {
+    final geracao = _geracao;
     _token = token;
     final r = await req(
       'GET',
       '$urlDrive/about',
       params: {'fields': 'user(emailAddress)'},
     );
+    if (geracao != _geracao) throw LoginNecessario(_msgLogin);
     final user = r['user'];
     final endereco = user is Map ? user['emailAddress'] : null;
     if (endereco is! String) {
@@ -64,9 +73,14 @@ class SessaoGoogle {
   }
 
   void sair() {
-    armazenamento.apagar(arquivoToken);
+    _geracao++;
     _token = null;
     _email = null;
+    try {
+      armazenamento.apagar(arquivoToken);
+    } catch (_) {
+      // o estado em memória já foi zerado
+    }
   }
 
   Uri _montarUrl(String url, Map<String, Object>? params) {
@@ -80,8 +94,12 @@ class SessaoGoogle {
     return base.replace(queryParameters: consulta);
   }
 
-  Future<void> _renovar() async {
-    _token = await renovarToken(http, _token!);
+  Future<void> _renovar(int geracao) async {
+    final atual = _token;
+    if (atual == null || geracao != _geracao) throw LoginNecessario(_msgLogin);
+    final novo = await renovarToken(http, atual);
+    if (geracao != _geracao) throw LoginNecessario(_msgLogin);
+    _token = novo;
   }
 
   /// `_req`: pedido autenticado; devolve o JSON da resposta (`{}` se vazia).
@@ -92,6 +110,7 @@ class SessaoGoogle {
     Object? json,
   }) async {
     if (_token == null) throw LoginNecessario(_msgLogin);
+    final geracao = _geracao;
     // codifica antes de abrir conexão: NaN/Infinity não vai ao Google
     final String? corpo;
     try {
@@ -100,15 +119,19 @@ class SessaoGoogle {
       throw ErroGoogle(_msgNaN);
     }
     final uri = _montarUrl(url, params);
-    if (!_token!.valido(ambiente.agora())) await _renovar();
+    if (!_token!.valido(ambiente.agora())) await _renovar(geracao);
 
     Future<pkg.Response> enviar() async {
+      final token = _token;
+      if (token == null || geracao != _geracao) {
+        throw LoginNecessario(_msgLogin);
+      }
       try {
         return await http.enviar(
           metodo,
           uri,
           cabecalhos: {
-            'Authorization': 'Bearer ${_token!.token}',
+            'Authorization': 'Bearer ${token.token}',
             if (corpo != null) 'Content-Type': 'application/json',
           },
           corpo: corpo,
@@ -121,13 +144,20 @@ class SessaoGoogle {
 
     var r = await enviar();
     if (r.statusCode == 401) {
-      await _renovar();
+      await _renovar(geracao);
       r = await enviar();
       if (r.statusCode == 401) throw LoginNecessario(_msgSessao);
     }
     if (r.statusCode >= 400) throw ErroGoogle(_mensagem(r), r.statusCode);
     if (r.bodyBytes.isEmpty) return <String, Object?>{};
-    return await decodificarJson(r.bodyBytes, executar) as Map<String, Object?>;
+    try {
+      return await decodificarJson(r.bodyBytes, executar)
+          as Map<String, Object?>;
+    } on FormatException {
+      throw ErroGoogle(_msgInvalida);
+    } on TypeError {
+      throw ErroGoogle(_msgInvalida);
+    }
   }
 
   String _mensagem(pkg.Response r) {

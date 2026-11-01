@@ -59,6 +59,7 @@ class _Montagem {
     Future<void> Function(Uri) abrir, {
     Duration tempoLimite = const Duration(seconds: 600),
     Esperar? esperar,
+    Future<void>? cancelar,
   }) => loginNavegador(
     sessao,
     _cliente,
@@ -68,6 +69,7 @@ class _Montagem {
       return abrir(url);
     },
     tempoLimite: tempoLimite,
+    cancelar: cancelar,
     esperar:
         esperar ??
         (d) async {
@@ -273,6 +275,24 @@ void main() {
       _erro<ErroGoogle>('O login não foi concluído.'),
     );
     await expectLater(_get(redirect), throwsA(isA<SocketException>()));
+  });
+
+  test('cancelar fecha o servidor e lança "O login foi cancelado."', () async {
+    final m = _Montagem([]);
+    final cancelar = Completer<void>();
+    late Uri redirect;
+    final login = m.login((u) async {
+      redirect = _redirect(u);
+      unawaited(
+        Future<void>.delayed(
+          const Duration(milliseconds: 20),
+          cancelar.complete,
+        ),
+      );
+    }, cancelar: cancelar.future);
+    await expectLater(login, _erro<ErroGoogle>('O login foi cancelado.'));
+    await expectLater(_get(redirect), throwsA(isA<SocketException>()));
+    expect(m.falso.pedidos, isEmpty);
   });
 
   test('troca do código sem rede repete a cada 2 s', () async {

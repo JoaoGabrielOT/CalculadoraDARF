@@ -270,4 +270,80 @@ void main() {
       _erro<LoginNecessario>('Faça login com o Google.'),
     );
   });
+
+  test(
+    'sair durante carregarToken não recria token.json nem repõe o e-mail',
+    () async {
+      final (s, _, a) = _montar([
+        RespostaFalsa(
+          200,
+          json: {'access_token': 'ya29.novo', 'expires_in': 3599},
+          atraso: const Duration(milliseconds: 50),
+        ),
+        _about(),
+      ]);
+      gravarToken(a, _token(expiry: DateTime.utc(2025, 10, 1)));
+      final f = s.carregarToken();
+      final esperado = expectLater(f, throwsA(isA<LoginNecessario>()));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      s.sair();
+      await esperado;
+      expect(a.existe(arquivoToken), isFalse);
+      expect(s.email, isNull);
+    },
+  );
+
+  test('sair durante o about de iniciar não repõe o e-mail', () async {
+    final (s, _, _) = _montar([
+      RespostaFalsa(
+        200,
+        json: {
+          'user': {'emailAddress': 'a@b.com'},
+        },
+        atraso: const Duration(milliseconds: 50),
+      ),
+    ]);
+    final f = s.iniciar(_token());
+    final esperado = expectLater(f, throwsA(isA<LoginNecessario>()));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    s.sair();
+    await esperado;
+    expect(s.email, isNull);
+  });
+
+  test('sair durante a renovação em req não repõe o token', () async {
+    final (s, _, _) = _montar([
+      _about(),
+      RespostaFalsa(401, texto: ''),
+      RespostaFalsa(
+        200,
+        json: {'access_token': 'ya29.novo', 'expires_in': 3599},
+        atraso: const Duration(milliseconds: 50),
+      ),
+    ]);
+    await s.iniciar(_token());
+    final f = s.req('GET', '$urlSheets/x');
+    final esperado = expectLater(f, throwsA(isA<LoginNecessario>()));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    s.sair();
+    await esperado;
+    await expectLater(
+      s.req('GET', '$urlSheets/x'),
+      _erro<LoginNecessario>('Faça login com o Google.'),
+    );
+  });
+
+  for (final corpo in ['<html>erro</html>', '[1, 2]']) {
+    test(
+      'req: corpo 200 que não é objeto JSON ($corpo) → ErroGoogle',
+      () async {
+        final (s, _, _) = _montar([_about(), RespostaFalsa(200, texto: corpo)]);
+        await s.iniciar(_token());
+        await expectLater(
+          s.req('GET', '$urlSheets/x'),
+          _erro<ErroGoogle>('Resposta inválida do Google.'),
+        );
+      },
+    );
+  }
 }

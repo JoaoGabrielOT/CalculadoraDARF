@@ -20,6 +20,7 @@ import 'token.dart';
 typedef AbrirUrl = Future<void> Function(Uri url);
 
 const _msgLogin = 'O login não foi concluído.';
+const _msgCancelado = 'O login foi cancelado.';
 
 /// google_sync.py:178-179.
 const paginaLoginConcluido =
@@ -74,6 +75,7 @@ Future<String> loginNavegador(
   AbrirUrl abrirUrl, {
   Duration tempoLimite = const Duration(seconds: 600),
   Esperar? esperar,
+  Future<void>? cancelar,
 }) async {
   final dormir = esperar ?? Future<void>.delayed;
   final pkce = gerarPkce();
@@ -128,7 +130,11 @@ Future<String> loginNavegador(
       ),
     );
     try {
-      retorno = await recebido.future.timeout(tempoLimite);
+      retorno = await Future.any<Uri>([
+        recebido.future,
+        if (cancelar != null)
+          cancelar.then<Uri>((_) => throw ErroGoogle(_msgCancelado)),
+      ]).timeout(tempoLimite);
     } on TimeoutException {
       throw ErroGoogle(_msgLogin);
     }
@@ -146,7 +152,7 @@ Future<String> loginNavegador(
   if (erro != null) {
     throw ErroGoogle(
       erro == 'access_denied'
-          ? 'O login foi cancelado.'
+          ? _msgCancelado
           : 'O login não foi concluído: $erro',
     );
   }

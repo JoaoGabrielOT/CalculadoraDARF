@@ -13,7 +13,7 @@ abstract interface class ContaGoogle {
   bool get temCredencial;
   bool temToken();
   Future<String> carregarToken();
-  Future<String> login(AbrirUrl abrirUrl);
+  Future<String> login(AbrirUrl abrirUrl, {Future<void>? cancelar});
   void sair();
   Future<String?> buscarPlanilha([String dono = 'me']);
   Future<bool> planilhaExiste(String sid);
@@ -51,12 +51,18 @@ class Google implements ContaGoogle {
   Future<String> carregarToken() => sessao.carregarToken();
 
   @override
-  Future<String> login(AbrirUrl abrirUrl) async {
+  Future<String> login(AbrirUrl abrirUrl, {Future<void>? cancelar}) async {
     final cliente = this.cliente;
     if (cliente == null) {
       throw SemCredencial('Arquivo credentials.json não encontrado.');
     }
-    return await loginNavegador(sessao, cliente, httpLogin, abrirUrl);
+    return await loginNavegador(
+      sessao,
+      cliente,
+      httpLogin,
+      abrirUrl,
+      cancelar: cancelar,
+    );
   }
 
   @override

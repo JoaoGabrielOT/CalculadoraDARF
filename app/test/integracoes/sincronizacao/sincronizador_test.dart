@@ -22,6 +22,8 @@ class ContaGoogleFalsa implements ContaGoogle {
   Future<void> Function()? aoEscrever;
   Future<void> Function()? aoCriar;
   Future<void> Function()? aoLer;
+  Future<void> Function()? aoCarregar;
+  Future<void>? segurarLogin;
   bool existe = true;
   String? achada;
   String criada = 'sid-criada';
@@ -36,13 +38,24 @@ class ContaGoogleFalsa implements ContaGoogle {
   @override
   Future<String> carregarToken() async {
     chamadas.add('carregarToken');
+    await aoCarregar?.call();
     if (falhaCarregar != null) throw falhaCarregar!;
     return email = 'ana@gmail.com';
   }
 
   @override
-  Future<String> login(AbrirUrl abrirUrl) async {
+  Future<String> login(AbrirUrl abrirUrl, {Future<void>? cancelar}) async {
     chamadas.add('login');
+    final segurar = segurarLogin;
+    if (segurar != null) {
+      await Future.any<void>([
+        segurar,
+        if (cancelar != null)
+          cancelar.then<void>(
+            (_) => throw ErroGoogle('O login foi cancelado.'),
+          ),
+      ]);
+    }
     if (falhaLogin != null) throw falhaLogin!;
     return email = 'ana@gmail.com';
   }
@@ -541,6 +554,93 @@ void main() {
       expect(c.sync.ultimoErro, '');
     },
   );
+
+  testesLogin();
+}
+
+class DadosPendenteFalha extends DadosSincronizacaoLocal {
+  DadosPendenteFalha(super.repo);
+
+  @override
+  Future<bool> pendente() async => throw ErroValidacao('disco cheio');
+}
+
+void testesLogin() {
+  test('segundo "Conectar" com login em andamento é ignorado', () async {
+    final c = _Cenario(conta: ContaGoogleFalsa(email: null));
+    c.conta.achada = 'p';
+    final liberar = Completer<void>();
+    c.conta.segurarLogin = liberar.future;
+    final primeiro = c.sync.conectar((_) async {});
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(c.sync.ocupado, isTrue);
+    await c.sync.conectar((_) async {});
+    expect(c.conta.chamadas.where((x) => x == 'login'), hasLength(1));
+    liberar.complete();
+    await primeiro;
+    expect(c.sync.ocupado, isFalse);
+    expect(c.sync.status, StatusSync.ok);
+  });
+
+  test('cancelarLogin encerra o login com a mensagem e status off', () async {
+    final c = _Cenario(conta: ContaGoogleFalsa(email: null));
+    c.conta.segurarLogin = Completer<void>().future;
+    final login = c.sync.conectar((_) async {});
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await c.sync.cancelarLogin();
+    await login;
+    expect(c.sync.status, StatusSync.off);
+    expect(c.avisos, ['O login foi cancelado.']);
+    expect(c.sync.ocupado, isFalse);
+  });
+
+  test('conectarComToken não roda durante o login', () async {
+    final c = _Cenario(conta: ContaGoogleFalsa(email: null, token: true));
+    c.conta.segurarLogin = Completer<void>().future;
+    final login = c.sync.conectar((_) async {});
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await c.sync.conectarComToken();
+    expect(c.conta.chamadas, ['login']);
+    await c.sync.cancelarLogin();
+    await login;
+  });
+
+  test(
+    'renovação antiga com LoginNecessario durante login novo não sai da conta',
+    () async {
+      final c = _Cenario(conta: ContaGoogleFalsa(email: null, token: true));
+      final liberar = Completer<void>();
+      c.conta.aoCarregar = () async {
+        await liberar.future;
+        throw LoginNecessario('antigo');
+      };
+      final antiga = c.sync.conectarComToken();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      c.sync.sair();
+      c.conta.chamadas.clear();
+      c.conta.segurarLogin = Completer<void>().future;
+      final login = c.sync.conectar((_) async {});
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      liberar.complete();
+      await antiga;
+      expect(c.conta.chamadas, ['login']);
+      expect(c.sync.status, StatusSync.login);
+      expect(c.sync.ocupado, isTrue);
+      await c.sync.cancelarLogin();
+      await login;
+    },
+  );
+
+  test('tick não sobrescreve o status login', () async {
+    final c = _Cenario(dados: DadosPendenteFalha.new);
+    c.conta.segurarLogin = Completer<void>().future;
+    final login = c.sync.conectar((_) async {});
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await c.sync.tick();
+    expect(c.sync.status, StatusSync.login);
+    await c.sync.cancelarLogin();
+    await login;
+  });
 }
 
 class DadosJanela extends DadosSincronizacaoLocal {
