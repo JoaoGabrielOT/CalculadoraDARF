@@ -156,7 +156,12 @@ class Sincronizador {
         if (identical(_cancelamento, cancelamento)) _cancelamento = null;
       }
     }
-    if (geracao != _geracao) return;
+    if (geracao != _geracao) {
+      // `sair()` veio durante a troca do código: o login acabou de regravar o
+      // token. Só não sai se outro login já começou (ele grava por cima).
+      if (!_logando) _sairDaConta();
+      return;
+    }
     _avisar('Conectado como ${conta.email}.');
     await _prepararESincronizar(geracao);
   }

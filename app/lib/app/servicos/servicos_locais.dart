@@ -12,40 +12,48 @@ import 'api.dart';
 import 'eventos.dart';
 import 'locais/apuracao_local.dart';
 import 'locais/config_segura.dart';
+import 'locais/conta_local.dart';
 
 class ServicosLocais implements ServicosApp {
   ServicosLocais({
     required this._repo,
-    required this._agendarSync,
-    bool Function()? temCredencial,
-  }) : _temCredencial = temCredencial ?? (() => false);
+    required ContaGoogle conta,
+    required AbrirUrl abrirUrl,
+    Duration atrasoAgendamento = const Duration(milliseconds: 1500),
+  }) {
+    _conta = ContaLocal(
+      repo: _repo,
+      conta: conta,
+      abrirUrl: abrirUrl,
+      emitir: _emitir,
+      atrasoAgendamento: atrasoAgendamento,
+    );
+    _apuracao = ApuracaoLocal(
+      _repo,
+      agendarSync: _conta.agendar,
+      emitir: _emitir,
+      amigoAtual: () => _conta.amigoCarregado,
+    );
+  }
 
   final Repositorio _repo;
-  final bool Function() _temCredencial;
-  final void Function() _agendarSync;
   final StreamController<EventoServico> _eventos =
       StreamController<EventoServico>.broadcast();
-
-  /// Dados do amigo carregado (preenchido pela Tarefa 4).
-  AmigoCarregado? _amigo;
-
-  late final ApuracaoLocal _apuracao = ApuracaoLocal(
-    _repo,
-    agendarSync: _agendarSync,
-    emitir: _emitir,
-    amigoAtual: () => _amigo,
-  );
+  late final ContaLocal _conta;
+  late final ApuracaoLocal _apuracao;
 
   void _emitir(EventoServico e) {
     if (!_eventos.isClosed) _eventos.add(e);
   }
 
-  /// Guarda os dados do amigo carregado (somente leitura).
-  void usarAmigo(String email, DadosPlanilha dados) {
-    _amigo = (email: email, dados: dados);
-  }
+  /// `tick` da sincronização, chamado pelo timer (Tarefa 7).
+  Future<void> tickSync() => _conta.tick();
 
-  void limparAmigo() => _amigo = null;
+  /// Guarda os dados do amigo carregado (somente leitura).
+  void usarAmigo(String email, DadosPlanilha dados) =>
+      _conta.usarAmigo(email, dados);
+
+  void limparAmigo() => _conta.limparAmigo();
 
   Never _faltaImplementar(String tarefa) =>
       throw UnimplementedError('Chega na $tarefa.');
@@ -104,7 +112,7 @@ class ServicosLocais implements ServicosApp {
     if (mudou && cfg != null) {
       cfg.pendente = true;
       _repo.gravarConfig(cfg);
-      _agendarSync();
+      _conta.agendar();
     }
 
     if (erroConfig != null) _emitir(EventoConfigIlegivel(erroConfig));
@@ -113,7 +121,7 @@ class ServicosLocais implements ServicosApp {
       mesesComDados: _repo.listarMeses(),
       preferencias: _preferenciasDe(cfg ?? Config()),
       erroConfig: erroConfig,
-      temCredencial: _temCredencial(),
+      temCredencial: _conta.estado().temCredencial,
     );
   }
 
@@ -205,37 +213,35 @@ class ServicosLocais implements ServicosApp {
   // --- conta, sincronização e amigos (Tarefa 4)
 
   @override
-  Future<EstadoConta> conta() async => _faltaImplementar('Tarefa 4');
+  Future<EstadoConta> conta() async => _conta.estado();
 
   @override
-  Future<void> conectar() async => _faltaImplementar('Tarefa 4');
+  Future<void> conectar() => _conta.conectar();
 
   @override
-  Future<void> cancelarLogin() async => _faltaImplementar('Tarefa 4');
+  Future<void> cancelarLogin() => _conta.cancelarLogin();
 
   @override
-  Future<void> sair() async => _faltaImplementar('Tarefa 4');
+  Future<void> sair() => _conta.sair();
 
   @override
-  Future<void> sincronizarAgora() async => _faltaImplementar('Tarefa 4');
+  Future<void> sincronizarAgora() => _conta.sincronizarAgora();
 
   @override
-  Future<List<Amigo>> amigos() async => _faltaImplementar('Tarefa 4');
+  Future<List<Amigo>> amigos() => _conta.amigos();
 
   @override
-  Future<void> adicionarAmigo(String email) async =>
-      _faltaImplementar('Tarefa 4');
+  Future<void> adicionarAmigo(String email) => _conta.adicionarAmigo(email);
 
   @override
-  Future<void> removerAmigo(String email) async =>
-      _faltaImplementar('Tarefa 4');
+  Future<void> removerAmigo(String email) => _conta.removerAmigo(email);
 
   @override
-  Future<ResumoAmigo> carregarAmigo(String email) async =>
-      _faltaImplementar('Tarefa 4');
+  Future<ResumoAmigo> carregarAmigo(String email) =>
+      _conta.carregarAmigo(email);
 
   @override
-  Future<void> esquecerAmigo() async => _faltaImplementar('Tarefa 4');
+  Future<void> esquecerAmigo() => _conta.esquecerAmigo();
 
   // --- mercado, radar e metas (Tarefa 5)
 

@@ -152,7 +152,60 @@ class ServicosFalsos implements ServicosApp {
     () => visaoCaixa ?? caixaExemplo(),
   );
 
-  /// Métodos das Tarefas 4 a 6 ainda sem resposta.
+  // conta, sincronização e amigos
+  EstadoConta estadoConta = const EstadoConta();
+  List<Amigo> listaAmigos = [];
+  ResumoAmigo? resumoAmigo;
+
+  @override
+  Future<EstadoConta> conta() => _chamar('conta', [], () => estadoConta);
+
+  @override
+  Future<void> conectar() => _chamar('conectar', [], () {});
+
+  @override
+  Future<void> cancelarLogin() => _chamar('cancelarLogin', [], () {});
+
+  @override
+  Future<void> sair() => _chamar('sair', [], () {});
+
+  @override
+  Future<void> sincronizarAgora() => _chamar('sincronizarAgora', [], () {});
+
+  @override
+  Future<List<Amigo>> amigos() => _chamar('amigos', [], () => listaAmigos);
+
+  @override
+  Future<void> adicionarAmigo(String email) => _chamar(
+    'adicionarAmigo',
+    [email],
+    () {
+      listaAmigos = [...listaAmigos, Amigo(email: email, desde: '2026-10-28')];
+    },
+  );
+
+  @override
+  Future<void> removerAmigo(String email) =>
+      _chamar('removerAmigo', [email], () {
+        listaAmigos = [
+          for (final a in listaAmigos)
+            if (a.email != email) a,
+        ];
+      });
+
+  @override
+  Future<ResumoAmigo> carregarAmigo(String email) => _chamar(
+    'carregarAmigo',
+    [email],
+    () =>
+        resumoAmigo ??
+        ResumoAmigo(email: email, meses: meses, mesInicial: mesAberto),
+  );
+
+  @override
+  Future<void> esquecerAmigo() => _chamar('esquecerAmigo', [], () {});
+
+  /// Métodos das Tarefas 5 e 6 ainda sem resposta.
   @override
   dynamic noSuchMethod(Invocation invocation) {
     final nome = RegExp(r'"(.*)"')

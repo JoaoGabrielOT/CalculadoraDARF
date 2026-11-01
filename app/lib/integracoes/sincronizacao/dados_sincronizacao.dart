@@ -21,8 +21,7 @@ class DadosSincronizacaoLocal implements DadosSincronizacao {
   Config _config() => _repo.lerConfigParaGravar();
 
   @override
-  Future<String?> planilhaDe(String email) async =>
-      _repo.lerConfig().planilhas[email];
+  Future<String?> planilhaDe(String email) async => _config().planilhas[email];
 
   @override
   Future<void> definirPlanilha(String email, String? sid) async {

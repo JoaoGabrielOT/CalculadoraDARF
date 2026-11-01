@@ -1,5 +1,6 @@
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
+import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -38,8 +39,39 @@ void main() {
       f.eventosFalsos.add(const EventoDadosMudaram());
       await Future<void>.delayed(Duration.zero);
       expect(recebidos.single, isA<EventoDadosMudaram>());
-      await expectLater(f.conta(), throwsA(isA<UnimplementedError>()));
-      expect(f.chamadas, ['conta()']);
+      await expectLater(f.metas(), throwsA(isA<UnimplementedError>()));
+      expect(f.chamadas, ['metas()']);
     },
   );
+
+  test('conta e amigos: respostas, chamadas e erro programável', () async {
+    final f = ServicosFalsos();
+    expect((await f.conta()).status, StatusSync.off);
+    await f.adicionarAmigo('bia@gmail.com');
+    expect((await f.amigos()).single.email, 'bia@gmail.com');
+    final r = await f.carregarAmigo('bia@gmail.com');
+    expect((r.email, r.mesInicial), ('bia@gmail.com', '2026-10'));
+    await f.removerAmigo('bia@gmail.com');
+    expect(await f.amigos(), isEmpty);
+    f.erros['conectar'] = ErroValidacao('Sem credencial.');
+    f.erros['sincronizarAgora'] = ErroValidacao('Falhou.');
+    await expectLater(f.conectar(), throwsA(isA<ErroValidacao>()));
+    await expectLater(f.sincronizarAgora(), throwsA(isA<ErroValidacao>()));
+    await f.sair();
+    await f.cancelarLogin();
+    await f.esquecerAmigo();
+    expect(f.chamadas, [
+      'conta()',
+      'adicionarAmigo(bia@gmail.com)',
+      'amigos()',
+      'carregarAmigo(bia@gmail.com)',
+      'removerAmigo(bia@gmail.com)',
+      'amigos()',
+      'conectar()',
+      'sincronizarAgora()',
+      'sair()',
+      'cancelarLogin()',
+      'esquecerAmigo()',
+    ]);
+  });
 }

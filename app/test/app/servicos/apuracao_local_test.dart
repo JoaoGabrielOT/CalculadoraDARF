@@ -2,8 +2,11 @@ import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/servicos/servicos_locais.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
+import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../apoio/conta_falsa.dart';
 
 class _ArmazenamentoQueFalha extends ArmazenamentoMemoria {
   @override
@@ -18,8 +21,17 @@ class _ArmazenamentoQueFalha extends ArmazenamentoMemoria {
 late ArmazenamentoMemoria disco;
 late Repositorio repo;
 late ServicosLocais servicos;
-late int agendamentos;
 late List<EventoServico> eventos;
+
+/// Agendamentos vistos pela conta conectada (o stream entrega depois de um
+/// ciclo de eventos).
+Future<int> agendamentos() async {
+  await Future<void>.delayed(Duration.zero);
+  return eventos
+      .whereType<EventoConta>()
+      .where((e) => e.conta.status == StatusSync.pendente)
+      .length;
+}
 
 Lote compra(
   String id, {
@@ -58,8 +70,14 @@ void main() {
     ambiente = Ambiente.fixo();
     disco = ArmazenamentoMemoria();
     repo = Repositorio(disco);
-    agendamentos = 0;
-    servicos = ServicosLocais(repo: repo, agendarSync: () => agendamentos++);
+    // com a conta conectada cada agendamento emite um EventoConta pendente;
+    // o atraso longo mantém a sincronização fora dos testes
+    servicos = ServicosLocais(
+      repo: repo,
+      conta: ContaFalsa(email: 'ana@gmail.com'),
+      abrirUrl: (_) async {},
+      atrasoAgendamento: const Duration(hours: 1),
+    );
     eventos = [];
     servicos.eventos.listen(eventos.add);
   });
@@ -140,7 +158,7 @@ void main() {
       expect(e.preferencias.tema, TemaVisual.terminal);
       expect(e.preferencias.notificarNoticias, isFalse);
       expect(e.preferencias.ordemRadar, 'alta');
-      expect(agendamentos, 0);
+      expect(await agendamentos(), 0);
     });
   });
 
@@ -166,7 +184,11 @@ void main() {
       'leitura do config que lança FormatException: iniciar abre com o aviso',
       () async {
         final repoFalho = Repositorio(_ArmazenamentoQueFalha());
-        final s = ServicosLocais(repo: repoFalho, agendarSync: () {});
+        final s = ServicosLocais(
+          repo: repoFalho,
+          conta: ContaFalsa(),
+          abrirUrl: (_) async {},
+        );
         final e = await s.iniciar();
         expect(e.erroConfig, msg);
         await s.encerrar();
@@ -207,7 +229,7 @@ void main() {
       expect(l.mod, ambiente.agora());
       expect(v.dados.lotes.single.id, 'id0001');
       expect(v.editavel, isTrue);
-      expect(agendamentos, 1);
+      expect(await agendamentos(), 1);
       await Future<void>.delayed(Duration.zero);
       expect(eventos.whereType<EventoDadosMudaram>(), hasLength(1));
     });
@@ -231,7 +253,7 @@ void main() {
       await espera(com(qtd: 0), 'Quantidade inválida.');
       await espera(com(preco: 0), 'Preço inválido.');
       expect(disco.existe('2026-10.json'), isFalse);
-      expect(agendamentos, 0);
+      expect(await agendamentos(), 0);
     });
 
     test('editarCompra usa erroEdicaoLote', () async {
@@ -286,7 +308,7 @@ void main() {
         ('VALE3', 'Ação', '2026-10-06', 60, 12.0),
       );
       expect(l.vendas, hasLength(1));
-      expect(agendamentos, 1);
+      expect(await agendamentos(), 1);
     });
 
     test(
@@ -300,7 +322,7 @@ void main() {
           servicos.excluirCompra('2026-10', 'L1'),
           'Compra não encontrada.',
         );
-        expect(agendamentos, 1);
+        expect(await agendamentos(), 1);
       },
     );
   });
@@ -324,7 +346,7 @@ void main() {
         'Quantidade maior que a disponível (20).',
       );
       expect(disco.ler('2026-10.json'), antes);
-      expect(agendamentos, 0);
+      expect(await agendamentos(), 0);
     });
 
     test('registrarVenda no mês grava a venda e valida os campos', () async {
@@ -368,7 +390,7 @@ void main() {
         ('id0001', '2026-10-12', 10, 11.0),
       );
       expect(r.visao.apuracao.ops, hasLength(1));
-      expect(agendamentos, 1);
+      expect(await agendamentos(), 1);
     });
 
     test(
@@ -405,7 +427,7 @@ void main() {
         expect(repo.carregar('2026-09').fechado, isTrue);
         expect(repo.carregar('2026-10').lotes, isEmpty);
         expect(r.visao.mes, '2026-10');
-        expect(agendamentos, 1);
+        expect(await agendamentos(), 1);
 
         // DARF vencida
         gravarMes('2026-10', [
@@ -574,7 +596,7 @@ void main() {
         ),
         'Venda não encontrada.',
       );
-      expect(agendamentos, 1);
+      expect(await agendamentos(), 1);
     });
 
     test('excluirVenda remove a venda', () async {
@@ -631,7 +653,7 @@ void main() {
       );
       await espera(servicos.fecharMes('2026-09'), 'O mês está fechado.');
       expect(disco.ler('2026-09.json'), antes);
-      expect(agendamentos, 0);
+      expect(await agendamentos(), 0);
       final visao = await servicos.carregarMes('2026-09');
       expect(visao.editavel, isFalse);
     });
@@ -712,7 +734,7 @@ void main() {
       );
       expect(f.visao.dados.fechado, isTrue);
       expect(repo.carregar('2026-11').lotes.single.origem, 'L1');
-      expect(agendamentos, 1);
+      expect(await agendamentos(), 1);
     });
 
     test('fecharMes com o mês seguinte ilegível não grava nada', () async {
@@ -730,7 +752,7 @@ void main() {
         ),
       );
       expect(disco.ler('2026-10.json'), antes);
-      expect(agendamentos, 0);
+      expect(await agendamentos(), 0);
     });
 
     test(
@@ -810,13 +832,13 @@ void main() {
       expect(repo.lerConfig().caixa.saldo, 5000);
       expect(repo.lerConfig().caixa.data, '2026-10-28');
       final disponivel = c.resumo.disponivel;
-      expect(agendamentos, 1);
+      expect(await agendamentos(), 1);
 
       c = await servicos.alterarSaldo(ModoSaldo.aporte, 250.5);
       expect(c.resumo.disponivel, closeTo(disponivel + 250.5, 1e-9));
       c = await servicos.alterarSaldo(ModoSaldo.retirada, 100);
       expect(c.resumo.disponivel, closeTo(disponivel + 150.5, 1e-9));
-      expect(agendamentos, 3);
+      expect(await agendamentos(), 3);
 
       await espera(
         servicos.alterarSaldo(ModoSaldo.aporte, 0),
@@ -830,7 +852,7 @@ void main() {
         servicos.alterarSaldo(ModoSaldo.definir, double.nan),
         'Informe um valor válido.',
       );
-      expect(agendamentos, 3);
+      expect(await agendamentos(), 3);
 
       c = await servicos.alterarSaldo(ModoSaldo.definir, 0);
       expect(c.resumo.disponivel, 0);

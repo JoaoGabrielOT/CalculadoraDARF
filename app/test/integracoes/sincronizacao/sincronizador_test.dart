@@ -24,6 +24,9 @@ class ContaGoogleFalsa implements ContaGoogle {
   Future<void> Function()? aoLer;
   Future<void> Function()? aoCarregar;
   Future<void>? segurarLogin;
+
+  /// Simula o login já na troca do código, quando o cancelamento não chega mais.
+  bool loginIgnoraCancelar = false;
   bool existe = true;
   String? achada;
   String criada = 'sid-criada';
@@ -50,7 +53,7 @@ class ContaGoogleFalsa implements ContaGoogle {
     if (segurar != null) {
       await Future.any<void>([
         segurar,
-        if (cancelar != null)
+        if (cancelar != null && !loginIgnoraCancelar)
           cancelar.then<void>(
             (_) => throw ErroGoogle('O login foi cancelado.'),
           ),
@@ -428,6 +431,35 @@ void main() {
     c.sync.sair();
     expect(c.conta.chamadas, ['sair']);
     expect(c.sync.status, StatusSync.off);
+  });
+
+  test(
+    'sair durante a troca do código: o login não deixa a sessão gravada',
+    () async {
+      final c = _Cenario(conta: ContaGoogleFalsa(email: null));
+      final segurar = Completer<void>();
+      c.conta.segurarLogin = segurar.future;
+      c.conta.loginIgnoraCancelar = true;
+      final f = c.sync.conectar((_) async {});
+      await Future<void>.delayed(Duration.zero);
+      c.sync.sair();
+      c.conta.chamadas.clear();
+      segurar.complete();
+      await f;
+      // o login terminou depois do sair: a conta sai de novo e nada é sincronizado
+      expect(c.conta.chamadas, ['sair']);
+      expect(c.conta.email, isNull);
+      expect(c.sync.status, StatusSync.off);
+    },
+  );
+
+  test('config ilegível: recusa antes de qualquer chamada remota', () async {
+    final c = _Cenario();
+    c.repo.armazenamento.gravar('config.json', '{quebrado');
+    await c.sync.sincronizar();
+    expect(c.sync.status, StatusSync.erro);
+    expect(c.conta.chamadas, isEmpty);
+    expect(c.repo.armazenamento.ler('config.json'), '{quebrado');
   });
 
   test('lerAmigo sem planilha compartilhada → mensagem do Python', () async {
