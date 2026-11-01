@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +21,12 @@ Noticia _noticia(String fonteUrl) => Noticia(
   tickers: [],
   temas: [],
 );
+
+class _CacheQuebrado extends CacheBinarioMemoria {
+  @override
+  Future<Uint8List?> ler(String nome) =>
+      throw const FileSystemException('disco cheio');
+}
 
 void main() {
   late CacheBinarioMemoria cache;
@@ -156,6 +165,18 @@ void main() {
     expect(await l.favicon(_noticia('https://sem.png/x')), isNull);
     expect(await cache.ler('logos/fontes/sem.png.png'), isNull);
     expect(await cache.ler('logos/fontes/sem.png.falta'), isEmpty);
+  });
+
+  test('exceção qualquer vira sem logo (cache que falha)', () async {
+    final falso = ClienteFalso.fila([]);
+    final l = Logos(http: ClienteHttp(falso), cache: _CacheQuebrado());
+    expect(await l.logoPng('PETR4'), isNull);
+    expect(await l.logoSvg('PETR4'), isNull);
+  });
+
+  test('URL malformada vira sem logo', () async {
+    final falso = ClienteFalso.fila([]);
+    expect(await logos(falso).favicon(_noticia('http://a b:x/')), isNull);
   });
 
   test('favicon sem domínio → null sem pedido', () async {

@@ -84,6 +84,7 @@ class ClienteFalso extends http.BaseClient {
 
   final FutureOr<RespostaFalsa> Function(PedidoGravado) _responder;
   final List<PedidoGravado> pedidos = [];
+  int abortados = 0;
   int _emAndamento = 0;
   int _maxSimultaneos = 0;
 
@@ -112,6 +113,9 @@ class ClienteFalso extends http.BaseClient {
       corpo,
     );
     pedidos.add(pedido);
+    if (request case http.Abortable(:final abortTrigger)) {
+      unawaited(abortTrigger?.then((_) => abortados++));
+    }
     _emAndamento++;
     if (_emAndamento > _maxSimultaneos) _maxSimultaneos = _emAndamento;
     try {

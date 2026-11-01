@@ -23,13 +23,20 @@ class RespostaContinua {
     required this.cabecalhos,
     required this.urlFinal,
     required this.blocos,
-  });
+    required Future<void> Function() cancelar,
+  }) : // Parâmetro nomeado não pode ser privado.
+       // ignore: prefer_initializing_formals
+       _cancelar = cancelar;
 
   final int status;
   final String? motivo;
   final Map<String, String> cabecalhos;
   final Uri urlFinal;
   final Stream<List<int>> blocos;
+  final Future<void> Function() _cancelar;
+
+  /// Aborta o pedido e solta a conexão, sem ler o resto do corpo.
+  Future<void> cancelar() => _cancelar();
 }
 
 /// Falha de transporte vira [ErroConexao] com o texto original; o resto passa.
@@ -191,6 +198,7 @@ class ClienteHttp {
           ? (resposta as http.BaseResponseWithUrl).url
           : url,
       blocos: blocos,
+      cancelar: () async => abortarAgora(),
     );
   }
 

@@ -2,6 +2,7 @@
 // (`dados/noticias_img/`, `dados/logos/`), porque o plano 4 migra a pasta `dados/`.
 
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 /// Arquivos binários por nome relativo; `/` no nome separa subpastas.
@@ -49,9 +50,28 @@ class CacheBinarioArquivos implements CacheBinario {
   CacheBinarioArquivos(this.pasta);
 
   final String pasta;
-  int _sequencia = 0;
+  static final _sorteio = Random();
 
   File _arquivo(String nome) => File('$pasta/$nome');
+
+  /// Remove restos `.tmp` (de gravações interrompidas) com mais de 1 hora.
+  void _limparTemporariosAntigos(File destino) {
+    final prefixo = '${destino.uri.pathSegments.last}.';
+    final limite = DateTime.now().subtract(const Duration(hours: 1));
+    try {
+      for (final e in destino.parent.listSync()) {
+        final nome = e.uri.pathSegments.last;
+        if (e is File &&
+            nome.startsWith(prefixo) &&
+            nome.endsWith('.tmp') &&
+            e.lastModifiedSync().isBefore(limite)) {
+          e.deleteSync();
+        }
+      }
+    } on FileSystemException {
+      // limpeza é só higiene
+    }
+  }
 
   @override
   Future<Uint8List?> ler(String nome) async {
@@ -66,7 +86,11 @@ class CacheBinarioArquivos implements CacheBinario {
   Future<void> gravar(String nome, List<int> bytes) async {
     final destino = _arquivo(nome);
     await destino.parent.create(recursive: true);
-    final temporario = File('${destino.path}.${_sequencia++}.tmp');
+    _limparTemporariosAntigos(destino);
+    // Sufixo aleatório: duas instâncias (ou execuções) não se atropelam.
+    final temporario = File(
+      '${destino.path}.${_sorteio.nextInt(1 << 32).toRadixString(16)}.tmp',
+    );
     try {
       await temporario.writeAsBytes(bytes, flush: true);
       await temporario.rename(destino.path);

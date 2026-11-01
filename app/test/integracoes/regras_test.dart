@@ -17,10 +17,8 @@ Map<String, String> _arquivosDe(String pasta) {
 }
 
 /// Texto sem as linhas de comentário (`//`), para não acusar menções em prosa.
-String _semComentarios(String texto) => texto
-    .split('\n')
-    .where((l) => !l.trimLeft().startsWith('//'))
-    .join('\n');
+String _semComentarios(String texto) =>
+    texto.split('\n').where((l) => !l.trimLeft().startsWith('//')).join('\n');
 
 /// Imports proibidos em integracoes: widgets, material, cupertino, dart:ui; e
 /// package:flutter fora de google/credenciais_asset.dart (e só services.dart).
@@ -38,7 +36,8 @@ List<String> violacoesImportsIntegracoes(Map<String, String> arquivos) {
       if (texto.contains(p)) violacoes.add('$caminho usa $p');
     }
     if (!texto.contains('package:flutter')) return;
-    final permitido = caminho.endsWith('/google/credenciais_asset.dart') &&
+    final permitido =
+        caminho.endsWith('/google/credenciais_asset.dart') &&
         texto.contains('package:flutter/services.dart') &&
         !RegExp(r'package:flutter/(?!services\.dart)').hasMatch(texto);
     if (!permitido) violacoes.add('$caminho usa package:flutter');
@@ -86,18 +85,23 @@ void main() {
         "import 'dart:ui';",
         "import 'package:flutter/services.dart';",
       ]) {
-        expect(violacoesImportsIntegracoes({outro: imp}), isNotEmpty,
-            reason: imp);
+        expect(
+          violacoesImportsIntegracoes({outro: imp}),
+          isNotEmpty,
+          reason: imp,
+        );
       }
       expect(
-        violacoesImportsIntegracoes(
-            {g: "import 'package:flutter/foundation.dart';"}),
+        violacoesImportsIntegracoes({
+          g: "import 'package:flutter/foundation.dart';",
+        }),
         isNotEmpty,
       );
       expect(
         violacoesImportsIntegracoes({
-          g: "import 'package:flutter/services.dart';\n"
-              "import 'package:flutter/foundation.dart';"
+          g:
+              "import 'package:flutter/services.dart';\n"
+              "import 'package:flutter/foundation.dart';",
         }),
         isNotEmpty,
       );
@@ -105,8 +109,9 @@ void main() {
 
     test('services.dart em google/credenciais_asset.dart passa', () {
       expect(
-        violacoesImportsIntegracoes(
-            {g: "import 'package:flutter/services.dart';"}),
+        violacoesImportsIntegracoes({
+          g: "import 'package:flutter/services.dart';",
+        }),
         isEmpty,
       );
     });
@@ -115,13 +120,16 @@ void main() {
       expect(violacoesSortRound({outro: 'lista.sort();'}), isNotEmpty);
       expect(violacoesSortRound({outro: 'final a = x.round();'}), isNotEmpty);
       expect(violacoesSortRound({outro: '// nunca usar .sort( aqui'}), isEmpty);
-      expect(violacoesSortRound({outro: '  /// evite .round( sempre'}), isEmpty);
+      expect(
+        violacoesSortRound({outro: '  /// evite .round( sempre'}),
+        isEmpty,
+      );
     });
 
     test('núcleo que importa integracoes/ gera violação', () {
       expect(
         violacoesNucleoImportaIntegracoes({
-          'lib/nucleo/a.dart': "import '../integracoes/integracoes.dart';"
+          'lib/nucleo/a.dart': "import '../integracoes/integracoes.dart';",
         }),
         isNotEmpty,
       );
@@ -133,26 +141,29 @@ void main() {
   });
 
   group('código real', () {
-    test('integracoes não importa widgets, material, cupertino nem dart:ui',
-        () {
-      expect(integracoes, isNotEmpty);
-      expect(
-        violacoesImportsIntegracoes(integracoes)
-            .where((v) => !v.endsWith('usa package:flutter')),
-        isEmpty,
-      );
-    });
+    test(
+      'integracoes não importa widgets, material, cupertino nem dart:ui',
+      () {
+        expect(integracoes, isNotEmpty);
+        expect(
+          violacoesImportsIntegracoes(integracoes)
+              .where((v) => !v.endsWith('usa package:flutter')),
+          isEmpty,
+        );
+      },
+    );
 
     test(
-        'package:flutter só em google/credenciais_asset.dart e só services.dart',
-        () {
-      expect(integracoes, isNotEmpty);
-      expect(
-        violacoesImportsIntegracoes(integracoes)
-            .where((v) => v.endsWith('usa package:flutter')),
-        isEmpty,
-      );
-    });
+      'package:flutter só em google/credenciais_asset.dart e só services.dart',
+      () {
+        expect(integracoes, isNotEmpty);
+        expect(
+          violacoesImportsIntegracoes(integracoes)
+              .where((v) => v.endsWith('usa package:flutter')),
+          isEmpty,
+        );
+      },
+    );
 
     test('integracoes não usa .sort( nem .round(', () {
       expect(integracoes, isNotEmpty);

@@ -46,6 +46,12 @@ void main() {
       expect((i.width, i.height), (400, 300));
     });
 
+    test('acima do limite de pixels → null antes de decodificar', () {
+      final png = _png(300, 200);
+      expect(reduzirParaJpeg(png, maxPixels: 59999), isNull);
+      expect(reduzirParaJpeg(png, maxPixels: 60000), isNotNull);
+    });
+
     test('GIF também decodifica', () {
       final g = img.Image(width: 300, height: 200);
       img.fill(g, color: img.ColorRgb8(1, 2, 3));
@@ -104,6 +110,7 @@ void main() {
       );
       expect(nome, isNull);
       expect(await cache.ler(nomeImagemNoticia(url)), isNull);
+      expect(falso.abortados, 1);
     });
 
     test('exatamente no limite ainda passa', () async {
@@ -165,7 +172,7 @@ void main() {
       final falso = ClienteFalso.fila([
         RespostaFalsa(404, motivo: 'Not Found'),
       ]);
-      expect(
+      await expectLater(
         baixarImagemNoticia(
           _cliente(falso),
           CacheBinarioMemoria(),
@@ -174,6 +181,7 @@ void main() {
         ),
         throwsA(isA<ErroHttp>()),
       );
+      expect(falso.abortados, 1);
     });
 
     test('falha de transporte vira ErroConexao', () async {

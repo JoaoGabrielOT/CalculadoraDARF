@@ -25,7 +25,13 @@ String nomeArquivoFavicon(String dominio) =>
 
 /// Decodifica (JPEG, PNG, WebP, GIF), descarta o alfa, reduz para [largura] e
 /// reencoda em JPEG qualidade 85; `null` se não for imagem ou for menor que 120×80.
-Uint8List? reduzirParaJpeg(Uint8List dados, {int largura = 900}) {
+Uint8List? reduzirParaJpeg(
+  Uint8List dados, {
+  int largura = 900,
+  int maxPixels = 40000000,
+}) {
+  final info = img.findDecoderForData(dados)?.startDecode(dados);
+  if (info == null || info.width * info.height > maxPixels) return null;
   final original = img.decodeImage(dados);
   if (original == null) return null;
   var imagem = original.convert(
@@ -60,11 +66,19 @@ Future<String?> baixarImagemNoticia(
   if (await cache.ler(nome) != null) return nome;
   final uri = Uri.parse(url);
   final resposta = await navegador.abrir('GET', uri);
-  conferirStatus(resposta.status, uri, motivo: resposta.motivo);
+  try {
+    conferirStatus(resposta.status, uri, motivo: resposta.motivo);
+  } catch (_) {
+    await resposta.cancelar();
+    rethrow;
+  }
   final corpo = BytesBuilder(copy: false);
   await for (final bloco in resposta.blocos) {
     corpo.add(bloco);
-    if (corpo.length > limite) return null;
+    if (corpo.length > limite) {
+      await resposta.cancelar();
+      return null;
+    }
   }
   final dados = corpo.takeBytes();
   final jpeg = await executar(() => reduzirParaJpeg(dados, largura: largura));

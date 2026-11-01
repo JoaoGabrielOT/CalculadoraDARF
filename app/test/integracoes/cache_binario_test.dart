@@ -34,6 +34,18 @@ void main() {
     expect(restos.where((p) => p.endsWith('.tmp')), isEmpty);
   });
 
+  test('.tmp antigo é removido ao gravar; recente fica', () async {
+    final cache = CacheBinarioArquivos(pasta.path);
+    final velho = File('${pasta.path}/x.bin.abc.tmp')..writeAsBytesSync([1]);
+    velho.setLastModifiedSync(
+      DateTime.now().subtract(const Duration(hours: 2)),
+    );
+    final novo = File('${pasta.path}/x.bin.def.tmp')..writeAsBytesSync([1]);
+    await cache.gravar('x.bin', [2]);
+    expect(velho.existsSync(), isFalse);
+    expect(novo.existsSync(), isTrue);
+  });
+
   test('memória: relógio injetado, ler, apagar', () async {
     var agora = DateTime.utc(2026, 10, 28);
     final cache = CacheBinarioMemoria(relogio: () => agora);

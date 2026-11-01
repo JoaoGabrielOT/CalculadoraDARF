@@ -60,6 +60,19 @@ class Logos {
     String nomeFalta,
     bool Function(Uint8List) valido,
   ) async {
+    try {
+      return await _baixarCru(url, nome, nomeFalta, valido);
+    } catch (_) {
+      return null; // como o Python: uma logo que falha não derruba as outras
+    }
+  }
+
+  Future<Uint8List?> _baixarCru(
+    String url,
+    String nome,
+    String nomeFalta,
+    bool Function(Uint8List) valido,
+  ) async {
     final guardado = await _cache.ler(nome);
     if (guardado != null) return guardado;
     final desde = await _cache.modificadoEm(nomeFalta);
