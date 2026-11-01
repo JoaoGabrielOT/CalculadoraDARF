@@ -2,12 +2,16 @@ import 'ambiente.dart';
 import 'armazenamento.dart';
 import 'compat/json_python.dart';
 import 'compat/ordenacao.dart';
+import 'erros.dart';
 import 'modelos/com_mod.dart';
 import 'modelos/config.dart';
 import 'modelos/lote.dart';
 import 'modelos/mes.dart';
 
 const _arquivoConfig = 'config.json';
+
+const mensagemConfigIlegivel =
+    'O arquivo config.json está ilegível; nada foi alterado.';
 
 /// Mudanças que não contam como edição do registro (`SEM_CARIMBO`,
 /// nucleo.py:190).
@@ -105,6 +109,26 @@ class Repositorio {
       json = null;
     }
     return Config.fromJson(json ?? {});
+  }
+
+  /// Config para ler e depois gravar. Um `config.json` ilegível (bytes
+  /// inválidos, JSON inválido, raiz que não é objeto ou campo inválido) seria
+  /// lido como o padrão e a gravação o apagaria: nesse caso lança
+  /// [ErroValidacao] e nada é alterado. Único ponto desta guarda.
+  Config lerConfigParaGravar() {
+    try {
+      final texto = armazenamento.ler(_arquivoConfig);
+      if (texto != null && jsonPythonDecode(texto) is! Map) {
+        throw ErroValidacao(mensagemConfigIlegivel);
+      }
+      return lerConfig();
+    } on FormatException {
+      throw ErroValidacao(mensagemConfigIlegivel);
+    } on TypeError {
+      throw ErroValidacao(mensagemConfigIlegivel);
+    } on RangeError {
+      throw ErroValidacao(mensagemConfigIlegivel);
+    }
   }
 
   /// Grava a configuração. Com [carimbar], marca a hora de alteração dos

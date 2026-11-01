@@ -5,6 +5,16 @@ import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+class _ArmazenamentoQueFalha extends ArmazenamentoMemoria {
+  @override
+  String? ler(String nome) {
+    if (nome == 'config.json') {
+      throw const FormatException('bytes UTF-8 inválidos');
+    }
+    return super.ler(nome);
+  }
+}
+
 late ArmazenamentoMemoria disco;
 late Repositorio repo;
 late ServicosLocais servicos;
@@ -151,6 +161,17 @@ void main() {
         expect(disco.ler('config.json'), texto);
       });
     }
+
+    test(
+      'leitura do config que lança FormatException: iniciar abre com o aviso',
+      () async {
+        final repoFalho = Repositorio(_ArmazenamentoQueFalha());
+        final s = ServicosLocais(repo: repoFalho, agendarSync: () {});
+        final e = await s.iniciar();
+        expect(e.erroConfig, msg);
+        await s.encerrar();
+      },
+    );
 
     test('campo inválido: iniciar abre com o aviso e nada é gravado', () async {
       const texto = '{"metas": [{"id": "m", "qtd": 1.5}]}';

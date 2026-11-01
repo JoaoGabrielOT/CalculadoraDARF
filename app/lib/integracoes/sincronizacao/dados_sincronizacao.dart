@@ -17,21 +17,8 @@ class DadosSincronizacaoLocal implements DadosSincronizacao {
 
   final Repositorio _repo;
 
-  /// Config para ler e depois gravar. Um `config.json` ilegível seria lido
-  /// como o padrão e a gravação o apagaria: nesse caso nada é alterado.
-  Config _config() {
-    final texto = _repo.armazenamento.ler('config.json');
-    if (texto != null) {
-      try {
-        jsonPythonDecode(texto);
-      } on FormatException {
-        throw ErroValidacao(
-          'O arquivo config.json está ilegível; nada foi alterado.',
-        );
-      }
-    }
-    return _repo.lerConfig();
-  }
+  /// Config para ler e depois gravar (guarda única do núcleo).
+  Config _config() => _repo.lerConfigParaGravar();
 
   @override
   Future<String?> planilhaDe(String email) async =>
