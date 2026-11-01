@@ -37,6 +37,10 @@ dependencies:
   collection: ^1.19.1
   meta: ^1.19.0
   unorm_dart: 0.3.3
+  http: 1.6.0
+  crypto: 3.0.7
+  xml: 6.6.1
+  image: 4.12.0
 
 dev_dependencies:
   flutter_test:
@@ -59,6 +63,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/google/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
