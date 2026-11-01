@@ -1,0 +1,77 @@
+import 'dart:async';
+
+import 'package:calculadoradarf/app/app.dart';
+import 'package:calculadoradarf/app/estado/estado_app.dart';
+import 'package:calculadoradarf/app/telas/casca.dart';
+import 'package:calculadoradarf/app/tema/cores_app.dart';
+import 'package:calculadoradarf/app/tema/tema_visual.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+
+import 'apoio/montar.dart';
+import 'apoio/plataforma_falsa.dart';
+import 'apoio/servicos_falsos.dart';
+
+CoresApp _cores(WidgetTester t) =>
+    CoresApp.de(t.element(find.text('Calculadora DARF').first));
+
+void main() {
+  testWidgets('MaterialApp em português do Brasil com o título do app', (
+    t,
+  ) async {
+    await montarApp(t);
+    final app = t.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.title, 'Calculadora DARF');
+    expect(app.locale, const Locale('pt', 'BR'));
+    expect(find.byKey(chaveCaptura), findsOneWidget);
+  });
+
+  testWidgets('tema Automático segue o claro/escuro do sistema', (t) async {
+    t.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    addTearDown(t.platformDispatcher.clearPlatformBrightnessTestValue);
+    await montarApp(t, tema: TemaVisual.automatico);
+    expect(_cores(t).destaque, const Color(0xFF6C5CE7)); // Moderno
+    t.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    await t.pumpAndSettle();
+    expect(_cores(t).destaque, const Color(0xFF1B1F2A)); // Claro
+  });
+
+  testWidgets('trocar o tema pelo estado vale na hora', (t) async {
+    await montarApp(t, tema: TemaVisual.claro);
+    expect(_cores(t).destaque, const Color(0xFF1B1F2A));
+    final estado = Provider.of<EstadoApp>(
+      t.element(find.byType(Casca)),
+      listen: false,
+    );
+    unawaited(estado.trocarTema(TemaVisual.terminal));
+    await t.pumpAndSettle();
+    expect(_cores(t).destaque, const Color(0xFF2EA043));
+  });
+
+  testWidgets('iniciarApp abre o app com os serviços dados', (t) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final s = ServicosFalsos();
+    await iniciarApp(servicos: s, plataforma: PlataformaFalsa());
+    await t.pump();
+    await t.pump();
+    expect(find.text('Calculadora DARF'), findsWidgets);
+    expect(s.chamadas, contains('iniciar()'));
+  });
+
+  testWidgets('falha ao subir os serviços mostra o motivo', (t) async {
+    await t.pumpWidget(const AppFalhaInicial('Sem permissão.'));
+    expect(find.textContaining('Sem permissão.'), findsOneWidget);
+  });
+
+  testWidgets('exatamente em 840 usa o layout de PC sem estourar', (t) async {
+    await montarApp(t, tamanho: const Size(840, 700));
+    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await montarApp(t, tamanho: const Size(839, 700));
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+}

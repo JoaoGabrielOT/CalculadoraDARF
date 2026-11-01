@@ -7,8 +7,8 @@ import 'package:path_provider/path_provider.dart';
 Future<({String dados, String temporaria})> pastasDoApp() async {
   final suporte = await getApplicationSupportDirectory();
   final temporaria = await getTemporaryDirectory();
-  return (
-    dados: '${suporte.path}${Platform.pathSeparator}dados',
-    temporaria: temporaria.path,
-  );
+  final dados = '${suporte.path}${Platform.pathSeparator}dados';
+  // A pasta existe antes do primeiro uso (leituras, cache de logos, gravação).
+  await Directory(dados).create(recursive: true);
+  return (dados: dados, temporaria: temporaria.path);
 }

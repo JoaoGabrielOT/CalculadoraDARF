@@ -28,6 +28,10 @@ class PlataformaFalsa implements Plataforma {
   /// Resposta de `pedirPermissaoNotificacoes`.
   bool permissaoNotificacoes = true;
 
+  /// Quando preenchido, os métodos de notificação e o instalador lançam isto
+  /// (falha de plugin).
+  Object? falhaPlugin;
+
   /// Quantas vezes `iniciarNotificacoes` foi chamado.
   int notificacoesIniciadas = 0;
 
@@ -46,10 +50,14 @@ class PlataformaFalsa implements Plataforma {
   Future<void> iniciarNotificacoes(void Function(String link) aoTocar) async {
     notificacoesIniciadas++;
     this.aoTocar = aoTocar;
+    if (falhaPlugin != null) throw falhaPlugin!;
   }
 
   @override
-  Future<bool> pedirPermissaoNotificacoes() async => permissaoNotificacoes;
+  Future<bool> pedirPermissaoNotificacoes() async {
+    if (falhaPlugin != null) throw falhaPlugin!;
+    return permissaoNotificacoes;
+  }
 
   @override
   Future<void> notificar(
@@ -58,11 +66,13 @@ class PlataformaFalsa implements Plataforma {
     String corpo,
     String link,
   ) async {
+    if (falhaPlugin != null) throw falhaPlugin!;
     notificacoes.add(NotificacaoGravada(id, titulo, corpo, link));
   }
 
   @override
   Future<void> instalarAtualizacao(String caminho) async {
+    if (falhaPlugin != null) throw falhaPlugin!;
     instalacoes.add(caminho);
   }
 }
