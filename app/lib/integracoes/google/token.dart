@@ -73,13 +73,14 @@ class TokenGoogle {
       final escopos = json['scopes'];
       final expiry = json['expiry'];
       final token = json['token'];
-      final uri = json['token_uri'];
       final universo = json['universe_domain'];
       final conta = json['account'];
       return TokenGoogle(
         token: token is String ? token : null,
         refreshToken: refresh,
-        tokenUri: uri is String ? uri : _tokenUriPadrao,
+        // o google-auth ignora o token_uri do arquivo: não enviar segredos
+        // a um host de arquivo adulterado
+        tokenUri: _tokenUriPadrao,
         clientId: id,
         clientSecret: segredo,
         scopes: escopos is List
@@ -87,7 +88,16 @@ class TokenGoogle {
             : escopos is String
             ? escopos.split(' ').where((e) => e.isNotEmpty).toList()
             : null,
-        expiry: expiry is String ? _lerExpiry(expiry) : null,
+        // sem expiry nasce vencido e é renovado (credentials.py:503-504)
+        expiry: expiry is String && expiry.isNotEmpty
+            ? _lerExpiry(expiry)
+            : DateTime.fromMicrosecondsSinceEpoch(
+                arredondar(
+                  (ambiente.agora() - margemRenovacao) * 1000000,
+                  0,
+                ).toInt(),
+                isUtc: true,
+              ),
         universeDomain: universo is String ? universo : 'googleapis.com',
         account: conta is String ? conta : '',
       );
@@ -156,6 +166,7 @@ Future<TokenGoogle> renovarToken(ClienteHttp http, TokenGoogle t) async {
         'client_id': t.clientId,
         'client_secret': t.clientSecret,
         'refresh_token': refresh,
+        'scope': escoposGoogle.join(' '),
       },
     );
   } on ErroConexao catch (e) {

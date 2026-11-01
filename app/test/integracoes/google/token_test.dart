@@ -89,14 +89,40 @@ void main() {
   test('expiry sem microssegundos e sem expiry', () {
     final t = TokenGoogle.fromJson(_exemplo());
     expect(t.expiry, DateTime.utc(2026, 10, 20, 22, 40));
-    final j = _exemplo()..remove('expiry');
-    final s = TokenGoogle.fromJson(j);
-    expect(s.expiry, isNull);
-    expect(s.valido(9e12), isTrue);
-    expect(s.toJson().containsKey('expiry'), isFalse);
+    // sem expiry (ou vazio) nasce vencido: agora − 225 s
+    ambiente = Ambiente.fixo(agora: 1761000000.0);
+    for (final j in [_exemplo()..remove('expiry'), _exemplo(expiry: '')]) {
+      final s = TokenGoogle.fromJson(j);
+      expect(
+        s.expiry,
+        DateTime.fromMillisecondsSinceEpoch(
+          (1761000000 - 225) * 1000,
+          isUtc: true,
+        ),
+      );
+      expect(s.valido(1761000000.0), isFalse);
+    }
+    final s = TokenGoogle.fromJson(_exemplo());
     s.token = null;
     expect(s.valido(0), isFalse);
     expect(s.toJson().containsKey('token'), isFalse);
+    // expiry nulo (resposta da renovação sem expires_in) é válido
+    final r = TokenGoogle(clientId: 'c', clientSecret: 's', token: 't');
+    expect(r.valido(9e12), isTrue);
+    expect(r.toJson().containsKey('expiry'), isFalse);
+  });
+
+  test('token_uri do arquivo é ignorado', () {
+    final j = _exemplo()..['token_uri'] = 'https://mal.example/token';
+    expect(
+      TokenGoogle.fromJson(j).tokenUri,
+      'https://oauth2.googleapis.com/token',
+    );
+  });
+
+  test('scopes ausente assume os escopos do app', () {
+    final j = _exemplo()..remove('scopes');
+    expect(TokenGoogle.fromJson(j).scopes, _escopos);
   });
 
   test('sem refresh_token, client_id ou client_secret → LoginNecessario("Faça login com o Google.")', () {
@@ -145,6 +171,7 @@ void main() {
       'client_id': 'c.apps.googleusercontent.com',
       'client_secret': 's',
       'refresh_token': '1//r',
+      'scope': _escopos.join(' '),
     });
     expect(t.token, 'ya29.novo');
     expect(t.refreshToken, '1//novo');

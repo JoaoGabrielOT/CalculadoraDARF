@@ -44,6 +44,11 @@ void main() {
     );
     final semSegredo = _dados.replaceFirst('"client_secret": "s", ', '');
     expect(ClienteOAuth.deTexto(semSegredo).clientSecret, '');
+    // `installed` vazio cai em `web`
+    expect(
+      ClienteOAuth.deTexto('{"installed": {}, "web": $_dados}').clientId,
+      i.clientId,
+    );
   });
 
   test('credenciais ausentes ou inválidas → SemCredencial("Arquivo credentials.json não encontrado.")', () {
