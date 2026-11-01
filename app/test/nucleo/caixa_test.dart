@@ -220,6 +220,31 @@ void main() {
     expect(versaoPythonDasReferencias('caixa'), startsWith('3.12'));
   });
 
+  test('resumoCaixa valida a data do saldo como date.fromisoformat', () {
+    for (final ruim in ['5/10/2026', 'lixo', '2026-02-30']) {
+      expect(
+        () => resumoCaixa(
+          _cfg({'saldo': 10.0, 'data': ruim}),
+          {},
+          hoje: '2026-10-28',
+        ),
+        throwsFormatException,
+        reason: ruim,
+      );
+    }
+    final r = resumoCaixa(
+      _cfg({'saldo': 10.0, 'data': '2026-10-05'}),
+      {},
+      hoje: '2026-10-28',
+    );
+    expect(r.definido, isTrue);
+    expect(r.base, '2026-10-05');
+    expect(
+      resumoCaixa(_cfg({'saldo': 10.0}), {}, hoje: '2026-10-28').definido,
+      isFalse,
+    );
+  });
+
   test('diasSemana', () {
     expect(diasSemana.length, 7);
     expect(diasSemana.first, 'Segunda-feira');

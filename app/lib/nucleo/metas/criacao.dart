@@ -16,10 +16,6 @@ import '../repositorio.dart';
 import 'cadeia.dart';
 import 'preco_alvo.dart';
 
-/// `iso(...)` de metas.py: o instante no fuso de Brasília, sem frações.
-String _isoBr(DataHora? agora) =>
-    (agora ?? ambiente.agoraBr()).noFuso(fusoBrasilia).iso();
-
 /// `_validar_preco`: arredonda a centavos; recusa não finito, zero e negativo.
 double _validarPreco(num valor, String rotulo, {String artigo = 'O'}) {
   final v = arredondar(valor.toDouble(), 2);
@@ -200,7 +196,7 @@ Meta criarMeta(
     loteId: loteId,
     qtd: v.qtd,
     precoAlvo: alvo,
-    criadaEm: _isoBr(agora),
+    criadaEm: isoBr(agora ?? ambiente.agoraBr()),
     status: 'ativa',
     lucroDesejado: lucro,
   );
@@ -241,7 +237,7 @@ Meta criarStop(
     meses,
     ocoCom != null && ocoCom.isNotEmpty ? {ocoCom} : const {},
   );
-  final criada = _isoBr(agora);
+  final criada = isoBr(agora ?? ambiente.agoraBr());
   final meta = Meta(
     id: 'meta-${ambiente.novoId()}',
     ticker: v.lote.ticker,
@@ -309,7 +305,7 @@ void reconciliar(Repositorio repo, Config cfg, Meta meta) {
       'origem': 'reconciliada',
       'barra_ts': 0,
       'motivo': 'Venda automática já registrada',
-      'verificado_em': _isoBr(null),
+      'verificado_em': isoBr(ambiente.agoraBr()),
     };
   }
 }

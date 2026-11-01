@@ -19,8 +19,6 @@ const diasSemana = [
   'Domingo',
 ];
 
-String _dia2(int n) => n.toString().padLeft(2, '0');
-
 String _iso(int ano, int mes, int dia) =>
     isoDeDateTime(DateTime.utc(ano, mes, dia));
 
@@ -117,9 +115,7 @@ String rotuloVencimento(String d, {String? hoje}) {
   } else if (d == somarDias(hoje, 2)) {
     nome = 'Depois de amanhã';
   } else {
-    nome =
-        '${diasSemana[diaDaSemana(d)]}, ${_dia2(int.parse(d.substring(8, 10)))}'
-        '/${_dia2(int.parse(d.substring(5, 7)))}';
+    nome = '${diasSemana[diaDaSemana(d)]}, ${fmtData(d).substring(0, 5)}';
   }
   return '$nome (D+$n)';
 }
@@ -343,7 +339,8 @@ class ResumoCaixa {
 ResumoCaixa resumoCaixa(Config cfg, Map<String, Mes> meses, {String? hoje}) {
   hoje ??= ambiente.hoje();
   final caixa = cfg.caixa;
-  final base = caixa.data.isNotEmpty ? caixa.data : null;
+  // `date.fromisoformat`: data inválida lança; AAAAMMDD vira AAAA-MM-DD
+  final base = caixa.data.isNotEmpty ? somarDias(caixa.data, 0) : null;
   final saldo = caixa.saldo;
   final itens = lancamentosCaixa(meses);
   var entrou = 0.0;

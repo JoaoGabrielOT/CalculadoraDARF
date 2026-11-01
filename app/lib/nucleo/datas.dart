@@ -290,3 +290,6 @@ class DataHora implements Comparable<DataHora> {
   @override
   String toString() => iso();
 }
+
+/// `iso(...)` de metas.py: o instante no fuso de Brasília, sem frações.
+String isoBr(DataHora agora) => agora.noFuso(fusoBrasilia).iso();

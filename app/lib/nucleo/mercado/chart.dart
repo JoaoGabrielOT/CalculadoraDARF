@@ -19,6 +19,8 @@ typedef ObterChart = Future<Map<String, Object?>> Function(
 /// `PERIODOS_ATR` (mercado.py:8).
 const _periodosAtr = 14;
 
+// Visão sem cópia (o `lerMapa` de modelos/com_mod.dart faz cópia profunda; aqui
+// só se lê o JSON do Yahoo, que pode ser grande).
 Map<String, Object?> _mapa(Object? o) =>
     o is Map ? o.cast<String, Object?>() : <String, Object?>{};
 

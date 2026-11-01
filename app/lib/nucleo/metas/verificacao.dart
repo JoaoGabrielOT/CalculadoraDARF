@@ -90,9 +90,6 @@ String mensagemErro(Object e) {
 /// Instante de uma data/hora de meta (`_dt`): sem fuso vale Brasília.
 DataHora _dt(String texto) => DataHora.parse(texto);
 
-/// `iso(...)` de metas.py: o instante no fuso de Brasília, sem frações.
-String _isoBr(DataHora agora) => agora.noFuso(fusoBrasilia).iso();
-
 /// Os primeiros 10 caracteres (por ponto de código), como `s[:10]`.
 String _dez(String s) => String.fromCharCodes(s.runes.take(10));
 
@@ -247,7 +244,7 @@ _Execucao _executar(
     'barra_ts': barra.ts,
     'gatilho': gatilho(meta),
     'motivo': motivo,
-    'verificado_em': _isoBr(agora),
+    'verificado_em': isoBr(agora),
   };
   return _Execucao.executada;
 }

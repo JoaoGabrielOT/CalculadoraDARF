@@ -7,6 +7,7 @@ import 'package:unorm_dart/unorm_dart.dart' show nfkd;
 import '../ambiente.dart';
 import '../apuracao.dart';
 import '../compat/numeros.dart';
+import '../datas.dart';
 import 'estado.dart';
 
 // noticias.py:17-20
@@ -395,9 +396,7 @@ String tempoRelativo(double ts, {double? agora}) {
   final d = DateTime.fromMillisecondsSinceEpoch(
     arredondar(ts, 6).floor() * 1000,
   );
-  return '${d.day.toString().padLeft(2, '0')}/'
-      '${d.month.toString().padLeft(2, '0')}/'
-      '${d.year.toString().padLeft(4, '0')}';
+  return fmtData(isoDeDateTime(d));
 }
 
 String chaveTitulo(String titulo) =>
