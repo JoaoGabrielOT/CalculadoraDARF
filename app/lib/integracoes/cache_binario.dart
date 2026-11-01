@@ -54,18 +54,23 @@ class CacheBinarioArquivos implements CacheBinario {
 
   File _arquivo(String nome) => File('$pasta/$nome');
 
-  /// Remove restos `.tmp` (de gravações interrompidas) com mais de 1 hora.
+  bool _varrido = false;
+
+  /// Remove restos `.tmp` (de gravações interrompidas) com mais de 1 hora; uma
+  /// varredura só por instância, e uma falha em um arquivo não impede os outros.
   void _limparTemporariosAntigos(File destino) {
-    final prefixo = '${destino.uri.pathSegments.last}.';
+    if (_varrido) return;
+    _varrido = true;
     final limite = DateTime.now().subtract(const Duration(hours: 1));
     try {
-      for (final e in destino.parent.listSync()) {
-        final nome = e.uri.pathSegments.last;
-        if (e is File &&
-            nome.startsWith(prefixo) &&
-            nome.endsWith('.tmp') &&
-            e.lastModifiedSync().isBefore(limite)) {
-          e.deleteSync();
+      final dir = Directory(pasta);
+      if (!dir.existsSync()) return;
+      for (final e in dir.listSync(recursive: true, followLinks: false)) {
+        if (e is! File || !e.path.endsWith('.tmp')) continue;
+        try {
+          if (e.lastModifiedSync().isBefore(limite)) e.deleteSync();
+        } on FileSystemException {
+          // outro processo pode ter mexido nele
         }
       }
     } on FileSystemException {

@@ -22,21 +22,41 @@ class RespostaContinua {
     required this.motivo,
     required this.cabecalhos,
     required this.urlFinal,
-    required this.blocos,
-    required Future<void> Function() cancelar,
-  }) : // Parâmetro nomeado não pode ser privado.
+    required Stream<List<int>> blocos,
+    required void Function() abortar,
+  }) : // Parâmetros nomeados não podem ser privados.
        // ignore: prefer_initializing_formals
-       _cancelar = cancelar;
+       _blocos = blocos,
+       // ignore: prefer_initializing_formals
+       _abortar = abortar;
 
   final int status;
   final String? motivo;
   final Map<String, String> cabecalhos;
   final Uri urlFinal;
-  final Stream<List<int>> blocos;
-  final Future<void> Function() _cancelar;
+  final Stream<List<int>> _blocos;
+  final void Function() _abortar;
+  bool _entregue = false;
 
-  /// Aborta o pedido e solta a conexão, sem ler o resto do corpo.
-  Future<void> cancelar() => _cancelar();
+  /// Corpo em fluxo de assinatura única; quem o pega fica responsável por ele.
+  Stream<List<int>> get blocos {
+    _entregue = true;
+    return _blocos;
+  }
+
+  /// Aborta o pedido e solta a conexão, sem ler o resto do corpo. Se ninguém
+  /// pegou o [blocos], assina-o antes: sem ouvinte o abort só emitiria o erro
+  /// e o socket continuaria aberto (io_client do pacote http).
+  Future<void> cancelar() async {
+    if (_entregue) {
+      _abortar();
+      return;
+    }
+    _entregue = true;
+    final assinatura = _blocos.listen(null, onError: (Object _) {});
+    _abortar();
+    await assinatura.cancel();
+  }
 }
 
 /// Falha de transporte vira [ErroConexao] com o texto original; o resto passa.
@@ -198,7 +218,7 @@ class ClienteHttp {
           ? (resposta as http.BaseResponseWithUrl).url
           : url,
       blocos: blocos,
-      cancelar: () async => abortarAgora(),
+      abortar: abortarAgora,
     );
   }
 

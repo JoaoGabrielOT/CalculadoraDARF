@@ -28,7 +28,7 @@ String nomeArquivoFavicon(String dominio) =>
 Uint8List? reduzirParaJpeg(
   Uint8List dados, {
   int largura = 900,
-  int maxPixels = 40000000,
+  int maxPixels = 25000000,
 }) {
   final info = img.findDecoderForData(dados)?.startDecode(dados);
   if (info == null || info.width * info.height > maxPixels) return null;

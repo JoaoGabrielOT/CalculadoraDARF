@@ -110,6 +110,7 @@ void main() {
       );
       expect(nome, isNull);
       expect(await cache.ler(nomeImagemNoticia(url)), isNull);
+      await Future<void>.delayed(Duration.zero);
       expect(falso.abortados, 1);
     });
 
@@ -181,6 +182,7 @@ void main() {
         ),
         throwsA(isA<ErroHttp>()),
       );
+      await Future<void>.delayed(Duration.zero);
       expect(falso.abortados, 1);
     });
 

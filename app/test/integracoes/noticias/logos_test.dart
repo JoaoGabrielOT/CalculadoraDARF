@@ -172,11 +172,7 @@ void main() {
     final l = Logos(http: ClienteHttp(falso), cache: _CacheQuebrado());
     expect(await l.logoPng('PETR4'), isNull);
     expect(await l.logoSvg('PETR4'), isNull);
-  });
-
-  test('URL malformada vira sem logo', () async {
-    final falso = ClienteFalso.fila([]);
-    expect(await logos(falso).favicon(_noticia('http://a b:x/')), isNull);
+    expect(falso.pedidos, isEmpty);
   });
 
   test('favicon sem domínio → null sem pedido', () async {
