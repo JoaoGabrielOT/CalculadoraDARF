@@ -92,9 +92,10 @@ Future<String> loginNavegador(
       final resposta = pedido.response;
       final ehRetorno =
           uri.toString().contains('code=') || uri.toString().contains('error=');
+      final retornoGet = pedido.method == 'GET' && ehRetorno;
       // o código é guardado antes de responder (google_sync.py:172): o
       // navegador pode derrubar a conexão sem atrapalhar o login
-      if (pedido.method == 'GET' && ehRetorno && !recebido.isCompleted) {
+      if (retornoGet && !recebido.isCompleted) {
         recebido.complete(uri);
       }
       try {
@@ -115,7 +116,7 @@ Future<String> loginNavegador(
       } catch (_) {
         // conexão do navegador interrompida
       } finally {
-        if (ehRetorno && !respondido.isCompleted) respondido.complete();
+        if (retornoGet && !respondido.isCompleted) respondido.complete();
       }
     });
     await abrirUrl(

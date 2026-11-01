@@ -347,16 +347,22 @@ void main() {
     () async {
       final m = _Montagem([_tokenOk(), _about()]);
       final status = Completer<int>();
+      final statusGet = Completer<int>();
       final email = await m.login((url) async {
         final r = _redirect(url);
         final estado = url.queryParameters['state']!;
         final alvo = r.replace(queryParameters: {'code': 'x', 'state': estado});
         unawaited(() async {
           status.complete((await _get(alvo, metodo: 'POST')).$1);
-          await _retornarComCodigo(url);
+          final get = await _get(
+            r.replace(queryParameters: {'code': 'abc', 'state': estado}),
+          );
+          statusGet.complete(get.$1);
         }());
       });
       expect(await status.future, 501);
+      // a página do GET sai inteira: o POST não libera o fechamento do servidor
+      expect(await statusGet.future, 200);
       expect(email, 'ana@gmail.com');
       expect(m.falso.pedidos[0].formulario['code'], 'abc');
     },
