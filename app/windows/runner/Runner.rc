@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "io.github.joaogabrielot" "\0"
-            VALUE "FileDescription", "calculadoradarf" "\0"
+            VALUE "CompanyName", "JoaoGabrielOT" "\0"
+            VALUE "FileDescription", "Calculadora DARF" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "calculadoradarf" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 io.github.joaogabrielot. All rights reserved." "\0"
             VALUE "OriginalFilename", "calculadoradarf.exe" "\0"
-            VALUE "ProductName", "calculadoradarf" "\0"
+            VALUE "ProductName", "Calculadora DARF" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

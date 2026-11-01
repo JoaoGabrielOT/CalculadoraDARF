@@ -3,3 +3,5 @@ tags:
   # Roda também no `flutter test` comum (só escreve em build/, ignorada pelo git);
   # para rodar apenas ele: flutter test --tags ida_e_volta
   ida_e_volta:
+  # Só no Windows; CI usa --exclude-tags golden
+  golden:
