@@ -120,6 +120,16 @@ void main() {
     final nucleo = _arquivosDe('lib/nucleo');
     final integracoes = _arquivosDe('lib/integracoes');
 
+    test('raiz do projeto encontrada e lib/app lido quando existe', () {
+      // Caminho errado faria os testes abaixo passarem em silêncio.
+      expect(File('pubspec.yaml').existsSync(), isTrue,
+          reason: 'rode a partir de app/');
+      expect(Directory('lib/nucleo').existsSync(), isTrue);
+      // lib/app ainda não existe na Tarefa 1; a partir de que existir, tem
+      // de ser lido (não vazio).
+      if (Directory('lib/app').existsSync()) expect(app, isNotEmpty);
+    });
+
     test('servicos/ e tema_visual.dart não importam package:flutter', () {
       expect(violacoesFlutterEmServicos(app), isEmpty);
     });

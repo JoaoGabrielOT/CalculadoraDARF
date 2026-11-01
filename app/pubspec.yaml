@@ -75,6 +75,7 @@ flutter:
 
   assets:
     - assets/google/
+    - assets/fonts/LICENSE.txt
 
   fonts:
     - family: Roboto

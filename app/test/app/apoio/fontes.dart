@@ -17,9 +17,15 @@ Future<void> carregarFontesDeTeste() async {
   await roboto.load();
 
   final raiz = Platform.environment['FLUTTER_ROOT'] ?? _raizDoFlutter();
-  final icones = FontLoader('MaterialIcons')
-    ..addFont(_bytes(File(
-        '$raiz/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')));
+  // No SDK o nome é 'materialicons-regular.otf' (minúsculas); procura sem
+  // diferenciar maiúsculas para funcionar em Linux e Windows.
+  final pasta = Directory('$raiz/bin/cache/artifacts/material_fonts');
+  final otf = pasta
+      .listSync()
+      .whereType<File>()
+      .firstWhere((f) =>
+          f.uri.pathSegments.last.toLowerCase() == 'materialicons-regular.otf');
+  final icones = FontLoader('MaterialIcons')..addFont(_bytes(otf));
   await icones.load();
 }
 
