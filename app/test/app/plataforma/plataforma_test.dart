@@ -15,6 +15,10 @@ class _AdaptadorFalso implements AdaptadorNotificacoes {
   void Function(String payload)? aoTocar;
   final List<List<Object>> mostradas = [];
   bool permissao = true;
+  String? partida;
+
+  @override
+  Future<String?> payloadDaPartida() async => partida;
 
   @override
   Future<void> iniciar(void Function(String payload) aoTocar) async {
@@ -133,6 +137,24 @@ void main() {
       adaptador.aoTocar!('https://x.com/n');
       adaptador.aoTocar!('');
       expect(tocados, ['https://x.com/n', '']);
+    });
+
+    test('partida a frio pela notificação chama aoTocar uma vez', () async {
+      final adaptador = _AdaptadorFalso()..partida = 'https://x.com/n';
+      final p = PlataformaReal(windows: false, adaptador: adaptador);
+      final tocados = <String>[];
+      await p.iniciarNotificacoes(tocados.add);
+      expect(tocados, ['https://x.com/n']);
+    });
+
+    test('partida normal ou sem link não chama aoTocar', () async {
+      final adaptador = _AdaptadorFalso();
+      final tocados = <String>[];
+      final p = PlataformaReal(windows: false, adaptador: adaptador);
+      await p.iniciarNotificacoes(tocados.add);
+      adaptador.partida = '';
+      await p.iniciarNotificacoes(tocados.add);
+      expect(tocados, isEmpty);
     });
 
     test('permissão: Windows devolve true; Android pergunta', () async {

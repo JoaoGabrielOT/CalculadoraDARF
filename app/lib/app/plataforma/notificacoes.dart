@@ -18,6 +18,11 @@ abstract interface class AdaptadorNotificacoes {
   /// (o link da notícia, ou vazio no resumo).
   Future<void> iniciar(void Function(String payload) aoTocar);
 
+  /// Link da notificação que abriu o app já fechado (partida a frio), ou
+  /// null/vazio quando a partida foi normal (android/main.py:119-127).
+  /// Chamado depois de [iniciar].
+  Future<String?> payloadDaPartida();
+
   /// Android 13+: pede a permissão; devolve se ela está concedida.
   Future<bool> pedirPermissao();
 
@@ -32,7 +37,7 @@ class AdaptadorNotificacoesReal implements AdaptadorNotificacoes {
   Future<void> iniciar(void Function(String payload) aoTocar) async {
     await _plugin.initialize(
       settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('ic_notificacao'),
         windows: WindowsInitializationSettings(
           appName: 'Calculadora DARF',
           appUserModelId: aumid,
@@ -42,6 +47,13 @@ class AdaptadorNotificacoesReal implements AdaptadorNotificacoes {
       onDidReceiveNotificationResponse: (resposta) =>
           aoTocar(resposta.payload ?? ''),
     );
+  }
+
+  @override
+  Future<String?> payloadDaPartida() async {
+    final detalhes = await _plugin.getNotificationAppLaunchDetails();
+    if (detalhes == null || !detalhes.didNotificationLaunchApp) return null;
+    return detalhes.notificationResponse?.payload;
   }
 
   @override

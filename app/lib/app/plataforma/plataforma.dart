@@ -53,8 +53,11 @@ class PlataformaReal implements Plataforma {
   }
 
   @override
-  Future<void> iniciarNotificacoes(void Function(String link) aoTocar) =>
-      _adaptador.iniciar(aoTocar);
+  Future<void> iniciarNotificacoes(void Function(String link) aoTocar) async {
+    await _adaptador.iniciar(aoTocar);
+    final partida = await _adaptador.payloadDaPartida();
+    if (partida != null && partida.isNotEmpty) aoTocar(partida);
+  }
 
   @override
   Future<bool> pedirPermissaoNotificacoes() async {
