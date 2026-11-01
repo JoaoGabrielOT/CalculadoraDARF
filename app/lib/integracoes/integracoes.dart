@@ -1,4 +1,9 @@
 export 'executor.dart';
+export 'google/constantes.dart';
+export 'google/credenciais.dart';
+export 'google/credenciais_asset.dart';
+export 'google/erros.dart';
+export 'google/token.dart';
 export 'http/cliente.dart';
 export 'http/erros.dart';
 export 'http/json.dart';
