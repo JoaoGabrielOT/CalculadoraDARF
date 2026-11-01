@@ -153,6 +153,9 @@ void main() {
         final fundos = [
           for (final b in base) ...[b, Color.alphaBlend(c.cartao, b)],
           th.colorScheme.surface,
+          th.colorScheme.surfaceContainerLowest,
+          th.colorScheme.surfaceContainerLow,
+          th.colorScheme.surfaceContainer,
           th.colorScheme.surfaceContainerHigh,
           th.colorScheme.surfaceContainerHighest,
         ];
@@ -186,9 +189,35 @@ void main() {
           razao(c.chipAtivoTexto, c.chipAtivoFundo),
           greaterThanOrEqualTo(4.5),
         );
+        // Borda de campo/controle: 3:1 sobre todas as superfícies (WCAG 1.4.11).
+        for (final f in fundos) {
+          expect(
+            razao(c.bordaCampo, f),
+            greaterThanOrEqualTo(3),
+            reason: 'borda sobre $f',
+          );
+        }
+        expect(th.inputDecorationTheme.enabledBorder, isNotNull);
+        expect(
+          (th.inputDecorationTheme.enabledBorder! as OutlineInputBorder)
+              .borderSide
+              .color,
+          c.bordaCampo,
+        );
+        expect(th.colorScheme.outline, c.bordaCampo);
+        // Indicador do item selecionado da navegação: visível e com texto legível.
+        final ind = th.navigationBarTheme.indicatorColor!;
+        expect(ind.a, greaterThan(0));
+        expect(
+          razao(
+            c.navAtivo,
+            Color.alphaBlend(ind, th.colorScheme.surfaceContainerLow),
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
         // Fixados no spec e fora desta checagem: selo de alta do Claro
-        // (#14833b sobre #e3f6ea, 4,3:1) e texto branco sobre o fim do
-        // degradê do chip ativo do Moderno (#00b894).
+        // (#14833b sobre #e3f6ea, 4,3:1). O degradê destaqueGradiente do Moderno
+        // não está em uso nos componentes do tema (branco sobre #00b894 não passa).
         if (tema != TemaVisual.claro) {
           expect(
             razao(c.alta, Color.alphaBlend(c.seloAltaFundo, c.fundo)),

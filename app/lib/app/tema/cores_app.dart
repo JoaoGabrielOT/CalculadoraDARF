@@ -24,6 +24,7 @@ class CoresApp extends ThemeExtension<CoresApp> {
     required this.chipAtivoFundo,
     required this.chipAtivoTexto,
     this.chipAtivoBorda,
+    required this.bordaCampo,
     required this.linha,
     required this.logoFundo,
     required this.navAtivo,
@@ -44,12 +45,19 @@ class CoresApp extends ThemeExtension<CoresApp> {
   final Color seloQuedaFundo;
   final Color aviso;
   final Color destaque;
+
+  /// Só decorativo: texto sobre ele precisa de cor escura (o branco não passa
+  /// de 4,5:1 sobre o verde final #00b894).
   final Gradient? destaqueGradiente;
   final Color chipFundo;
   final Color chipTexto;
   final Color chipAtivoFundo;
   final Color chipAtivoTexto;
   final Color? chipAtivoBorda;
+
+  /// Borda de campo e controle (WCAG 1.4.11, 3:1 sobre as superfícies); `linha`
+  /// fica para divisórias e cartões decorativos.
+  final Color bordaCampo;
   final Color linha;
   final Color logoFundo;
   final Color navAtivo;
@@ -80,6 +88,7 @@ class CoresApp extends ThemeExtension<CoresApp> {
     Color? chipAtivoFundo,
     Color? chipAtivoTexto,
     Color? chipAtivoBorda,
+    Color? bordaCampo,
     Color? linha,
     Color? logoFundo,
     Color? navAtivo,
@@ -105,6 +114,7 @@ class CoresApp extends ThemeExtension<CoresApp> {
     chipAtivoFundo: chipAtivoFundo ?? this.chipAtivoFundo,
     chipAtivoTexto: chipAtivoTexto ?? this.chipAtivoTexto,
     chipAtivoBorda: chipAtivoBorda ?? this.chipAtivoBorda,
+    bordaCampo: bordaCampo ?? this.bordaCampo,
     linha: linha ?? this.linha,
     logoFundo: logoFundo ?? this.logoFundo,
     navAtivo: navAtivo ?? this.navAtivo,

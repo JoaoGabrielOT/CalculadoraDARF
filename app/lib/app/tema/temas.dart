@@ -37,6 +37,7 @@ const _terminal = CoresApp(
   chipAtivoFundo: Color(0xFF161B22),
   chipAtivoTexto: Color(0xFF3FB950),
   chipAtivoBorda: Color(0xFF2EA043),
+  bordaCampo: Color(0xFF6E7681),
   linha: Color(0xFF21262D),
   logoFundo: Color(0xFF161B22),
   navAtivo: Color(0xFF3FB950),
@@ -67,6 +68,7 @@ const _claro = CoresApp(
   chipTexto: Color(0xFF4A5068),
   chipAtivoFundo: Color(0xFF1B1F2A),
   chipAtivoTexto: Color(0xFFFFFFFF),
+  bordaCampo: Color(0xFF7A8098),
   linha: Color(0xFFE8EAF2),
   logoFundo: Color(0xFFEEF0F7),
   navAtivo: Color(0xFF1B1F2A),
@@ -101,6 +103,7 @@ const _moderno = CoresApp(
   chipTexto: Color(0xFFAAB1CF),
   chipAtivoFundo: Color(0xFF6C5CE7),
   chipAtivoTexto: Color(0xFFFFFFFF),
+  bordaCampo: Color(0xFF7C84A8),
   linha: Color.fromRGBO(255, 255, 255, .07),
   logoFundo: Color.fromRGBO(255, 255, 255, .10),
   navAtivo: Color(0xFFA29BFE),
@@ -132,7 +135,7 @@ const _supClaro = _Superficies(
   Color(0xFFFFFFFF),
   Color(0xFFFFFFFF),
   Color(0xFFF6F7FB),
-  Color(0xFFEEF0F7),
+  Color(0xFFF6F7FB),
   Color(0xFFFFFFFF),
   Color(0xFFF6F7FB),
 );
@@ -195,7 +198,7 @@ ThemeData _montar(
         surfaceContainerHigh: s.high,
         surfaceContainerHighest: s.highest,
         error: c.queda,
-        outline: borda,
+        outline: c.bordaCampo,
         outlineVariant: c.linha,
       );
   final base = ThemeData(
@@ -230,8 +233,8 @@ ThemeData _montar(
       fillColor: s.lowest,
       labelStyle: TextStyle(color: c.textoSuave),
       hintStyle: TextStyle(color: c.textoSuave),
-      border: campo(borda),
-      enabledBorder: campo(borda),
+      border: campo(c.bordaCampo),
+      enabledBorder: campo(c.bordaCampo),
       focusedBorder: campo(c.destaque, 2),
     ),
     dialogTheme: DialogThemeData(
@@ -260,7 +263,7 @@ ThemeData _montar(
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: s.low,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: Colors.transparent,
+      indicatorColor: c.navAtivo.withValues(alpha: .16),
       iconTheme: WidgetStateProperty.resolveWith(
         (e) => IconThemeData(color: estadoNav.resolve(e)),
       ),
@@ -270,7 +273,7 @@ ThemeData _montar(
     ),
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: s.low,
-      indicatorColor: Colors.transparent,
+      indicatorColor: c.navAtivo.withValues(alpha: .16),
       selectedIconTheme: IconThemeData(color: c.navAtivo),
       unselectedIconTheme: IconThemeData(color: c.textoSuave),
       selectedLabelTextStyle: TextStyle(color: c.navAtivo),
@@ -299,7 +302,7 @@ ThemeData _montar(
       selectedColor: c.chipAtivoFundo,
       labelStyle: TextStyle(color: c.chipTexto),
       secondaryLabelStyle: TextStyle(color: c.chipAtivoTexto),
-      side: BorderSide(color: c.chipAtivoBorda ?? c.linha),
+      side: BorderSide(color: c.bordaCampo),
       shape: formaSemBorda,
     ),
     popupMenuTheme: PopupMenuThemeData(
@@ -338,7 +341,7 @@ ThemeData _montar(
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: estiloBotao.copyWith(
         foregroundColor: WidgetStatePropertyAll(c.texto),
-        side: WidgetStatePropertyAll(BorderSide(color: borda)),
+        side: WidgetStatePropertyAll(BorderSide(color: c.bordaCampo)),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
