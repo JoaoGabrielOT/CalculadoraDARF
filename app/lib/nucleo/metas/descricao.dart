@@ -53,7 +53,7 @@ DescricaoMeta descricao(Meta meta, {List<Meta>? todas}) {
   } else {
     titulo = '${meta.ticker} · ${meta.qtd} un. a ${brl(meta.precoAlvo!)}';
   }
-  final st = meta.status;
+  final st = meta.statusOuAtiva;
   final cor = _cores[st] ?? 'muted';
   final criada = DataHora.parse(meta.criadaEm);
   final partes = <String>[

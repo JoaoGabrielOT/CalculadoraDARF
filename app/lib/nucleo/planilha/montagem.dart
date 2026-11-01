@@ -53,7 +53,7 @@ Linha linhaMeta(Meta m) {
     stop ? '' : m.precoAlvo,
     m.lucroDesejado ?? '',
     m.criadaEm,
-    m.status,
+    m.statusOuAtiva,
     m.ultimoErro ?? '',
     execucao != null && execucao.isNotEmpty ? jsonPython(execucao) : '',
     m.mod,

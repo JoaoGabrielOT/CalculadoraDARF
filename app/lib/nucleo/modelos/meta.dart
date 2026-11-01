@@ -82,7 +82,7 @@ class Meta implements ComMod {
     precoAlvo: lerDoubleOuNulo(json['preco_alvo']),
     lucroDesejado: lerDoubleOuNulo(json['lucro_desejado']),
     criadaEm: lerTexto(json['criada_em']),
-    status: lerTexto(json['status'], 'ativa'),
+    status: lerTextoOuNulo(json['status']),
     ultimoErro: lerTextoOuNulo(json['ultimo_erro']),
     execucao: lerMapaOuNulo(json['execucao']),
     mod: lerDouble(json['mod']),
@@ -111,7 +111,10 @@ class Meta implements ComMod {
   double? precoAlvo;
   double? lucroDesejado;
   String criadaEm;
-  String status;
+
+  /// Nulo quando a meta foi gravada sem a chave (o Python lê com
+  /// `m.get("status")`, que só vira "ativa" na descrição e na planilha).
+  String? status;
   String? ultimoErro;
   Map<String, Object?>? execucao;
   @override
@@ -133,6 +136,9 @@ class Meta implements ComMod {
 
   List<String>? _ordem;
 
+  /// `m.get("status", "ativa")`.
+  String get statusOuAtiva => status ?? 'ativa';
+
   Map<String, Object?> toJson() => emOrdem({
     'id': id,
     'ticker': ticker,
@@ -146,7 +152,7 @@ class Meta implements ComMod {
     if (stopAtual != null) 'stop_atual': stopAtual,
     if (niveis != null) 'niveis': [for (final n in niveis!) n.toJson()],
     'criada_em': criadaEm,
-    'status': status,
+    if (status != null) 'status': status,
     if (lucroDesejado != null) 'lucro_desejado': lucroDesejado,
     if (sugestao != null) 'sugestao': copiaProfunda(sugestao),
     if (oco != null) 'oco': oco,
