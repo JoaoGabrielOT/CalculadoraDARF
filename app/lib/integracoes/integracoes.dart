@@ -4,6 +4,7 @@ export 'google/credenciais.dart';
 export 'google/credenciais_asset.dart';
 export 'google/erros.dart';
 export 'google/login.dart';
+export 'google/pedidos.dart';
 export 'google/sessao.dart';
 export 'google/token.dart';
 export 'http/cliente.dart';
