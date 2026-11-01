@@ -3,3 +3,4 @@ export 'http/cliente.dart';
 export 'http/erros.dart';
 export 'http/json.dart';
 export 'http/semaforo.dart';
+export 'yahoo/interpretacao.dart';

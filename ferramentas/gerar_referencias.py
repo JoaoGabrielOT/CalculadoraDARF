@@ -20,7 +20,7 @@ DESTINO = RAIZ / "app" / "test" / "referencias"
 
 
 def areas_disponiveis():
-    return sorted(p.stem for p in (AQUI / "referencias").glob("*.py") if p.stem not in ("__init__", "base"))
+    return sorted(p.stem for p in (AQUI / "referencias").glob("*.py") if p.stem != "base" and not p.stem.startswith("_"))
 
 
 def gerar(area):
