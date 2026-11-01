@@ -108,6 +108,37 @@ double somaPython(Iterable<double> valores) {
   return (c != 0.0 && c.isFinite) ? f + c : f;
 }
 
+/// `sum()` do Python 3.12 sobre `int` e `float` misturados (`builtin_sum_impl`):
+/// fase inteira exata; a primeira parcela `float` entra por soma simples; depois
+/// os `float` somam com Neumaier e os `int` entram sem compensação. Devolve
+/// `int` quando todos os valores são `int`.
+num somaPythonNum(Iterable<num> valores) {
+  var i = 0;
+  var f = 0.0;
+  var c = 0.0;
+  var real = false;
+  for (final x in valores) {
+    if (!real) {
+      if (x is int) {
+        i += x;
+        continue;
+      }
+      real = true;
+      f = i.toDouble() + x;
+      continue;
+    }
+    if (x is double) {
+      final t = f + x;
+      c += f.abs() >= x.abs() ? (f - t) + x : (x - t) + f;
+      f = t;
+    } else {
+      f += x.toDouble();
+    }
+  }
+  if (!real) return i;
+  return (c != 0.0 && c.isFinite) ? f + c : f;
+}
+
 /// `max(a, b)` do Python: devolve [a] nos empates (max(-0.0, 0) = -0.0).
 T maxPython<T extends num>(T a, T b) => b > a ? b : a;
 

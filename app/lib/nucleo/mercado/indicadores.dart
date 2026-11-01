@@ -28,12 +28,12 @@ const periodosGrafico = <String, (String, String, int)>{
 
 /// ATR de Wilder: média móvel suavizada do True Range.
 double? calcularAtr(
-  List<double> maximas,
-  List<double> minimas,
-  List<double> fechamentos, [
+  List<num> maximas,
+  List<num> minimas,
+  List<num> fechamentos, [
   int n = 14,
 ]) {
-  final trs = [
+  final trs = <num>[
     for (var i = 1; i < fechamentos.length; i++)
       maxPython(
         maxPython(
@@ -44,7 +44,7 @@ double? calcularAtr(
       ),
   ];
   if (trs.length < n) return null;
-  var atr = somaPython(trs.take(n)) / n;
+  var atr = somaPythonNum(trs.take(n)) / n;
   for (final tr in trs.skip(n)) {
     atr = (atr * (n - 1) + tr) / n;
   }

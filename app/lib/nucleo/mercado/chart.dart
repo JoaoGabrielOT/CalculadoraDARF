@@ -217,15 +217,17 @@ DadosAtivo dadosAtivoDeChart(
     if (l.length < n) n = l.length;
   }
   final datas = <String>[];
-  final hi = <double>[];
-  final lo = <double>[];
-  final cl = <double>[];
+  // Valores crus (`int` ou `double`): o `sum()` do Python soma `int` sem
+  // compensação.
+  final hi = <num>[];
+  final lo = <num>[];
+  final cl = <num>[];
   for (var i = 0; i < n; i++) {
     if (valido(altas[i]) && valido(baixas[i]) && valido(fechadas[i])) {
       datas.add(DataHora.deTimestamp((timestamps[i]! as num) + desvio, 0).data);
-      hi.add((altas[i]! as num).toDouble());
-      lo.add((baixas[i]! as num).toDouble());
-      cl.add((fechadas[i]! as num).toDouble());
+      hi.add(altas[i]! as num);
+      lo.add(baixas[i]! as num);
+      cl.add(fechadas[i]! as num);
     }
   }
   if (cl.length < _periodosAtr + 1) {
@@ -235,17 +237,19 @@ DadosAtivo dadosAtivoDeChart(
   final dia = tMercado is num && tMercado != 0
       ? DataHora.deTimestamp(tMercado + desvio, 0).data
       : datas.last;
-  final media = somaPython(cl) / cl.length;
+  final media = somaPythonNum(cl) / cl.length;
   final atr = calcularAtr(hi, lo, cl);
   final precoMeta = meta['regularMarketPrice'];
-  final preco = valido(precoMeta) ? (precoMeta! as num).toDouble() : cl.last;
+  final preco = valido(precoMeta)
+      ? (precoMeta! as num).toDouble()
+      : cl.last.toDouble();
   final longo = meta['longName'];
   final curto = meta['shortName'];
   final nomeMeta = longo is String && longo.isNotEmpty
       ? longo
       : (curto is String && curto.isNotEmpty ? curto : '');
   final anterior = anteriorDe([
-    for (var i = 0; i < cl.length; i++) (datas[i], cl[i]),
+    for (var i = 0; i < cl.length; i++) (datas[i], cl[i].toDouble()),
   ], dia);
   final atrPct = atr != null && atr != 0 ? atr / preco * 100 : null;
   final delta = variacao(preco, anterior);
@@ -265,10 +269,10 @@ DadosAtivo dadosAtivoDeChart(
     anterior: anterior,
     variacao: delta.$1,
     variacaoPct: delta.$2,
-    min6m: minDe(lo),
-    max6m: maxDe(hi),
+    min6m: minDe(lo.map((v) => v.toDouble())),
+    max6m: maxDe(hi.map((v) => v.toDouble())),
     variacao6mPct: valido(preco) && valido(cl[0])
-        ? (preco / cl[0] - 1) * 100
+        ? (preco / cl[0].toDouble() - 1) * 100
         : null,
     vsMediaPct: valido(preco) && valido(media)
         ? (preco / media - 1) * 100
