@@ -1,7 +1,7 @@
 // Fachada dos serviços no isolate do núcleo: um só `Repositorio`, um só dono.
 // Apuração e caixa vêm de `ApuracaoLocal`, conta e amigos de `ContaLocal`,
-// mercado, radar e metas de `MercadoLocal`; notícias e atualizador entram na
-// Tarefa 6.
+// mercado, radar e metas de `MercadoLocal`, notícias e imagens de
+// `NoticiasLocal`, atualização de `AtualizadorLocal`.
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -12,9 +12,11 @@ import '../tema/tema_visual.dart';
 import 'api.dart';
 import 'eventos.dart';
 import 'locais/apuracao_local.dart';
+import 'locais/atualizador_local.dart';
 import 'locais/config_segura.dart';
 import 'locais/conta_local.dart';
 import 'locais/mercado_local.dart';
+import 'locais/noticias_local.dart';
 
 class ServicosLocais implements ServicosApp {
   ServicosLocais({
@@ -23,7 +25,12 @@ class ServicosLocais implements ServicosApp {
     required ContaGoogle conta,
     required AbrirUrl abrirUrl,
     Duration atrasoAgendamento = const Duration(milliseconds: 1500),
+    NoticiasLocal Function(void Function(EventoServico))? noticias,
+    AtualizadorLocal Function(void Function(EventoServico))? atualizador,
   }) {
+    // Quem não usa notícias nem atualização (testes de apuração) não monta.
+    _noticiasLocal = noticias?.call(_emitir);
+    _atualizadorLocal = atualizador?.call(_emitir);
     _conta = ContaLocal(
       repo: _repo,
       conta: conta,
@@ -52,6 +59,14 @@ class ServicosLocais implements ServicosApp {
   late final ContaLocal _conta;
   late final ApuracaoLocal _apuracao;
   late final MercadoLocal _mercado;
+  late final NoticiasLocal? _noticiasLocal;
+  late final AtualizadorLocal? _atualizadorLocal;
+
+  NoticiasLocal get _noticias =>
+      _noticiasLocal ?? (throw StateError('Notícias não configuradas.'));
+
+  AtualizadorLocal get _atualizador =>
+      _atualizadorLocal ?? (throw StateError('Atualizador não configurado.'));
 
   void _emitir(EventoServico e) {
     if (!_eventos.isClosed) _eventos.add(e);
@@ -65,9 +80,6 @@ class ServicosLocais implements ServicosApp {
       _conta.usarAmigo(email, dados);
 
   void limparAmigo() => _conta.limparAmigo();
-
-  Never _faltaImplementar(String tarefa) =>
-      throw UnimplementedError('Chega na $tarefa.');
 
   @override
   Stream<EventoServico> get eventos => _eventos.stream;
@@ -357,36 +369,36 @@ class ServicosLocais implements ServicosApp {
 
   // --- notícias, imagens e atualizador (Tarefa 6)
 
-  @override
-  Future<VisaoNoticias> noticias() async => _faltaImplementar('Tarefa 6');
+  /// Passo do timer de notícias (Tarefa 7).
+  Future<void> tickNoticias() => _noticias.tick();
 
   @override
-  Future<VisaoNoticias> atualizarNoticias({bool forcar = false}) async =>
-      _faltaImplementar('Tarefa 6');
+  Future<VisaoNoticias> noticias() => _noticias.noticias();
 
   @override
-  Future<void> marcarNoticiasLidas() async => _faltaImplementar('Tarefa 6');
+  Future<VisaoNoticias> atualizarNoticias({bool forcar = false}) =>
+      _noticias.atualizarNoticias(forcar: forcar);
 
   @override
-  Future<ImagemBytes?> logo(String ticker) async =>
-      _faltaImplementar('Tarefa 6');
+  Future<void> marcarNoticiasLidas() => _noticias.marcarNoticiasLidas();
 
   @override
-  Future<Uint8List?> favicon(Noticia item) async =>
-      _faltaImplementar('Tarefa 6');
+  Future<ImagemBytes?> logo(String ticker) => _noticias.logo(ticker);
 
   @override
-  Future<Uint8List?> imagemNoticia(String url) async =>
-      _faltaImplementar('Tarefa 6');
+  Future<Uint8List?> favicon(Noticia item) => _noticias.favicon(item);
 
   @override
-  Future<InfoAtualizacao?> verificarAtualizacao() async =>
-      _faltaImplementar('Tarefa 6');
+  Future<Uint8List?> imagemNoticia(String url) => _noticias.imagemNoticia(url);
 
   @override
-  Future<String> baixarAtualizacao(InfoAtualizacao info) async =>
-      _faltaImplementar('Tarefa 6');
+  Future<InfoAtualizacao?> verificarAtualizacao() =>
+      _atualizador.verificarAtualizacao();
 
   @override
-  Future<void> cancelarDownload() async => _faltaImplementar('Tarefa 6');
+  Future<String> baixarAtualizacao(InfoAtualizacao info) =>
+      _atualizador.baixarAtualizacao(info);
+
+  @override
+  Future<void> cancelarDownload() => _atualizador.cancelarDownload();
 }
