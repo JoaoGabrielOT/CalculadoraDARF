@@ -25,6 +25,15 @@ img.Image _ler(Uint8List b) => img.decodeJpg(b)!;
 
 ClienteHttp _cliente(ClienteFalso f) => ClienteHttp(f);
 
+/// Existe, mas ler o conteúdo é um erro: a checagem de cache não pode ler.
+class _CacheSoExistencia extends CacheBinarioMemoria {
+  @override
+  Future<Uint8List?> ler(String nome) => throw StateError('não deve ler');
+
+  @override
+  Future<DateTime?> modificadoEm(String nome) async => DateTime.utc(2026);
+}
+
 void main() {
   group('reduzirParaJpeg', () {
     test('1800×1000 vira JPEG 900×500', () {
@@ -84,6 +93,19 @@ void main() {
       final falso = ClienteFalso.fila([]);
       final cache = CacheBinarioMemoria();
       await cache.gravar(nomeImagemNoticia(url), [1]);
+      final nome = await baixarImagemNoticia(
+        _cliente(falso),
+        cache,
+        url,
+        executar: executarDireto,
+      );
+      expect(nome, nomeImagemNoticia(url));
+      expect(falso.pedidos, isEmpty);
+    });
+
+    test('em cache confere só a existência, sem ler o arquivo', () async {
+      final falso = ClienteFalso.fila([]);
+      final cache = _CacheSoExistencia();
       final nome = await baixarImagemNoticia(
         _cliente(falso),
         cache,

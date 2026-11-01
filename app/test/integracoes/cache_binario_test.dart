@@ -46,6 +46,18 @@ void main() {
     expect(novo.existsSync(), isTrue);
   });
 
+  test('falha ao gravar relança o erro original e não deixa .tmp', () async {
+    final cache = CacheBinarioArquivos(pasta.path);
+    Directory('${pasta.path}/destino').createSync();
+    // renomear um arquivo sobre uma pasta falha: o erro é o do rename
+    await expectLater(
+      cache.gravar('destino', [1]),
+      throwsA(isA<FileSystemException>()),
+    );
+    final restos = pasta.listSync().map((e) => e.path).toList();
+    expect(restos.where((p) => p.endsWith('.tmp')), isEmpty);
+  });
+
   test('memória: relógio injetado, ler, apagar', () async {
     var agora = DateTime.utc(2026, 10, 28);
     final cache = CacheBinarioMemoria(relogio: () => agora);

@@ -40,14 +40,25 @@ void main() {
   });
   tearDown(() => ambiente = Ambiente.sistema());
 
-  Logos logos(ClienteFalso f) => Logos(
-    http: ClienteHttp(
-      f,
-      userAgent: uaNoticias,
-      tempoLimite: const Duration(seconds: 15),
-    ),
-    cache: cache,
-  );
+  Logos logos(ClienteFalso f) =>
+      Logos(http: Logos.clientePadrao(f), cache: cache);
+
+  test('clientePadrao: UA de notícias e 15 s; clienteNavegador: UA do navegador e 20 s', () async {
+    final falso = ClienteFalso.fila([RespostaFalsa(200), RespostaFalsa(200)]);
+    final padrao = Logos.clientePadrao(falso);
+    expect(padrao.tempoLimite, const Duration(seconds: 15));
+    await padrao.enviar('GET', Uri.parse('https://x.com/a'));
+    expect(falso.pedidos.last.cabecalhos['user-agent'], uaNoticias);
+
+    final navegador = Logos.clienteNavegador(falso);
+    expect(navegador.tempoLimite, const Duration(seconds: 20));
+    await navegador.enviar('GET', Uri.parse('https://x.com/a'));
+    expect(
+      falso.pedidos.last.cabecalhos['user-agent'],
+      uaNavegador['User-Agent'],
+    );
+    expect(falso.pedidos.last.cabecalhos['accept-language'], 'pt-BR,pt;q=0.9');
+  });
 
   // Os nomes vêm das URLs do núcleo.
   String nomeUrl(String u) => u.substring(u.lastIndexOf('/') + 1);

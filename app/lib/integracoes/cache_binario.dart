@@ -58,17 +58,17 @@ class CacheBinarioArquivos implements CacheBinario {
 
   /// Remove restos `.tmp` (de gravações interrompidas) com mais de 1 hora; uma
   /// varredura só por instância, e uma falha em um arquivo não impede os outros.
-  void _limparTemporariosAntigos(File destino) {
+  Future<void> _limparTemporariosAntigos() async {
     if (_varrido) return;
     _varrido = true;
     final limite = DateTime.now().subtract(const Duration(hours: 1));
     try {
       final dir = Directory(pasta);
-      if (!dir.existsSync()) return;
-      for (final e in dir.listSync(recursive: true, followLinks: false)) {
+      if (!await dir.exists()) return;
+      await for (final e in dir.list(recursive: true, followLinks: false)) {
         if (e is! File || !e.path.endsWith('.tmp')) continue;
         try {
-          if (e.lastModifiedSync().isBefore(limite)) e.deleteSync();
+          if ((await e.lastModified()).isBefore(limite)) await e.delete();
         } on FileSystemException {
           // outro processo pode ter mexido nele
         }
@@ -91,7 +91,7 @@ class CacheBinarioArquivos implements CacheBinario {
   Future<void> gravar(String nome, List<int> bytes) async {
     final destino = _arquivo(nome);
     await destino.parent.create(recursive: true);
-    _limparTemporariosAntigos(destino);
+    await _limparTemporariosAntigos();
     // Sufixo aleatório: duas instâncias (ou execuções) não se atropelam.
     final temporario = File(
       '${destino.path}.${_sorteio.nextInt(1 << 32).toRadixString(16)}.tmp',
@@ -100,7 +100,11 @@ class CacheBinarioArquivos implements CacheBinario {
       await temporario.writeAsBytes(bytes, flush: true);
       await temporario.rename(destino.path);
     } catch (_) {
-      if (temporario.existsSync()) temporario.deleteSync();
+      try {
+        if (temporario.existsSync()) temporario.deleteSync();
+      } catch (_) {
+        // a limpeza não pode trocar o erro original
+      }
       rethrow;
     }
   }

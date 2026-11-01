@@ -63,7 +63,8 @@ Future<String?> baixarImagemNoticia(
   int limite = 6000000,
 }) async {
   final nome = nomeImagemNoticia(url);
-  if (await cache.ler(nome) != null) return nome;
+  // só a existência: não precisa ler a imagem inteira para saber que há cache
+  if (await cache.modificadoEm(nome) != null) return nome;
   final uri = Uri.parse(url);
   final resposta = await navegador.abrir('GET', uri);
   try {

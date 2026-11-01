@@ -12,6 +12,7 @@ import '../../nucleo/noticias/estado.dart';
 import '../../nucleo/noticias/texto.dart';
 import '../cache_binario.dart';
 import '../http/cliente.dart';
+import 'google_news.dart';
 import 'imagens.dart';
 
 const _assinaturaPng = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -41,7 +42,24 @@ bool _ehSvg(Uint8List b) {
 }
 
 class Logos {
-  /// [http] já vem com o User-Agent de notícias e o limite de 15 s.
+  /// Cliente das logos: UA de notícias e 15 s (noticias.py:21, 473-511).
+  static ClienteHttp clientePadrao(http.Client c) => ClienteHttp(
+    c,
+    userAgent: uaNoticias,
+    tempoLimite: const Duration(seconds: 15),
+  );
+
+  /// Cliente das imagens das matérias: UA de navegador com `Accept-Language`
+  /// e 20 s (noticias.py:22-23).
+  static ClienteHttp clienteNavegador(http.Client c) => ClienteHttp(
+    c,
+    userAgent: uaNavegador['User-Agent'],
+    cabecalhos: {'Accept-Language': uaNavegador['Accept-Language']!},
+    tempoLimite: const Duration(seconds: 20),
+  );
+
+  /// [http] já vem com o User-Agent de notícias e o limite de 15 s
+  /// ([clientePadrao]).
   Logos({required ClienteHttp http, required CacheBinario cache})
     : // Parâmetro nomeado não pode ser privado.
       // ignore: prefer_initializing_formals

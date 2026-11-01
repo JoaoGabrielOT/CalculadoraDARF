@@ -88,9 +88,9 @@ Future<InfoAtualizacao?> verificarAtualizacao(
   );
   if (r.statusCode == 404) return null;
   conferirStatus(r.statusCode, url, motivo: r.reasonPhrase);
-  final Map rel;
+  final Map<Object?, Object?> rel;
   try {
-    rel = await decodificarJson(r.bodyBytes, executar) as Map;
+    rel = await decodificarJson(r.bodyBytes, executar) as Map<Object?, Object?>;
   } on FormatException {
     throw ErroAtualizacao('Resposta inválida do GitHub.');
   } on TypeError {
