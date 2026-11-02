@@ -73,6 +73,60 @@ void main() {
     expect(pintor(t).cor, Colors.purple);
   });
 
+  testWidgets('GraficoLinha: altura sem limite dá erro claro', (t) async {
+    await montarComponente(
+      t,
+      const SingleChildScrollView(child: GraficoLinha(pontos: pontos)),
+    );
+    final erro = t.takeException();
+    expect(erro, isA<AssertionError>());
+    expect(erro.toString(), contains('altura limitada'));
+  });
+
+  testWidgets('GraficoLinha: fica num RepaintBoundary próprio', (t) async {
+    await montarComponente(t, grafico());
+    expect(
+      find.descendant(
+        of: find.byType(GraficoLinha),
+        matching: find.byType(RepaintBoundary),
+      ),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('GraficoLinha: trocar os pontos limpa o ponto tocado', (t) async {
+    (int, double)? ultimo = (99, 99);
+    var pontosAtuais = pontos;
+    late StateSetter troca;
+    await montarComponente(
+      t,
+      StatefulBuilder(
+        builder: (c, set) {
+          troca = set;
+          return SizedBox(
+            width: 300,
+            height: 100,
+            child: GraficoLinha(
+              pontos: pontosAtuais,
+              interativo: true,
+              aoTocar: (p) => ultimo = p,
+            ),
+          );
+        },
+      ),
+    );
+    await t.tapAt(
+      t.getTopLeft(find.byType(GraficoLinha)) + const Offset(10, 50),
+    );
+    await t.pump();
+    expect(pintor(t).tocado, (0, 10.0));
+    troca(() => pontosAtuais = const [(0, 1.0), (5, 2.0)]);
+    await t.pump();
+    await t.pump();
+    expect(pintor(t).tocado, isNull);
+    expect(ultimo, isNull);
+  });
+
   testWidgets('GraficoLinha: poucos pontos não quebra', (t) async {
     await montarComponente(
       t,

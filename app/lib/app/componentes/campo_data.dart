@@ -25,7 +25,8 @@ class CampoData extends StatefulWidget {
   /// Bloqueia dias dentro dos limites (componentes.py: `filtro`).
   final bool Function(String iso)? permitido;
 
-  /// Chamado com a data escolhida; null quando o texto é apagado.
+  /// Chamado com a data escolhida; null quando o texto fica vazio, inválido
+  /// ou fora do período (o formulário deve bloquear o salvar).
   final ValueChanged<String?> aoMudar;
 
   @override
@@ -36,20 +37,42 @@ class _CampoDataState extends State<CampoData> {
   late final TextEditingController _texto = TextEditingController(
     text: _formatar(widget.valor),
   );
+  final FocusNode _foco = FocusNode();
   String? _erro;
 
   @override
+  void initState() {
+    super.initState();
+    _foco.addListener(_aoMudarFoco);
+  }
+
+  @override
   void dispose() {
+    _foco.dispose();
     _texto.dispose();
     super.dispose();
+  }
+
+  /// Ao sair do campo, texto incompleto ou impossível ganha o erro.
+  void _aoMudarFoco() {
+    final t = _texto.text.trim();
+    if (!_foco.hasFocus && t.isNotEmpty && _ler(t) == null) {
+      setState(() => _erro = 'Data inválida.');
+    }
   }
 
   @override
   void didUpdateWidget(CampoData antigo) {
     super.didUpdateWidget(antigo);
     // Valor trocado de fora (limites, outro formulário): reflete no texto,
-    // a menos que o texto digitado já seja esse valor.
-    if (widget.valor != antigo.valor && _ler(_texto.text) != widget.valor) {
+    // a menos que o texto digitado já seja esse valor. Valor null não apaga
+    // um texto que o próprio campo recusou (inválido ou fora do período).
+    if (widget.valor == antigo.valor) return;
+    final digitado = _ler(_texto.text);
+    final apagar = widget.valor == null
+        ? digitado != null && _permite(digitado)
+        : digitado != widget.valor;
+    if (apagar) {
       _texto.text = _formatar(widget.valor);
       _erro = null;
     }
@@ -65,31 +88,37 @@ class _CampoDataState extends State<CampoData> {
     }
   }
 
+  // Os mesmos limites valem para o texto e para o calendário.
+  String get _minimo => widget.minimo ?? '2000-01-01';
+  String get _maximo => widget.maximo ?? ambiente.hoje();
+
   bool _permite(String iso) =>
-      (widget.minimo == null || iso.compareTo(widget.minimo!) >= 0) &&
-      (widget.maximo == null || iso.compareTo(widget.maximo!) <= 0) &&
+      iso.compareTo(_minimo) >= 0 &&
+      iso.compareTo(_maximo) <= 0 &&
       (widget.permitido?.call(iso) ?? true);
 
+  static final _formatoCompleto = RegExp(r'^\d{1,2}/\d{1,2}/\d{4}$');
+
+  /// Texto vazio, inválido ou fora do período não deixa a data antiga valendo:
+  /// o pai recebe null (o formulário bloqueia o salvar).
   void _digitou(String texto) {
     final t = texto.trim();
-    if (t.isEmpty) {
-      setState(() => _erro = null);
-      if (widget.valor != null) widget.aoMudar(null);
-      return;
-    }
     final iso = _ler(t);
-    if (iso == null) {
-      // Ainda digitando (ou texto inválido): o valor não muda; só avisa
-      // quando o texto já tem o tamanho de uma data completa.
-      setState(() => _erro = t.length >= 10 ? 'Data inválida.' : null);
-      return;
+    String? erro;
+    if (t.isNotEmpty && iso == null) {
+      // Ainda digitando: sem erro até sair do campo, a menos que o texto já
+      // tenha o formato completo (30/2/2026).
+      erro = _formatoCompleto.hasMatch(t) ? 'Data inválida.' : null;
+    } else if (iso != null && !_permite(iso)) {
+      erro = 'Data fora do período permitido.';
     }
-    if (!_permite(iso)) {
-      setState(() => _erro = 'Data fora do período permitido.');
-      return;
+    setState(() => _erro = erro);
+    final valido = iso != null && erro == null;
+    if (valido) {
+      if (iso != widget.valor) widget.aoMudar(iso);
+    } else if (widget.valor != null) {
+      widget.aoMudar(null);
     }
-    setState(() => _erro = null);
-    if (iso != widget.valor) widget.aoMudar(iso);
   }
 
   void _definir(String iso) {
@@ -100,8 +129,8 @@ class _CampoDataState extends State<CampoData> {
 
   Future<void> _abrirCalendario() async {
     final hoje = ambiente.hoje();
-    final inicio = widget.minimo ?? '2000-01-01';
-    final fim = widget.maximo ?? hoje;
+    final inicio = _minimo;
+    final fim = _maximo;
     final inicial = _diaInicial(widget.valor ?? hoje, inicio, fim);
     if (inicial == null) {
       await avisar(context, 'Atenção', 'Não há data válida neste período.');
@@ -150,6 +179,7 @@ class _CampoDataState extends State<CampoData> {
       children: [
         TextField(
           controller: _texto,
+          focusNode: _foco,
           keyboardType: TextInputType.datetime,
           onChanged: _digitou,
           decoration: InputDecoration(

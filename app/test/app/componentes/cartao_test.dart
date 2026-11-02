@@ -1,4 +1,5 @@
 import 'package:calculadoradarf/app/componentes/cartao.dart';
+import 'package:calculadoradarf/app/componentes/chips_ticker.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +48,40 @@ void main() {
       },
     );
   }
+
+  testWidgets('alvos de toque têm 48 dp no celular (360x800)', (t) async {
+    await montarComponente(
+      t,
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ChipFiltro(rotulo: 'A', selecionado: true, aoTocar: () {}),
+          BotaoSegmentado<String>(
+            opcoes: const [('a', 'Ações'), ('f', 'FIIs')],
+            valor: 'a',
+            aoMudar: (_) {},
+          ),
+          ChipsTicker(
+            tickers: const ['PETR4', 'VALE3', 'X'],
+            marcado: 'X',
+            aoEscolher: (_) {},
+          ),
+        ],
+      ),
+      tamanho: const Size(360, 800),
+    );
+    await expectLater(t, meetsGuideline(androidTapTargetGuideline));
+    expect(t.getSize(find.widgetWithText(ChipFiltro, 'A')).height, 48);
+  });
+
+  testWidgets('no PC (1366 de largura) o chip continua compacto', (t) async {
+    await montarComponente(
+      t,
+      ChipFiltro(rotulo: 'A', selecionado: false, aoTocar: () {}),
+      tamanho: const Size(1366, 768),
+    );
+    expect(t.getSize(find.widgetWithText(ChipFiltro, 'A')).height, 40);
+  });
 
   testWidgets('ChipFiltro chama aoTocar', (t) async {
     var n = 0;

@@ -13,25 +13,66 @@ import '../tema/cores_app.dart';
 
 /// Logos já pedidas, por ticker, para uma lista inteira não repetir o pedido.
 class CacheLogos {
-  final _futuros = <String, Future<ImagemBytes?>>{};
-  final _prontos = <String, ImagemBytes?>{};
+  /// [agora] (segundos) é o relógio; os testes injetam o seu.
+  CacheLogos({double Function()? agora})
+    : _agora = agora ?? (() => ambiente.agora());
+
+  /// Quanto tempo uma falha (erro ou ticker sem logo) vale antes de repetir.
+  static const validadeFalha = 300.0;
+
+  final double Function() _agora;
+  final _entradas = <String, _Entrada>{};
+
+  _Entrada? _vigente(String ticker) {
+    final e = _entradas[ticker];
+    if (e == null) return null;
+    final falhouEm = e.falhouEm;
+    if (falhouEm != null && _agora() - falhouEm >= validadeFalha) {
+      _entradas.remove(ticker);
+      return null;
+    }
+    return e;
+  }
 
   /// Resposta já recebida (null também vale: ticker sem logo); `false` em
-  /// [conhecido] quando ainda não chegou.
-  (bool conhecido, ImagemBytes? imagem) pronto(String ticker) =>
-      (_prontos.containsKey(ticker), _prontos[ticker]);
+  /// [conhecido] quando ainda não chegou ou a falha já venceu.
+  (bool conhecido, ImagemBytes? imagem) pronto(String ticker) {
+    final e = _vigente(ticker);
+    return (e != null && e.concluida, e?.imagem);
+  }
 
   Future<ImagemBytes?> obter(
     String ticker,
     Future<ImagemBytes?> Function() pedir,
-  ) => _futuros.putIfAbsent(
-    ticker,
-    () => Future.sync(pedir).then<ImagemBytes?>(
-      (v) => _prontos[ticker] = v,
-      // Erro de rede ou pedido superado: fica nas iniciais.
-      onError: (Object _) => _prontos[ticker] = null,
-    ),
-  );
+  ) {
+    final existente = _vigente(ticker);
+    if (existente != null) return existente.futuro;
+    final e = _Entrada();
+    _entradas[ticker] = e;
+    e.futuro = Future.sync(pedir).then<ImagemBytes?>(
+      (v) {
+        e.concluida = true;
+        e.imagem = v;
+        if (v == null) e.falhouEm = _agora();
+        return v;
+      },
+      // Erro de rede ou pedido superado: iniciais por ora, nova tentativa
+      // depois da validade.
+      onError: (Object _) {
+        e.concluida = true;
+        e.falhouEm = _agora();
+        return null;
+      },
+    );
+    return e.futuro;
+  }
+}
+
+class _Entrada {
+  late final Future<ImagemBytes?> futuro;
+  bool concluida = false;
+  ImagemBytes? imagem;
+  double? falhouEm;
 }
 
 /// Dá aos [LogoAtivo] abaixo um cache comum. Sem ele, cada logo tem o seu.

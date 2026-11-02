@@ -117,6 +117,185 @@ void main() {
     h.dispose();
   });
 
+  group('Tabela: ids, ordenação robusta e cache', () {
+    Widget tab<L>({
+      required List<ColunaTabela<L>> cols,
+      required List<L> dados,
+      String? selecionado,
+      String Function(L)? id,
+    }) => SizedBox(
+      width: 500,
+      height: 300,
+      child: Tabela<L>(
+        colunas: cols,
+        linhas: dados,
+        vazio: 'v',
+        selecionado: selecionado,
+        id: id,
+      ),
+    );
+
+    List<String> coluna0(WidgetTester t) => [
+      for (final w in t.widgetList<Text>(find.byKey(const Key('coluna-0'))))
+        w.data!,
+    ];
+
+    testWidgets('linhas de texto repetido: só a do id fica selecionada', (
+      t,
+    ) async {
+      final h = t.ensureSemantics();
+      final dados = [(1, 'x'), (2, 'x'), (3, 'x')];
+      await montarComponente(
+        t,
+        tab<(int, String)>(
+          cols: [ColunaTabela(titulo: 'T', largura: 1, texto: (l) => l.$2)],
+          dados: dados,
+          selecionado: '2',
+          id: (l) => '${l.$1}',
+        ),
+      );
+      expect(t.takeException(), isNull);
+      expect(
+        t.getSemantics(find.byKey(const Key('linha-2'))),
+        isSemantics(isSelected: true),
+      );
+      expect(
+        t.getSemantics(find.byKey(const Key('linha-1'))),
+        isSemantics(isSelected: false),
+      );
+      h.dispose();
+    });
+
+    testWidgets('sem id, linhas repetidas não duplicam Key', (t) async {
+      await montarComponente(
+        t,
+        tab<String>(
+          cols: [ColunaTabela(titulo: 'T', largura: 1, texto: (l) => l)],
+          dados: const ['x', 'x'],
+        ),
+      );
+      expect(t.takeException(), isNull);
+      expect(find.text('x'), findsNWidgets(2));
+    });
+
+    test('selecionado sem id é erro de programação', () {
+      expect(
+        () => Tabela<String>(
+          colunas: [ColunaTabela(titulo: 'T', largura: 1, texto: (l) => l)],
+          linhas: const ['x'],
+          vazio: 'v',
+          selecionado: 'x',
+        ),
+        throwsAssertionError,
+      );
+    });
+
+    testWidgets(
+      'ordenar com texto repetido, null, tipos mistos e NaN não lança',
+      (t) async {
+        final cols = [
+          ColunaTabela<(String, Object?)>(
+            titulo: 'N',
+            largura: 1,
+            texto: (l) => l.$1,
+            chave: (l) => l.$2,
+          ),
+        ];
+        Future<void> ordenar(List<(String, Object?)> dados) async {
+          // Key nova: cada chamada começa sem ordenação.
+          await montarComponente(
+            t,
+            KeyedSubtree(
+              key: UniqueKey(),
+              child: tab(cols: cols, dados: dados),
+            ),
+          );
+          await t.tap(find.text('N ↕'));
+          await t.pump();
+          expect(t.takeException(), isNull);
+        }
+
+        // texto repetido e null em coluna de texto: null (vazio) primeiro
+        await ordenar([('a', 'b'), ('b', null), ('c', 'B'), ('d', 'a')]);
+        expect(coluna0(t), ['b', 'd', 'a', 'c']);
+        // tipos mistos: cai para texto
+        await ordenar([('a', 10), ('b', 'abc'), ('c', 2.5), ('d', true)]);
+        expect(coluna0(t).length, 4);
+        // NaN entre números
+        await ordenar([('a', 3.0), ('b', double.nan), ('c', 1.0)]);
+        expect(coluna0(t), ['b', 'c', 'a']);
+      },
+    );
+
+    testWidgets(
+      'a ordenação é guardada: rebuild com a mesma lista não recalcula',
+      (t) async {
+        var chamadas = 0;
+        final dados = [('b', 2.0), ('a', 1.0)];
+        final cols = [
+          ColunaTabela<(String, double)>(
+            titulo: 'N',
+            largura: 1,
+            texto: (l) => l.$1,
+            chave: (l) {
+              chamadas++;
+              return l.$2;
+            },
+          ),
+        ];
+        late StateSetter reconstruir;
+        var selecionado = 'a';
+        await montarComponente(
+          t,
+          StatefulBuilder(
+            builder: (c, set) {
+              reconstruir = set;
+              return tab<(String, double)>(
+                cols: cols,
+                dados: dados,
+                selecionado: selecionado,
+                id: (l) => l.$1,
+              );
+            },
+          ),
+        );
+        await t.tap(find.text('N ↕'));
+        await t.pump();
+        final depois = chamadas;
+        expect(depois, greaterThan(0));
+        reconstruir(() => selecionado = 'b');
+        await t.pump();
+        expect(chamadas, depois);
+        // inverter o sentido recalcula
+        await t.tap(find.text('N ▲'));
+        await t.pump();
+        expect(chamadas, greaterThan(depois));
+      },
+    );
+
+    testWidgets('larguras menores que 0,5 mantêm a proporção', (t) async {
+      await montarComponente(
+        t,
+        tab<String>(
+          cols: [
+            ColunaTabela(titulo: 'E', largura: 0.1, texto: (l) => l),
+            ColunaTabela(titulo: 'L', largura: 0.3, texto: (l) => 'larga'),
+          ],
+          dados: const ['z'],
+        ),
+      );
+      double larguraDe(String titulo) => t
+          .getSize(
+            find.ancestor(
+              of: find.text(titulo),
+              matching: find.byType(InkWell),
+            ),
+          )
+          .width;
+      expect(larguraDe('L') / larguraDe('E'), closeTo(3, 0.01));
+    });
+  });
+
   testWidgets('Tabela: cor da célula vem do callback', (t) async {
     await montarComponente(t, tabela());
     final negativo = t.widget<Text>(find.text('-1.0'));

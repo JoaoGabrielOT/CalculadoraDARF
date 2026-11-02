@@ -9,7 +9,7 @@ void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: '2026-10-28'));
 
   testWidgets(
-    'CampoData: Hoje e Ontem preenchem; data fora dos limites some dos chips; texto inválido não muda o valor',
+    'CampoData: Hoje e Ontem preenchem; data fora dos limites some dos chips; texto inválido não aceita o valor inválido',
     (t) async {
       String? valor;
       var chamadas = 0;
@@ -33,13 +33,17 @@ void main() {
       await t.pump();
       expect(valor, '2026-10-27');
 
-      final antes = chamadas;
+      // Texto inválido não deixa a data antiga valendo: o pai recebe null.
       await t.enterText(find.byType(TextField), '31/02/2026');
       await t.pump();
-      await t.enterText(find.byType(TextField), 'abc');
+      expect(valor, isNull);
+      await t.tap(find.text('Ontem'));
       await t.pump();
       expect(valor, '2026-10-27');
-      expect(chamadas, antes);
+      await t.enterText(find.byType(TextField), 'abc');
+      await t.pump();
+      expect(valor, isNull);
+      expect(chamadas, greaterThan(2));
 
       await t.enterText(find.byType(TextField), '05/10/2026');
       await t.pump();
@@ -81,6 +85,63 @@ void main() {
     await t.enterText(find.byType(TextField), '15/10/2026');
     await t.pump();
     expect(valor, '2026-10-15');
+  });
+
+  testWidgets('CampoData: data fora do período zera o valor e mostra o erro', (
+    t,
+  ) async {
+    String? valor = '2026-10-15';
+    await montarComponente(
+      t,
+      StatefulBuilder(
+        builder: (c, set) => CampoData(
+          valor: valor,
+          minimo: '2026-10-01',
+          maximo: '2026-10-31',
+          aoMudar: (v) => set(() => valor = v),
+        ),
+      ),
+    );
+    await t.enterText(find.byType(TextField), '15/09/2026');
+    await t.pump();
+    expect(valor, isNull);
+    expect(find.text('Data fora do período permitido.'), findsOneWidget);
+    // O texto digitado fica (o pai zerou o valor, o campo não o apaga).
+    expect(find.widgetWithText(TextField, '15/09/2026'), findsOneWidget);
+  });
+
+  testWidgets(
+    'CampoData: erro aparece na data impossível e, ao sair, no texto incompleto',
+    (t) async {
+      await montarComponente(t, CampoData(aoMudar: (_) {}));
+      await t.enterText(find.byType(TextField), '30/2/2026');
+      await t.pump();
+      expect(find.text('Data inválida.'), findsOneWidget);
+
+      await t.enterText(find.byType(TextField), '12/1');
+      await t.pump();
+      expect(find.text('Data inválida.'), findsNothing);
+      FocusManager.instance.primaryFocus?.unfocus();
+      await t.pump();
+      expect(find.text('Data inválida.'), findsOneWidget);
+    },
+  );
+
+  testWidgets('CampoData: sem limites, o texto segue os do calendário', (
+    t,
+  ) async {
+    String? valor;
+    await montarComponente(t, CampoData(aoMudar: (v) => valor = v));
+    // Depois de hoje (2026-10-28) e antes de 2000: o calendário não deixa.
+    await t.enterText(find.byType(TextField), '29/10/2026');
+    await t.pump();
+    expect(valor, isNull);
+    await t.enterText(find.byType(TextField), '31/12/1999');
+    await t.pump();
+    expect(valor, isNull);
+    await t.enterText(find.byType(TextField), '01/01/2000');
+    await t.pump();
+    expect(valor, '2000-01-01');
   });
 
   testWidgets('CampoData: calendário respeita os dias permitidos', (t) async {

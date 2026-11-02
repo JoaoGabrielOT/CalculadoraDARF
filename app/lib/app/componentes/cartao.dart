@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../app.dart' show expandido;
 import '../tema/cores_app.dart';
 
 /// Fundo do chip comum: no tema Moderno o token é translúcido.
@@ -159,6 +160,8 @@ class ChipFiltro extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     final cor = selecionado ? c.chipAtivoTexto : c.chipTexto;
+    // 48 dp no celular (Material/Android); no PC o ponteiro é preciso.
+    final alvo = expandido(context) ? 40.0 : 48.0;
     return Semantics(
       button: true,
       selected: selecionado,
@@ -180,7 +183,7 @@ class ChipFiltro extends StatelessWidget {
           customBorder: const StadiumBorder(),
           onTap: aoTocar,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 40),
+            constraints: BoxConstraints(minHeight: alvo, minWidth: alvo),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Row(

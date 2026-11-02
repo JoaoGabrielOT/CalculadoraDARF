@@ -61,6 +61,29 @@ void main() {
     },
   );
 
+  testWidgets('escolherMes: Mês atual não devolve mês desabilitado', (t) async {
+    await montarComponente(t, const SizedBox());
+    final c = t.element(find.byType(SizedBox).first);
+    // Hoje é 2026-10, mas o máximo é 2026-09.
+    final f = escolherMes(
+      c,
+      atual: '2026-03',
+      comDados: const {},
+      maximo: '2026-09',
+    );
+    await t.pumpAndSettle();
+    await t.tap(find.text('Mês atual'));
+    await t.pumpAndSettle();
+    expect(await f, '2026-09');
+  });
+
+  testWidgets('escolherMes: alvos de toque de 48 dp no celular', (t) async {
+    final abrir = await preparar(t);
+    unawaited(abrir());
+    await t.pumpAndSettle();
+    await expectLater(t, meetsGuideline(androidTapTargetGuideline));
+  });
+
   testWidgets(
     'escolherMes: mês aberto e meses com dados têm pista não cromática',
     (t) async {

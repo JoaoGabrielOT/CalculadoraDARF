@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
+import 'componentes/logo_ativo.dart';
 import 'estado/estado_app.dart';
 import 'plataforma/licencas.dart';
 import 'plataforma/pastas.dart';
@@ -153,8 +154,12 @@ class _AppMaterial extends StatelessWidget {
           theme: temaDe(
             resolverTema(escolhido, MediaQuery.platformBrightnessOf(context)),
           ),
-          builder: (context, child) =>
-              RepaintBoundary(key: chaveCaptura, child: child),
+          // O escopo fica acima do Navigator: as logos valem também nos
+          // diálogos e nas telas empilhadas.
+          builder: (context, child) => RepaintBoundary(
+            key: chaveCaptura,
+            child: EscopoLogos(child: child!),
+          ),
           home: const Casca(),
         ),
       ),

@@ -1,5 +1,6 @@
 // Gráfico de linha por `CustomPainter` próprio (sem pacote de gráficos).
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../tema/cores_app.dart';
@@ -34,6 +35,18 @@ class GraficoLinha extends StatefulWidget {
 
 class _GraficoLinhaState extends State<GraficoLinha> {
   (int, double)? _tocado;
+
+  @override
+  void didUpdateWidget(GraficoLinha antigo) {
+    super.didUpdateWidget(antigo);
+    // Outros pontos: o ponto tocado ficou obsoleto.
+    if (_tocado != null && !listEquals(antigo.pontos, widget.pontos)) {
+      _tocado = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.aoTocar?.call(null);
+      });
+    }
+  }
 
   Color _cor(CoresApp c) {
     if (widget.cor != null) return widget.cor!;
@@ -72,16 +85,24 @@ class _GraficoLinhaState extends State<GraficoLinha> {
     final c = CoresApp.de(context);
     return LayoutBuilder(
       builder: (context, caixa) {
+        assert(
+          caixa.hasBoundedHeight && caixa.hasBoundedWidth,
+          'GraficoLinha precisa de largura e altura limitadas: envolva-o em '
+          'um SizedBox com altura, em um Expanded ou em um AspectRatio '
+          '(dentro de rolagem ou Column ele não tem tamanho próprio).',
+        );
         final largura = caixa.maxWidth;
-        final grafico = CustomPaint(
-          size: Size.infinite,
-          painter: PintorLinha(
-            pontos: widget.pontos,
-            referencia: widget.referencia,
-            cor: _cor(c),
-            guia: c.textoSuave,
-            contorno: c.cartao,
-            tocado: widget.interativo ? _tocado : null,
+        final grafico = RepaintBoundary(
+          child: CustomPaint(
+            size: Size.infinite,
+            painter: PintorLinha(
+              pontos: widget.pontos,
+              referencia: widget.referencia,
+              cor: _cor(c),
+              guia: c.textoSuave,
+              contorno: c.cartao,
+              tocado: widget.interativo ? _tocado : null,
+            ),
           ),
         );
         if (!widget.interativo) return grafico;

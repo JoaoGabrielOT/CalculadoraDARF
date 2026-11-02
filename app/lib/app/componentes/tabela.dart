@@ -1,5 +1,7 @@
 // Tabela ordenável para o layout expandido (calculadora_darf.py:660-795).
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../nucleo/nucleo.dart';
@@ -30,6 +32,16 @@ class ColunaTabela<T> {
   final Color? Function(BuildContext, T)? cor;
 }
 
+/// Peso inteiro da coluna: duas casas, para larguras fracionárias (0,3 e 0,1)
+/// manterem a proporção, e no mínimo 1.
+int _flex(double largura) => math.max(1, (largura * 100).round());
+
+/// Tabela ordenável. Com altura limitada pelo pai, o corpo rola e é lazy
+/// (`ListView.builder`). Sem altura limitada, o corpo vira uma `Column` com
+/// todas as linhas, que NÃO é lazy: telas com muitas linhas devem limitar a
+/// altura (`Expanded`, `SizedBox`). A ordenação fica guardada enquanto a
+/// lista [linhas] (a mesma instância), a coluna e o sentido não mudam; ao
+/// trocar os dados, passe uma lista nova.
 class Tabela<T> extends StatefulWidget {
   const Tabela({
     super.key,
@@ -40,7 +52,10 @@ class Tabela<T> extends StatefulWidget {
     this.aoDuploClique,
     this.selecionado,
     this.id,
-  });
+  }) : assert(
+         selecionado == null || id != null,
+         'Tabela: para marcar uma linha selecionada informe `id`.',
+       );
 
   final List<ColunaTabela<T>> colunas;
   final List<T> linhas;
@@ -48,10 +63,11 @@ class Tabela<T> extends StatefulWidget {
   final ValueChanged<T>? aoSelecionar;
   final ValueChanged<T>? aoDuploClique;
 
-  /// Identificador da linha selecionada (veja [id]).
+  /// [id] da linha selecionada; exige [id].
   final String? selecionado;
 
-  /// Identificador de cada linha; sem ele vale o texto da primeira coluna.
+  /// Identificador único de cada linha (Key e seleção). Sem ele nenhuma linha
+  /// é marcada e as Keys usam a posição.
   final String Function(T)? id;
 
   @override
@@ -62,7 +78,10 @@ class _TabelaState<T> extends State<Tabela<T>> {
   int? _coluna;
   bool _decrescente = false;
 
-  String _id(T l) => widget.id?.call(l) ?? widget.colunas.first.texto(l);
+  List<T>? _cacheLinhas;
+  int? _cacheColuna;
+  bool _cacheDecrescente = false;
+  List<T> _cacheResultado = const [];
 
   void _ordenarPor(int i) => setState(() {
     if (_coluna == i) {
@@ -78,13 +97,31 @@ class _TabelaState<T> extends State<Tabela<T>> {
     if (i == null || i >= widget.colunas.length) return widget.linhas;
     final chave = widget.colunas[i].chave;
     if (chave == null) return widget.linhas;
-    final temTexto = widget.linhas.any((l) => chave(l) is String);
-    return ordenadoPor<T>(widget.linhas, (l) {
-      final v = chave(l);
-      if (v == null) return [temTexto ? '' : double.negativeInfinity];
-      if (v is String) return [v.toLowerCase()];
-      return [v];
+    if (identical(_cacheLinhas, widget.linhas) &&
+        _cacheColuna == i &&
+        _cacheDecrescente == _decrescente) {
+      return _cacheResultado;
+    }
+    final linhas = widget.linhas;
+    final valores = [for (final l in linhas) chave(l)];
+    // Só números (e booleanos) ordenam como número, com ausente e NaN em
+    // -infinito; qualquer outra mistura cai para a comparação de texto.
+    final numerico = valores.every((v) => v == null || v is bool || v is num);
+    final indices = ordenadoPor<int>(List.generate(linhas.length, (k) => k), (
+      k,
+    ) {
+      final v = valores[k];
+      if (numerico) {
+        return [
+          v == null || (v is num && v.isNaN) ? double.negativeInfinity : v,
+        ];
+      }
+      return [v == null ? '' : v.toString().toLowerCase()];
     }, reverso: _decrescente);
+    _cacheLinhas = linhas;
+    _cacheColuna = i;
+    _cacheDecrescente = _decrescente;
+    return _cacheResultado = [for (final k in indices) linhas[k]];
   }
 
   String _titulo(int i) {
@@ -102,7 +139,7 @@ class _TabelaState<T> extends State<Tabela<T>> {
       children: [
         for (final (i, col) in widget.colunas.indexed)
           Expanded(
-            flex: col.largura.round(),
+            flex: _flex(col.largura),
             child: InkWell(
               onTap: col.chave == null ? null : () => _ordenarPor(i),
               child: Padding(
@@ -124,15 +161,19 @@ class _TabelaState<T> extends State<Tabela<T>> {
           ),
       ],
     );
-    Widget linha(int n) => _Linha<T>(
-      colunas: widget.colunas,
-      dados: linhas[n],
-      id: _id(linhas[n]),
-      zebra: n.isOdd,
-      selecionada: widget.selecionado == _id(linhas[n]),
-      aoSelecionar: widget.aoSelecionar,
-      aoDuploClique: widget.aoDuploClique,
-    );
+    Widget linha(int n) {
+      final id = widget.id?.call(linhas[n]);
+      return _Linha<T>(
+        colunas: widget.colunas,
+        dados: linhas[n],
+        // Sem `id`, a posição mantém as Keys únicas com textos repetidos.
+        chaveLinha: id ?? '#$n',
+        zebra: n.isOdd,
+        selecionada: id != null && widget.selecionado == id,
+        aoSelecionar: widget.aoSelecionar,
+        aoDuploClique: widget.aoDuploClique,
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, caixa) {
@@ -173,7 +214,7 @@ class _Linha<T> extends StatelessWidget {
   const _Linha({
     required this.colunas,
     required this.dados,
-    required this.id,
+    required this.chaveLinha,
     required this.zebra,
     required this.selecionada,
     required this.aoSelecionar,
@@ -182,7 +223,7 @@ class _Linha<T> extends StatelessWidget {
 
   final List<ColunaTabela<T>> colunas;
   final T dados;
-  final String id;
+  final String chaveLinha;
   final bool zebra;
   final bool selecionada;
   final ValueChanged<T>? aoSelecionar;
@@ -196,7 +237,7 @@ class _Linha<T> extends StatelessWidget {
         : (zebra ? c.linha.withValues(alpha: .5) : Colors.transparent);
     final vertical = c.densa ? 6.0 : 10.0;
     return Semantics(
-      key: Key('linha-$id'),
+      key: Key('linha-$chaveLinha'),
       container: true,
       selected: selecionada,
       child: Material(
@@ -210,7 +251,7 @@ class _Linha<T> extends StatelessWidget {
             children: [
               for (final (i, col) in colunas.indexed)
                 Expanded(
-                  flex: col.largura.round(),
+                  flex: _flex(col.largura),
                   child: Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: 8,

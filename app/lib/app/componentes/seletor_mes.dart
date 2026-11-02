@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../../nucleo/nucleo.dart';
+import '../app.dart' show expandido;
 import '../tema/cores_app.dart';
 
 const _mesesCurtos = [
@@ -112,8 +113,14 @@ class _SeletorMesState extends State<_SeletorMes> {
       ),
       actions: [
         TextButton(
-          onPressed: () =>
-              Navigator.pop(context, ambiente.hoje().substring(0, 7)),
+          onPressed: () {
+            // O mês de hoje, a menos que o máximo seja anterior a ele.
+            final hoje = ambiente.hoje().substring(0, 7);
+            Navigator.pop(
+              context,
+              hoje.compareTo(widget.maximo) > 0 ? widget.maximo : hoje,
+            );
+          },
           child: const Text('Mês atual'),
         ),
         TextButton(
@@ -173,7 +180,7 @@ class _CelulaMes extends StatelessWidget {
             onTap: habilitado ? aoTocar : null,
             child: SizedBox(
               width: 90,
-              height: 44,
+              height: expandido(context) ? 44 : 48,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
