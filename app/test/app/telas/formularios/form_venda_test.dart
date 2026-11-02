@@ -396,4 +396,74 @@ void main() {
     expect(find.byType(AppBar), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
   });
+
+  testWidgets('editar com preço de 8 casas chega intacto a editarVenda', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    final lote = Lote(
+      id: 'P1',
+      ticker: 'PETR4',
+      tipo: 'Ação',
+      dataCompra: '2026-10-05',
+      qtd: 100,
+      preco: 30,
+      vendas: [
+        Venda(id: 'PV', data: '2026-10-20', qtd: 40, preco: 32.12345678),
+      ],
+    );
+    await _abrir(t, s, editar: (lote, lote.vendas.first));
+    expect(campoTexto(t, 'preco').controller!.text, '32,12345678');
+    await t.tap(find.text('Salvar'));
+    await t.pumpAndSettle();
+    expect(s.ultimaVenda?.preco, 32.12345678);
+    expect(s.ultimaVenda?.qtd, 40);
+  });
+
+  testWidgets('duplo toque com o serviço pendente faz uma única chamada', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    final espera = Completer<void>();
+    s.esperaGravacao = espera.future;
+    await _abrir(t, s, lote: _l('L2'));
+    await t.enterText(campo('preco'), '10');
+    await t.tap(find.text('Salvar'));
+    await t.tap(find.text('Salvar'), warnIfMissed: false);
+    await t.pump();
+    expect(s.chamadas.where((c) => c.startsWith('registrarVenda')).length, 1);
+    espera.complete();
+    await t.pumpAndSettle();
+  });
+
+  testWidgets('quantidade e preço são lidos antes do await e os campos ficam '
+      'sem edição enquanto grava', (t) async {
+    final s = ServicosFalsos();
+    final espera = Completer<void>();
+    s.esperaReserva = espera.future;
+    final antigo = Lote(
+      id: 'R1',
+      ticker: 'VALE3',
+      tipo: 'Ação',
+      dataCompra: '2026-07-10',
+      qtd: 100,
+      preco: 50,
+    );
+    s.visoes['2026-10'] = visaoExemplo(Mes(mes: '2026-10', lotes: [antigo]));
+    await _abrir(t, s, ticker: 'VALE3');
+    await t.enterText(_campoData, '15/09/2026');
+    await t.enterText(campo('qtd'), '10');
+    await t.enterText(campo('preco'), '55');
+    await t.tap(find.text('Salvar'));
+    await t.pump();
+    expect(campoTexto(t, 'qtd').readOnly, isTrue);
+    expect(campoTexto(t, 'preco').readOnly, isTrue);
+    expect(campoTexto(t, 'ticker').readOnly, isTrue);
+    campoTexto(t, 'qtd').controller!.text = '99';
+    campoTexto(t, 'preco').controller!.text = '1';
+    espera.complete();
+    await t.pumpAndSettle();
+    expect(s.ultimaVenda?.qtd, 10);
+    expect(s.ultimaVenda?.preco, 55);
+  });
 }

@@ -44,6 +44,18 @@ class ServicosFalsos implements ServicosApp {
   NovaVenda? ultimaVenda;
   ({ModoSaldo modo, double valor})? ultimoSaldo;
 
+  /// Quando preenchido, as gravações (compra e venda) só respondem depois dele;
+  /// a chamada já fica registrada em [chamadas].
+  Future<void>? esperaGravacao;
+
+  /// Idem para `reservadoEmMetas`.
+  Future<void>? esperaReserva;
+
+  Future<T> _segurar<T>(Future<T> resposta, Future<void>? espera) async {
+    if (espera != null) await espera;
+    return resposta;
+  }
+
   /// Resposta de `precoVenda`; nula = falha. [precoVendaFn] tem precedência
   /// (para deixar o `Future` pendente).
   (double, String)? precoVendaResp;
@@ -108,36 +120,46 @@ class ServicosFalsos implements ServicosApp {
   }) => _chamar('sugestoesTicker', [mes, soCustodia], () => sugestoes);
 
   @override
-  Future<VisaoMes> registrarCompra(String mes, NovaCompra c) =>
-      _chamar('registrarCompra', [mes, c.ticker], () {
-        ultimaCompra = c;
-        return _visao(mes);
-      });
+  Future<VisaoMes> registrarCompra(String mes, NovaCompra c) => _segurar(
+    _chamar('registrarCompra', [mes, c.ticker], () {
+      ultimaCompra = c;
+      return _visao(mes);
+    }),
+    esperaGravacao,
+  );
 
   @override
   Future<VisaoMes> editarCompra(String mes, String loteId, NovaCompra c) =>
-      _chamar('editarCompra', [mes, loteId, c.ticker], () {
-        ultimaCompra = c;
-        return _visao(mes);
-      });
+      _segurar(
+        _chamar('editarCompra', [mes, loteId, c.ticker], () {
+          ultimaCompra = c;
+          return _visao(mes);
+        }),
+        esperaGravacao,
+      );
 
   @override
   Future<VisaoMes> excluirCompra(String mes, String loteId) =>
       _chamar('excluirCompra', [mes, loteId], () => _visao(mes));
 
   @override
-  Future<VendaRegistrada> registrarVenda(String mes, NovaVenda v) =>
-      _chamar('registrarVenda', [mes, v.loteId, v.data, v.qtd], () {
-        ultimaVenda = v;
-        return vendaRegistrada ?? VendaRegistrada(visao: _visao(mes));
-      });
+  Future<VendaRegistrada> registrarVenda(String mes, NovaVenda v) => _segurar(
+    _chamar('registrarVenda', [mes, v.loteId, v.data, v.qtd], () {
+      ultimaVenda = v;
+      return vendaRegistrada ?? VendaRegistrada(visao: _visao(mes));
+    }),
+    esperaGravacao,
+  );
 
   @override
   Future<VisaoMes> editarVenda(String mes, String vendaId, NovaVenda v) =>
-      _chamar('editarVenda', [mes, vendaId, v.data, v.qtd], () {
-        ultimaVenda = v;
-        return _visao(mes);
-      });
+      _segurar(
+        _chamar('editarVenda', [mes, vendaId, v.data, v.qtd], () {
+          ultimaVenda = v;
+          return _visao(mes);
+        }),
+        esperaGravacao,
+      );
 
   @override
   Future<VisaoMes> excluirVenda(String mes, String vendaId) =>
@@ -159,8 +181,10 @@ class ServicosFalsos implements ServicosApp {
   }
 
   @override
-  Future<int> reservadoEmMetas(String loteId) =>
-      _chamar('reservadoEmMetas', [loteId], () => reservadoMetas);
+  Future<int> reservadoEmMetas(String loteId) => _segurar(
+    _chamar('reservadoEmMetas', [loteId], () => reservadoMetas),
+    esperaReserva,
+  );
 
   @override
   Future<Fechamento> fecharMes(String mes) => _chamar(

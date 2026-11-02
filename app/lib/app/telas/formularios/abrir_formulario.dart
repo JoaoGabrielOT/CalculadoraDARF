@@ -2,7 +2,7 @@
 // tela cheia no compacto. Enter salva e Esc cancela (calculadora_darf.py:164-165).
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
 import '../../regras/textos.dart';
 import '../../servicos/api.dart';
@@ -24,6 +24,8 @@ Future<T?> abrirFormulario<T>(
   if (expandido(c)) {
     return showDialog<T>(
       context: c,
+      // modal: só Cancelar ou Esc fecham (py:Toplevel); tocar fora não
+      barrierDismissible: false,
       builder: (_) => Dialog(
         child: SizedBox(
           width: larguraDialogoFormulario,
@@ -129,15 +131,20 @@ class QuadroFormulario extends StatelessWidget {
               ),
             ),
           );
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.enter): _salvar,
-        const SingleActivator(LogicalKeyboardKey.numpadEnter): _salvar,
-        const SingleActivator(LogicalKeyboardKey.escape): () {
-          if (!salvando) Navigator.of(context).pop();
+    // Voltar não fecha durante a gravação: o chamador receberia nulo e a tela
+    // ficaria desatualizada.
+    return PopScope(
+      canPop: !salvando,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.enter): _salvar,
+          const SingleActivator(LogicalKeyboardKey.numpadEnter): _salvar,
+          const SingleActivator(LogicalKeyboardKey.escape): () {
+            if (!salvando) Navigator.of(context).pop();
+          },
         },
-      },
-      child: corpo,
+        child: corpo,
+      ),
     );
   }
 

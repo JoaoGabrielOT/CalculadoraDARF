@@ -1,6 +1,9 @@
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/formularios/abrir_formulario.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
+
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -210,5 +213,78 @@ void main() {
       t.getSize(find.byKey(const ValueKey('quadro-formulario'))).width,
       420,
     );
+  });
+
+  testWidgets('tocar fora do diálogo não fecha o formulário', (t) async {
+    final r = await _abrir(t, ServicosFalsos());
+    await t.tapAt(const Offset(5, 5));
+    await t.pumpAndSettle();
+    expect(find.text('Novo ativo'), findsOneWidget);
+    expect(r.concluido, isFalse);
+  });
+
+  for (final (nome, tamanho) in [
+    ('diálogo', const Size(1366, 768)),
+    ('tela cheia', const Size(360, 800)),
+  ]) {
+    testWidgets('Voltar durante a gravação não fecha ($nome) e o valor chega '
+        'ao chamador', (t) async {
+      final s = ServicosFalsos();
+      final espera = Completer<void>();
+      s.esperaGravacao = espera.future;
+      final r = await _abrir(t, s, tamanho: tamanho);
+      await t.enterText(campo('ticker'), 'PETR4');
+      await t.enterText(campo('qtd'), '100');
+      await t.enterText(campo('preco'), '32,50');
+      await t.tap(find.text('Salvar'));
+      await t.pump();
+      await t.binding.handlePopRoute();
+      await t.pumpAndSettle();
+      expect(find.text('Novo ativo'), findsOneWidget);
+      expect(r.concluido, isFalse);
+      espera.complete();
+      await t.pumpAndSettle();
+      expect(r.concluido, isTrue);
+      expect(r.valor?.mes, '2026-10');
+    });
+  }
+
+  testWidgets('duplo toque e Enter repetido com o serviço pendente fazem uma '
+      'única chamada', (t) async {
+    final s = ServicosFalsos();
+    final espera = Completer<void>();
+    s.esperaGravacao = espera.future;
+    await _abrir(t, s);
+    await t.enterText(campo('ticker'), 'PETR4');
+    await t.enterText(campo('qtd'), '100');
+    await t.enterText(campo('preco'), '32,50');
+    await t.tap(find.text('Salvar'));
+    await t.tap(find.text('Salvar'), warnIfMissed: false);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pump();
+    expect(s.chamadas.where((c) => c.startsWith('registrarCompra')).length, 1);
+    espera.complete();
+    await t.pumpAndSettle();
+  });
+
+  testWidgets('editar com preço de 8 casas chega intacto a editarCompra', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    final lote = Lote(
+      id: 'P1',
+      ticker: 'PETR4',
+      tipo: 'Ação',
+      dataCompra: '2026-10-05',
+      qtd: 100,
+      preco: 32.12345678,
+    );
+    await _abrir(t, s, editar: lote);
+    expect(campoTexto(t, 'preco').controller!.text, '32,12345678');
+    await t.tap(find.text('Salvar'));
+    await t.pumpAndSettle();
+    expect(s.ultimaCompra?.preco, 32.12345678);
+    expect(s.ultimaCompra?.qtd, 100);
   });
 }

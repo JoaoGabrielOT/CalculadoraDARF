@@ -297,14 +297,17 @@ class _FormVendaState extends State<FormVenda>
     final s = context.read<ServicosApp>();
     final l = _lote;
     final d = _data;
+    // lidos antes do await: o que foi validado é o que vai ao serviço
+    final qtd = _qtd.text;
+    final preco = _preco.text;
     final retroativa =
         !_editando && l != null && d != null && d.compareTo(_inicioMes) < 0;
     final reservado = retroativa ? await s.reservadoEmMetas(l.id) : 0;
     final v = validarVenda(
       lote: l,
       data: d,
-      qtd: _qtd.text,
-      preco: _preco.text,
+      qtd: qtd,
+      preco: preco,
       inicioMes: _inicioMes,
       permitida: d != null && _permitida(d),
       reservado: reservado,
@@ -351,6 +354,7 @@ class _FormVendaState extends State<FormVenda>
           key: const ValueKey('ticker'),
           controller: _ticker,
           enabled: !_editando,
+          readOnly: salvando,
           autofocus: !_editando && _ticker.text.isEmpty,
           textCapitalization: TextCapitalization.characters,
           decoration: const InputDecoration(
@@ -402,6 +406,7 @@ class _FormVendaState extends State<FormVenda>
         TextField(
           key: const ValueKey('qtd'),
           controller: _qtd,
+          readOnly: salvando,
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
             labelText: l == null
@@ -414,6 +419,7 @@ class _FormVendaState extends State<FormVenda>
           key: const ValueKey('preco'),
           controller: _preco,
           focusNode: _focoPreco,
+          readOnly: salvando,
           autofocus: !_editando && _ticker.text.isNotEmpty,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
