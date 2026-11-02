@@ -248,7 +248,7 @@ class ContaLocal {
     final dados = await _sync.lerAmigo(email);
     if (geracao != _geracaoAmigo || _conta.email != minha) {
       // vale o último pedido; sair ou novo login durante a rede descarta
-      throw ErroGoogle('O carregamento dos dados do amigo foi cancelado.');
+      throw PedidoSuperado('O carregamento dos dados do amigo foi cancelado.');
     }
     usarAmigo(email, dados);
     return ResumoAmigo(

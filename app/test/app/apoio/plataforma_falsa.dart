@@ -35,6 +35,9 @@ class PlataformaFalsa implements Plataforma {
   /// Quantas vezes `iniciarNotificacoes` foi chamado.
   int notificacoesIniciadas = 0;
 
+  /// Quantas vezes `pedirPermissaoNotificacoes` foi chamado.
+  int pedidosPermissao = 0;
+
   void Function(String link)? aoTocar;
 
   /// Simula o toque do usuário numa notificação.
@@ -55,6 +58,7 @@ class PlataformaFalsa implements Plataforma {
 
   @override
   Future<bool> pedirPermissaoNotificacoes() async {
+    pedidosPermissao++;
     if (falhaPlugin != null) throw falhaPlugin!;
     return permissaoNotificacoes;
   }

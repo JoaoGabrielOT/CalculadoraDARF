@@ -55,15 +55,20 @@ void main() {
     addTearDown(t.view.reset);
     final s = ServicosFalsos();
     await iniciarApp(servicos: s, plataforma: PlataformaFalsa());
-    await t.pump();
+    await t.pump(const Duration(seconds: 1));
     await t.pump();
     expect(find.text('Calculadora DARF'), findsWidgets);
     expect(s.chamadas, contains('iniciar()'));
   });
 
   testWidgets('falha ao subir os serviços mostra o motivo', (t) async {
-    await t.pumpWidget(const AppFalhaInicial('Sem permissão.'));
+    var chamadas = 0;
+    await t.pumpWidget(
+      AppFalhaInicial('Sem permissão.', aoTentar: () => chamadas++),
+    );
     expect(find.textContaining('Sem permissão.'), findsOneWidget);
+    await t.tap(find.text('Tentar de novo'));
+    expect(chamadas, 1);
   });
 
   testWidgets('exatamente em 840 usa o layout de PC sem estourar', (t) async {
@@ -73,5 +78,36 @@ void main() {
     await montarApp(t, tamanho: const Size(839, 700));
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('falha ao subir os serviços: motivo, sem Exception, e retenta', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final s = ServicosFalsos();
+    var tentativas = 0;
+    await iniciarApp(
+      plataforma: PlataformaFalsa(),
+      criarServicos: (_) async {
+        tentativas++;
+        if (tentativas == 1) throw Exception('pasta bloqueada');
+        return s;
+      },
+    );
+    await t.pump();
+    expect(find.textContaining('pasta bloqueada'), findsOneWidget);
+    expect(find.textContaining('Exception:'), findsNothing);
+    await t.tap(find.text('Tentar de novo'));
+    // a recriação dos serviços é assíncrona de verdade
+    await t.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await t.pump(const Duration(seconds: 1));
+    await t.pump(const Duration(seconds: 1));
+    expect(tentativas, 2);
+    expect(find.byType(Casca), findsOneWidget);
+    expect(s.chamadas, contains('iniciar()'));
   });
 }

@@ -7,54 +7,65 @@ void main() {
     test('servicos/ e tema_visual.dart não importam package:flutter', () {
       expect(
         violacoesFlutterEmServicos({
-          'lib/app/servicos/a.dart': "import 'package:flutter/material.dart';"
+          'lib/app/servicos/a.dart': "import 'package:flutter/material.dart';",
         }),
         isNotEmpty,
       );
       expect(
         violacoesFlutterEmServicos({
           'lib/app/tema/tema_visual.dart':
-              "import 'package:flutter/foundation.dart';"
+              "import 'package:flutter/foundation.dart';",
         }),
         isNotEmpty,
       );
       expect(
         violacoesFlutterEmServicos({
           'lib/app/tema/tema.dart': "import 'package:flutter/material.dart';",
-          'lib/app/servicos/b.dart': "// import 'package:flutter/material.dart';",
+          'lib/app/servicos/b.dart':
+              "// import 'package:flutter/material.dart';",
         }),
         isEmpty,
       );
     });
 
-    test('telas, componentes, estado, regras e tema não importam IO nem plugins',
-        () {
-      for (final pasta in ['telas', 'componentes', 'estado', 'regras', 'tema']) {
-        for (final imp in [
-          "import 'dart:io';",
-          "import 'package:http/http.dart';",
-          "import 'package:path_provider/path_provider.dart';",
-          "import 'package:url_launcher/url_launcher.dart';",
-          "import 'package:flutter_local_notifications/x.dart';",
+    test(
+      'telas, componentes, estado, regras e tema não importam IO nem plugins',
+      () {
+        for (final pasta in [
+          'telas',
+          'componentes',
+          'estado',
+          'regras',
+          'tema',
         ]) {
-          expect(
-            violacoesImportsProibidosNaUi({'lib/app/$pasta/a.dart': imp}),
-            isNotEmpty,
-            reason: '$pasta: $imp',
-          );
+          for (final imp in [
+            "import 'dart:io';",
+            "import 'package:http/http.dart';",
+            "import 'package:path_provider/path_provider.dart';",
+            "import 'package:url_launcher/url_launcher.dart';",
+            "import 'package:flutter_local_notifications/x.dart';",
+          ]) {
+            expect(
+              violacoesImportsProibidosNaUi({'lib/app/$pasta/a.dart': imp}),
+              isNotEmpty,
+              reason: '$pasta: $imp',
+            );
+          }
         }
-      }
-      expect(
-        violacoesImportsProibidosNaUi(
-            {'lib/app/plataforma/a.dart': "import 'dart:io';"}),
-        isEmpty,
-      );
-      expect(
-        violacoesImportsProibidosNaUi(
-            {'lib/app/telas/a.dart': "// import 'dart:io';"}),
-        isEmpty,
-      );
-    });
+        expect(
+          violacoesImportsProibidosNaUi({
+            'lib/app/plataforma/a.dart': "import 'dart:io';",
+          }),
+          isEmpty,
+        );
+        expect(
+          violacoesImportsProibidosNaUi({
+            'lib/app/telas/a.dart': "// import 'dart:io';",
+          }),
+          isEmpty,
+        );
+      },
+    );
 
     test('plugins só em plataforma/', () {
       for (final imp in [
@@ -79,20 +90,27 @@ void main() {
     test('exceção explícita só vale para o arquivo listado', () {
       const imp = "import 'package:flutter/services.dart';";
       expect(
-        violacoesPluginsForaDePlataforma({'lib/app/telas/x.dart': imp},
-            excecoes: const ['lib/app/telas/x.dart']),
+        violacoesPluginsForaDePlataforma(
+          {'lib/app/telas/x.dart': imp},
+          excecoes: const ['lib/app/telas/x.dart'],
+        ),
         isEmpty,
       );
       expect(
-        violacoesPluginsForaDePlataforma({'lib/app/telas/y.dart': imp},
-            excecoes: const ['lib/app/telas/x.dart']),
+        violacoesPluginsForaDePlataforma(
+          {'lib/app/telas/y.dart': imp},
+          excecoes: const ['lib/app/telas/x.dart'],
+        ),
         isNotEmpty,
       );
     });
 
     test('.sort( gera violação; comentário não', () {
       expect(violacoesSort({'lib/app/a.dart': 'lista.sort();'}), isNotEmpty);
-      expect(violacoesSort({'lib/app/a.dart': '// nunca .sort( aqui'}), isEmpty);
+      expect(
+        violacoesSort({'lib/app/a.dart': '// nunca .sort( aqui'}),
+        isEmpty,
+      );
       expect(violacoesSort({'lib/app/a.dart': 'ordenadoPor(l, f);'}), isEmpty);
     });
 
@@ -122,8 +140,11 @@ void main() {
 
     test('raiz do projeto encontrada e lib/app lido quando existe', () {
       // Caminho errado faria os testes abaixo passarem em silêncio.
-      expect(File('pubspec.yaml').existsSync(), isTrue,
-          reason: 'rode a partir de app/');
+      expect(
+        File('pubspec.yaml').existsSync(),
+        isTrue,
+        reason: 'rode a partir de app/',
+      );
       expect(Directory('lib/nucleo').existsSync(), isTrue);
       // lib/app ainda não existe na Tarefa 1; a partir de que existir, tem
       // de ser lido (não vazio).
@@ -134,10 +155,12 @@ void main() {
       expect(violacoesFlutterEmServicos(app), isEmpty);
     });
 
-    test('telas, componentes, estado, regras e tema não importam IO nem plugins',
-        () {
-      expect(violacoesImportsProibidosNaUi(app), isEmpty);
-    });
+    test(
+      'telas, componentes, estado, regras e tema não importam IO nem plugins',
+      () {
+        expect(violacoesImportsProibidosNaUi(app), isEmpty);
+      },
+    );
 
     test('só plataforma/ importa plugins', () {
       expect(violacoesPluginsForaDePlataforma(app), isEmpty);
@@ -156,15 +179,14 @@ void main() {
 }
 
 /// Texto sem as linhas de comentário (`//`), para não acusar menções em prosa.
-String _semComentarios(String texto) => texto
-    .split('\n')
-    .where((l) => !l.trimLeft().startsWith('//'))
-    .join('\n');
+String _semComentarios(String texto) =>
+    texto.split('\n').where((l) => !l.trimLeft().startsWith('//')).join('\n');
 
 /// Linhas `import`/`export` do arquivo, sem comentários.
-Iterable<String> _imports(String texto) => _semComentarios(texto)
-    .split('\n')
-    .where((l) => RegExp(r'^\s*(import|export)\s').hasMatch(l));
+Iterable<String> _imports(String texto) =>
+    _semComentarios(texto)
+        .split('\n')
+        .where((l) => RegExp(r'^\s*(import|export)\s').hasMatch(l));
 
 bool _emPasta(String caminho, String pasta) =>
     caminho.contains('lib/app/$pasta/');
@@ -173,7 +195,8 @@ bool _emPasta(String caminho, String pasta) =>
 List<String> violacoesFlutterEmServicos(Map<String, String> arquivos) {
   final violacoes = <String>[];
   arquivos.forEach((caminho, bruto) {
-    final alvo = _emPasta(caminho, 'servicos') ||
+    final alvo =
+        _emPasta(caminho, 'servicos') ||
         caminho.endsWith('lib/app/tema/tema_visual.dart');
     if (alvo && _semComentarios(bruto).contains('package:flutter')) {
       violacoes.add('$caminho usa package:flutter');

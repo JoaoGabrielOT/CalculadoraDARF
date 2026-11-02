@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
+import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -235,4 +238,57 @@ void main() {
       expect(t.takeException(), isNull);
     },
   );
+
+  testWidgets('morte do isolate mostra a faixa de serviços encerrados', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    await montarApp(t, servicos: s);
+    expect(find.textContaining('foram encerrados'), findsNothing);
+    await s.eventosFalsos.close();
+    await t.pump();
+    await t.pump();
+    expect(
+      find.text(
+        'Os serviços do app foram encerrados. Feche e abra o app de novo.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('mostra o carregamento até o estado inicial chegar', (t) async {
+    final s = _Lento();
+    await montarApp(t, servicos: s, tema: TemaVisual.terminal);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
+    s.liberar.complete();
+    await t.pump();
+    await t.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(NavigationRail), findsOneWidget);
+  });
+
+  testWidgets('falha ao iniciar mostra o motivo e Tentar de novo', (t) async {
+    final s = ServicosFalsos()..erros['iniciar'] = StateError('quebrou');
+    await montarApp(t, servicos: s);
+    expect(find.textContaining('quebrou'), findsOneWidget);
+    expect(find.textContaining('Exception:'), findsNothing);
+    expect(find.byType(NavigationRail), findsNothing);
+    s.erros.remove('iniciar');
+    await t.tap(find.text('Tentar de novo'));
+    await t.pump();
+    await t.pump();
+    expect(find.byType(NavigationRail), findsOneWidget);
+  });
+}
+
+/// `iniciar` só termina quando o teste liberar.
+class _Lento extends ServicosFalsos {
+  final Completer<void> liberar = Completer<void>();
+
+  @override
+  Future<EstadoInicial> iniciar() async {
+    await liberar.future;
+    return super.iniciar();
+  }
 }

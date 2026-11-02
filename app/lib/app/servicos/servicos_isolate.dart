@@ -24,7 +24,9 @@ import 'locais/noticias_local.dart';
 import 'parametros.dart';
 import 'servicos_locais.dart';
 
-const _msgEncerrado = 'Serviços encerrados.';
+/// Texto do StateError de um pedido a serviços que já morreram.
+const msgServicosEncerrados = 'Serviços encerrados.';
+const _msgEncerrado = msgServicosEncerrados;
 
 const _msgNavegador = 'Não foi possível abrir o navegador.';
 

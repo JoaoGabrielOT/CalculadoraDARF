@@ -382,3 +382,9 @@ class ImagemBytes {
   final Uint8List bytes;
   final bool svg;
 }
+
+/// Pedido que perdeu para outro mais novo, ou para sair da conta; a interface
+/// o descarta sem avisar. Atravessa o isolate com o tipo preservado.
+class PedidoSuperado extends ErroGoogle {
+  PedidoSuperado(super.mensagem);
+}

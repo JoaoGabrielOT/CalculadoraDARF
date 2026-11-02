@@ -15,6 +15,7 @@ import 'servicos/api.dart';
 import 'servicos/parametros.dart';
 import 'servicos/servicos_isolate.dart';
 import 'telas/casca.dart';
+import 'telas/falha_inicial.dart';
 import 'tema/temas.dart';
 import 'tema/tema_visual.dart';
 import '../integracoes/integracoes.dart';
@@ -28,22 +29,31 @@ bool expandido(BuildContext context) =>
 /// Raiz capturável (imagem da tela, usada pelos goldens e pela captura).
 final chaveCaptura = GlobalKey();
 
-/// Sobe o isolate de serviços e abre o app. [servicos] e [plataforma] só são
-/// trocados nos testes.
-Future<void> iniciarApp({ServicosApp? servicos, Plataforma? plataforma}) async {
+/// Sobe o isolate de serviços e abre o app. [servicos], [plataforma] e
+/// [criarServicos] só são trocados nos testes. Falha ao subir mostra o motivo
+/// com "Tentar de novo".
+Future<void> iniciarApp({
+  ServicosApp? servicos,
+  Plataforma? plataforma,
+  Future<ServicosApp> Function(Plataforma plataforma)? criarServicos,
+}) async {
   WidgetsFlutterBinding.ensureInitialized();
   registrarLicencaRoboto();
-  try {
-    final plat = plataforma ?? PlataformaReal();
-    final serv = servicos ?? await _criarServicos(plat);
-    // O estado assina os eventos já no construtor: o proxy só guarda os 256
-    // últimos até a primeira assinatura.
-    final estado = EstadoApp(serv, plat);
-    runApp(AppCalculadora(servicos: serv, plataforma: plat, estado: estado));
-    unawaited(estado.iniciar());
-  } catch (e) {
-    runApp(AppFalhaInicial(textoErro(e)));
+  final plat = plataforma ?? PlataformaReal();
+  Future<void> abrir() async {
+    try {
+      final serv = servicos ?? await (criarServicos ?? _criarServicos)(plat);
+      // O estado assina os eventos já no construtor: o proxy só guarda os 256
+      // últimos até a primeira assinatura.
+      final estado = EstadoApp(serv, plat);
+      runApp(AppCalculadora(servicos: serv, plataforma: plat, estado: estado));
+      unawaited(estado.iniciar());
+    } catch (e) {
+      runApp(AppFalhaInicial(textoFalha(e), aoTentar: abrir));
+    }
   }
+
+  await abrir();
 }
 
 Future<ServicosApp> _criarServicos(Plataforma plataforma) async {
@@ -132,25 +142,16 @@ class _AppMaterial extends StatelessWidget {
 
 /// Mostrada quando os serviços não sobem (pasta de dados, isolate).
 class AppFalhaInicial extends StatelessWidget {
-  const AppFalhaInicial(this.mensagem, {super.key});
+  const AppFalhaInicial(this.mensagem, {super.key, required this.aoTentar});
 
   final String mensagem;
+  final VoidCallback aoTentar;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Calculadora DARF',
     debugShowCheckedModeBanner: false,
     theme: temaDe(TemaVisual.claro),
-    home: Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Não foi possível iniciar a Calculadora DARF.\n$mensagem',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    ),
+    home: CorpoFalha(mensagem, aoTentar: aoTentar),
   );
 }

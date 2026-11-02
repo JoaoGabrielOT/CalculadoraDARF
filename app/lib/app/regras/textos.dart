@@ -5,7 +5,11 @@ import 'dart:async';
 import '../../integracoes/integracoes.dart';
 import '../../nucleo/nucleo.dart';
 import '../servicos/api.dart';
-import '../servicos/servicos_isolate.dart' show ErroRemoto;
+import '../servicos/servicos_isolate.dart'
+    show ErroRemoto, msgServicosEncerrados;
+
+const textoServicosEncerrados =
+    'Os serviços do app foram encerrados. Feche e abra o app de novo.';
 
 /// Texto do status de sincronização (calculadora_darf.py:2715-2726); o
 /// "Sincronizado" ganha " às HH:MM" quando há hora da última sincronização.
@@ -52,5 +56,44 @@ String textoErro(Object e) {
   }
   if (e is ErroNucleo) return semPrefixoException(e.toString());
   if (e is ErroRemoto) return semPrefixoException(e.mensagem);
+  if (e is StateError && e.message == msgServicosEncerrados) {
+    return textoServicosEncerrados;
+  }
+  // PlatformException (flutter/services) e ProcessException (dart:io) não
+  // podem ser importadas aqui: reconhecidas pelo nome do tipo.
+  final plataforma = switch (nome) {
+    'PlatformException' =>
+      _campo(() => (e as dynamic).message) ?? _campo(() => (e as dynamic).code),
+    'ProcessException' => _textoProcesso(e),
+    _ => null,
+  };
+  if (plataforma != null && plataforma.isNotEmpty) {
+    return semPrefixoException(plataforma);
+  }
   return 'Erro inesperado: $nome';
+}
+
+String? _campo(Object? Function() ler) {
+  try {
+    return ler()?.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
+String? _textoProcesso(Object e) {
+  final exe = _campo(() => (e as dynamic).executable);
+  final msg = _campo(() => (e as dynamic).message);
+  if (exe == null || exe.isEmpty) return msg;
+  return msg == null || msg.isEmpty
+      ? 'Não foi possível executar $exe.'
+      : 'Não foi possível executar $exe: $msg';
+}
+
+/// O motivo de uma falha de inicialização: o texto de [textoErro] e, quando o
+/// erro é inesperado, a mensagem da própria exceção (sem "Exception:").
+String textoFalha(Object e) {
+  final t = textoErro(e);
+  if (!t.startsWith('Erro inesperado: ')) return t;
+  return '$t (${semPrefixoException(e.toString())})';
 }

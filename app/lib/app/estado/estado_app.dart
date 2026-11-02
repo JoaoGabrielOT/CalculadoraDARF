@@ -23,6 +23,7 @@ class EstadoApp extends ChangeNotifier {
     _assinatura = _servicos.eventos.listen(
       _aoEvento,
       onError: (Object e) => avisar('Erro inesperado', textoErro(e)),
+      onDone: _aoFecharEventos,
     );
   }
 
@@ -54,7 +55,19 @@ class EstadoApp extends ChangeNotifier {
   /// Fila consumida pela casca.
   final List<EventoAviso> avisos = [];
 
+  /// Verdadeiro até o estado inicial chegar: a casca mostra o carregamento
+  /// em vez de piscar com as preferências padrão.
+  bool carregando = true;
+
+  /// Motivo da falha de `servicos.iniciar()`; a casca oferece "Tentar de novo".
+  String? falhaInicial;
+
+  /// O isolate de serviços morreu sem o app pedir (faixa fixa na casca).
+  bool servicosEncerrados = false;
+
   bool _iniciado = false;
+  bool _iniciando = false;
+  bool _encerrandoNormal = false;
   bool _descartado = false;
   bool _avisouNotificacao = false;
   int _geracaoVisao = 0;
@@ -73,18 +86,33 @@ class EstadoApp extends ChangeNotifier {
 
   /// Chamado uma única vez na vida do app: uma segunda chamada reenviaria o
   /// link da partida a frio (`iniciarNotificacoes`).
+  ///
+  /// Se `servicos.iniciar()` falha, vira [falhaInicial] e uma nova chamada
+  /// tenta de novo; o resto só roda depois que ele dá certo.
   Future<void> iniciar() async {
-    if (_iniciado) return;
-    _iniciado = true;
+    if (_iniciado || _iniciando) return;
+    _iniciando = true;
+    if (falhaInicial != null || !carregando) {
+      falhaInicial = null;
+      carregando = true;
+      notifyListeners();
+    }
     try {
       final inicial = await _servicos.iniciar();
       preferencias = inicial.preferencias;
       mes = inicial.mesInicial;
       erroConfig = inicial.erroConfig;
-      notifyListeners();
     } catch (e) {
-      avisar('Não foi possível iniciar', textoErro(e));
+      falhaInicial = textoFalha(e);
+      carregando = false;
+      _iniciando = false;
+      notifyListeners();
+      return;
     }
+    _iniciado = true;
+    _iniciando = false;
+    carregando = false;
+    notifyListeners();
     await Future.wait([
       _atualizarConta(),
       atualizarSaldo(),
@@ -93,6 +121,18 @@ class EstadoApp extends ChangeNotifier {
       _iniciarNotificacoes(),
     ]);
     unawaited(_verificarAtualizacao());
+  }
+
+  /// Encerramento pedido pelo app: não mostra a faixa de serviços encerrados.
+  Future<void> encerrar() {
+    _encerrandoNormal = true;
+    return _servicos.encerrar();
+  }
+
+  void _aoFecharEventos() {
+    if (_encerrandoNormal || _descartado) return;
+    servicosEncerrados = true;
+    notifyListeners();
   }
 
   void irPara(Aba nova) {
@@ -132,8 +172,9 @@ class EstadoApp extends ChangeNotifier {
   Future<void> definirNotificar(bool v) async {
     preferencias = _com(notificarNoticias: v);
     notifyListeners();
-    await _gravarPreferencias();
-    if (v && !_plataforma.windows) await _pedirPermissao();
+    if (await _gravarPreferencias() && v && !_plataforma.windows) {
+      await _pedirPermissao();
+    }
   }
 
   Future<void> definirOrdemRadar(String chave) async {
@@ -142,11 +183,14 @@ class EstadoApp extends ChangeNotifier {
     await _gravarPreferencias();
   }
 
-  Future<void> _gravarPreferencias() async {
+  /// Devolve se gravou.
+  Future<bool> _gravarPreferencias() async {
     try {
       await _servicos.salvarPreferencias(preferencias);
+      return true;
     } catch (e) {
       avisar('Não foi possível salvar', textoErro(e));
+      return false;
     }
   }
 
@@ -166,6 +210,7 @@ class EstadoApp extends ChangeNotifier {
         amigo = null;
         mes = inicial;
       } catch (e) {
+        if (geracao != _geracaoVisao) return;
         avisar('Não foi possível carregar', textoErro(e));
       }
       notifyListeners();
@@ -186,8 +231,40 @@ class EstadoApp extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool _superado(Object e) =>
-      e is ErroGoogle && e.mensagem.endsWith('foi cancelado.');
+  bool _superado(Object e) => e is PedidoSuperado;
+
+  /// O serviço já limpou o amigo quando o usuário sai da conta ou o remove:
+  /// aqui a visão acompanha, invalidando qualquer pedido em voo.
+  Future<void> _conferirVisao() async {
+    if (amigo == null && !carregandoAmigo) return;
+    try {
+      final email = (await _servicos.conta()).email;
+      var sumiu = email == null;
+      final aberto = amigo;
+      if (!sumiu && aberto != null) {
+        sumiu = !(await _servicos.amigos()).any((a) => a.email == aberto);
+      }
+      if (sumiu) await _voltarAosMeus();
+    } catch (_) {
+      // sem como conferir: o próximo evento tenta de novo
+    }
+  }
+
+  Future<void> _voltarAosMeus() async {
+    final geracao = ++_geracaoVisao;
+    amigo = null;
+    carregandoAmigo = false;
+    versaoDados++;
+    notifyListeners();
+    try {
+      final inicial = await _servicos.mesInicial();
+      if (geracao != _geracaoVisao) return;
+      mes = inicial;
+      notifyListeners();
+    } catch (_) {
+      // o mês anterior fica; o seletor do Apuração corrige
+    }
+  }
 
   void trocarMes(String novo) {
     mes = novo;
@@ -243,9 +320,11 @@ class EstadoApp extends ChangeNotifier {
       case EventoConta():
         conta = e.conta;
         notifyListeners();
+        unawaited(_conferirVisao());
       case EventoDadosMudaram():
         versaoDados++;
         notifyListeners();
+        unawaited(_conferirVisao());
         unawaited(atualizarSaldo());
         unawaited(_atualizarMetas());
       case EventoAviso():

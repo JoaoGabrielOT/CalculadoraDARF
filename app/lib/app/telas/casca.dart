@@ -12,6 +12,7 @@ import '../app.dart';
 import '../estado/estado_app.dart';
 import '../regras/textos.dart';
 import '../tema/cores_app.dart';
+import 'falha_inicial.dart';
 
 extension on Aba {
   String get rotulo => switch (this) {
@@ -55,6 +56,7 @@ class _CascaState extends State<Casca> {
   /// Mantém o estado das telas quando a casca troca de layout.
   final GlobalKey _chavePaginas = GlobalKey();
   bool _mostrandoAvisos = false;
+  bool _quadroAgendado = false;
 
   @override
   void initState() {
@@ -72,8 +74,17 @@ class _CascaState extends State<Casca> {
   @override
   Widget build(BuildContext context) {
     final estado = context.watch<EstadoApp>();
+    if (estado.falhaInicial != null) {
+      return CorpoFalha(estado.falhaInicial!, aoTentar: estado.iniciar);
+    }
+    if (estado.carregando) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final grande = expandido(context);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _depoisDoQuadro());
+    final fora =
+        _controlador.hasClients &&
+        _controlador.page?.round() != estado.aba.index;
+    if (fora || estado.avisos.isNotEmpty) _agendarQuadro();
 
     final paginas = PageView(
       key: _chavePaginas,
@@ -91,7 +102,7 @@ class _CascaState extends State<Casca> {
     );
     final corpo = Column(
       children: [
-        if (estado.erroConfig != null) _FaixaConfig(estado.erroConfig!),
+        ..._faixas(estado),
         Expanded(child: paginas),
       ],
     );
@@ -109,8 +120,7 @@ class _CascaState extends State<Casca> {
                   child: Column(
                     children: [
                       _Cabecalho(estado),
-                      if (estado.erroConfig != null)
-                        _FaixaConfig(estado.erroConfig!),
+                      ..._faixas(estado),
                       Expanded(child: paginas),
                     ],
                   ),
@@ -153,6 +163,27 @@ class _CascaState extends State<Casca> {
       child: cena,
     );
   }
+
+  /// Uma só chamada pendente por quadro, por mais que a casca reconstrua.
+  void _agendarQuadro() {
+    if (_quadroAgendado) return;
+    _quadroAgendado = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _quadroAgendado = false;
+      _depoisDoQuadro();
+    });
+  }
+
+  List<Widget> _faixas(EstadoApp estado) => [
+    if (estado.servicosEncerrados) const _FaixaAviso(textoServicosEncerrados),
+    if (estado.erroConfig != null)
+      _FaixaAviso(
+        '${estado.erroConfig}\n'
+        'Enquanto o config.json estiver vazio ou corrompido, nenhuma '
+        'alteração é gravada. Feche o app, corrija ou mova esse '
+        'arquivo (na pasta de dados do app) e abra o app de novo.',
+      ),
+  ];
 
   void _depoisDoQuadro() {
     if (!mounted) return;
@@ -341,11 +372,11 @@ Color _corSync(CoresApp cores, StatusSync s) => switch (s) {
   StatusSync.erro => cores.queda,
 };
 
-/// Faixa fixa no topo quando o `config.json` está ilegível.
-class _FaixaConfig extends StatelessWidget {
-  const _FaixaConfig(this.erro);
+/// Faixa fixa no topo (config ilegível, serviços encerrados).
+class _FaixaAviso extends StatelessWidget {
+  const _FaixaAviso(this.texto);
 
-  final String erro;
+  final String texto;
 
   @override
   Widget build(BuildContext context) {
@@ -358,14 +389,7 @@ class _FaixaConfig extends StatelessWidget {
           children: [
             Icon(Icons.warning_amber, color: cores.aviso),
             const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                '$erro\n'
-                'Enquanto o config.json estiver vazio ou corrompido, nenhuma '
-                'alteração é gravada. Feche o app, corrija ou mova esse '
-                'arquivo (na pasta de dados do app) e abra o app de novo.',
-              ),
-            ),
+            Expanded(child: Text(texto)),
           ],
         ),
       ),

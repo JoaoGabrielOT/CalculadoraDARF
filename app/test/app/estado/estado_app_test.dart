@@ -3,10 +3,15 @@ import 'package:calculadoradarf/app/regras/textos.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/servicos/servicos_isolate.dart'
-    show ErroRemoto;
+    show ErroRemoto, msgServicosEncerrados;
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
+
+import 'dart:async';
+import 'dart:io';
+import 'dart:isolate';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -159,7 +164,7 @@ void main() {
 
     test('pedido de amigo superado não aparece ao usuário', () async {
       final s = ServicosFalsos()
-        ..erros['carregarAmigo'] = ErroGoogle(
+        ..erros['carregarAmigo'] = PedidoSuperado(
           'O carregamento dos dados do amigo foi cancelado.',
         );
       final (e, _, _) = await _criar(servicos: s);
@@ -266,10 +271,138 @@ void main() {
       expect(e.avisos, isEmpty); // a falha da verificação não vira aviso
     });
 
-    test('falha ao iniciar os serviços vira aviso', () async {
+    test('falha ao iniciar os serviços vira falha de inicialização', () async {
       final s = ServicosFalsos()..erros['iniciar'] = StateError('x');
+      final (e, _, p) = await _criar(servicos: s);
+      expect(e.falhaInicial, contains('StateError'));
+      expect(e.falhaInicial, isNot(contains('Exception:')));
+      expect(e.carregando, isFalse);
+      expect(e.avisos, isEmpty);
+      expect(p.notificacoesIniciadas, 0);
+      // tentar de novo funciona e roda o resto uma vez
+      s.erros.remove('iniciar');
+      await e.iniciar();
+      expect(e.falhaInicial, isNull);
+      expect(e.mes, '2026-10');
+      await e.iniciar();
+      expect(p.notificacoesIniciadas, 1);
+    });
+
+    test('carregando até o estado inicial chegar', () async {
+      final s = ServicosFalsos();
+      final e = EstadoApp(s, PlataformaFalsa());
+      addTearDown(e.dispose);
+      expect(e.carregando, isTrue);
+      await e.iniciar();
+      expect(e.carregando, isFalse);
+    });
+
+    test('PedidoSuperado atravessa o isolate com o tipo', () async {
+      await expectLater(
+        Isolate.run<void>(() => throw PedidoSuperado('x foi cancelado.')),
+        throwsA(isA<PedidoSuperado>()),
+      );
+    });
+
+    test('definirNotificar não pede permissão se a gravação falhou', () async {
+      final s = ServicosFalsos()..erros['salvarPreferencias'] = StateError('x');
+      final p = PlataformaFalsa(windows: false);
+      final (e, _, _) = await _criar(servicos: s, plataforma: p);
+      p.pedidosPermissao = 0;
+      await e.definirNotificar(true);
+      expect(p.pedidosPermissao, 0);
+      s.erros.clear();
+      await e.definirNotificar(true);
+      expect(p.pedidosPermissao, 1);
+    });
+
+    test('sair da conta com amigo ativo volta aos meus dados', () async {
+      final s = ServicosFalsos()
+        ..estadoConta = const EstadoConta(email: 'ana@gmail.com');
       final (e, _, _) = await _criar(servicos: s);
-      expect(e.avisos.single.texto, 'Erro inesperado: StateError');
+      await e.trocarVisao('bia@gmail.com');
+      e.trocarMes('2026-08');
+      final antes = e.versaoDados;
+      s.estadoConta = const EstadoConta();
+      s.eventosFalsos.add(const EventoConta(EstadoConta()));
+      await _soltar();
+      expect(e.amigo, isNull);
+      expect(e.carregandoAmigo, isFalse);
+      expect(e.mes, s.mesAberto);
+      expect(e.versaoDados, greaterThan(antes));
+    });
+
+    test('remover o amigo aberto volta aos meus dados', () async {
+      final s = ServicosFalsos()
+        ..estadoConta = const EstadoConta(email: 'ana@gmail.com')
+        ..listaAmigos = [Amigo(email: 'bia@gmail.com', desde: '2026-10-01')];
+      final (e, _, _) = await _criar(servicos: s);
+      await e.trocarVisao('bia@gmail.com');
+      s.eventosFalsos.add(const EventoDadosMudaram());
+      await _soltar();
+      expect(e.amigo, 'bia@gmail.com'); // ainda é amigo: continua
+      s.listaAmigos = [];
+      s.eventosFalsos.add(const EventoDadosMudaram());
+      await _soltar();
+      expect(e.amigo, isNull);
+      expect(e.mes, s.mesAberto);
+    });
+
+    test('carregamento em voo não recoloca o amigo depois de sair', () async {
+      final s = _AmigoLento()
+        ..estadoConta = const EstadoConta(email: 'ana@gmail.com');
+      final (e, _, _) = await _criar(servicos: s);
+      final pronto = e.trocarVisao('bia@gmail.com');
+      expect(e.carregandoAmigo, isTrue);
+      s.estadoConta = const EstadoConta();
+      s.eventosFalsos.add(const EventoConta(EstadoConta()));
+      await _soltar();
+      expect(e.carregandoAmigo, isFalse);
+      s.resposta.complete(
+        const ResumoAmigo(
+          email: 'bia@gmail.com',
+          meses: ['2026-08'],
+          mesInicial: '2026-08',
+        ),
+      );
+      await pronto;
+      expect(e.amigo, isNull);
+      expect(e.mes, s.mesAberto);
+    });
+
+    test('trocarVisao(null) superado não aplica o mês antigo', () async {
+      final s = _MesLento()
+        ..estadoConta = const EstadoConta(email: 'ana@gmail.com');
+      final (e, _, _) = await _criar(servicos: s);
+      await e.trocarVisao('bia@gmail.com');
+      s.travar = true;
+      final volta = e.trocarVisao(null);
+      await _soltar();
+      s.travar = false;
+      await e.trocarVisao('bia@gmail.com'); // pedido novo supera o antigo
+      s.mesPendente.completeError(StateError('x'));
+      await volta;
+      expect(e.avisos, isEmpty);
+      expect(e.amigo, 'bia@gmail.com');
+    });
+
+    test('morte do isolate mostra serviços encerrados', () async {
+      final s = ServicosFalsos();
+      final (e, _, _) = await _criar(servicos: s);
+      expect(e.servicosEncerrados, isFalse);
+      await s.eventosFalsos.close();
+      await _soltar();
+      expect(e.servicosEncerrados, isTrue);
+    });
+
+    test('encerrar normal não marca serviços encerrados', () async {
+      final s = ServicosFalsos();
+      final (e, _, _) = await _criar(servicos: s);
+      await e.encerrar();
+      await s.eventosFalsos.close();
+      await _soltar();
+      expect(e.servicosEncerrados, isFalse);
+      expect(s.chamadas, contains('encerrar()'));
     });
 
     test('irPara muda a aba', () async {
@@ -320,5 +453,45 @@ void main() {
       );
       expect(textoErro(const ErroRemoto('Exception: y')), 'y');
     });
+
+    test(
+      'textoErro usa a mensagem de PlatformException e ProcessException',
+      () {
+        expect(
+          textoErro(PlatformException(code: 'c', message: 'Sem permissão')),
+          'Sem permissão',
+        );
+        expect(textoErro(PlatformException(code: 'sem_msg')), 'sem_msg');
+        final t = textoErro(
+          ProcessException('instalador.exe', [], 'acesso negado'),
+        );
+        expect(t, contains('instalador.exe'));
+        expect(t, contains('acesso negado'));
+        expect(t, isNot(contains('Exception')));
+      },
+    );
+
+    test('textoErro traduz o StateError de serviços encerrados', () {
+      expect(
+        textoErro(StateError(msgServicosEncerrados)),
+        'Os serviços do app foram encerrados. Feche e abra o app de novo.',
+      );
+    });
   });
+}
+
+class _AmigoLento extends ServicosFalsos {
+  final Completer<ResumoAmigo> resposta = Completer<ResumoAmigo>();
+
+  @override
+  Future<ResumoAmigo> carregarAmigo(String email) => resposta.future;
+}
+
+class _MesLento extends ServicosFalsos {
+  bool travar = false;
+  final Completer<String> mesPendente = Completer<String>();
+
+  @override
+  Future<String> mesInicial({String? amigo}) =>
+      travar ? mesPendente.future : super.mesInicial(amigo: amigo);
 }
