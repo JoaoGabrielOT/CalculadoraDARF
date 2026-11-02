@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:calculadoradarf/app/app.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
+import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
@@ -59,6 +60,41 @@ void main() {
     await t.pump();
     expect(find.text('Calculadora DARF'), findsWidgets);
     expect(s.chamadas, contains('iniciar()'));
+  });
+
+  testWidgets('o primeiro quadro já usa o tema gravado', (t) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final s = ServicosFalsos()
+      ..estadoInicial = const EstadoInicial(
+        mesInicial: '2026-10',
+        mesesComDados: ['2026-10'],
+        preferencias: Preferencias(tema: TemaVisual.terminal),
+      );
+    await iniciarApp(servicos: s, plataforma: PlataformaFalsa());
+    await t.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(_cores(t).destaque, const Color(0xFF2EA043)); // Terminal
+    expect(s.chamadas.where((c) => c == 'iniciar()'), hasLength(1));
+  });
+
+  testWidgets('servicos.iniciar() que falha abre a tela de falha', (t) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final s = ServicosFalsos()..erros['iniciar'] = Exception('disco cheio');
+    await iniciarApp(servicos: s, plataforma: PlataformaFalsa());
+    await t.pump();
+    expect(find.textContaining('disco cheio'), findsOneWidget);
+    expect(find.textContaining('Exception'), findsNothing);
+    s.erros.clear();
+    await t.tap(find.text('Tentar de novo'));
+    await t.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byType(Casca), findsOneWidget);
   });
 
   testWidgets('falha ao subir os serviços mostra o motivo', (t) async {

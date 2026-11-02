@@ -67,7 +67,12 @@ class EstadoApp extends ChangeNotifier {
 
   bool _iniciado = false;
   bool _iniciando = false;
-  bool _encerrandoNormal = false;
+  bool _inicialAplicado = false;
+  bool _conferindo = false;
+  bool _reconferir = false;
+
+  /// E-mail do amigo cuja carga está em voo.
+  String? _pedido;
   bool _descartado = false;
   bool _avisouNotificacao = false;
   int _geracaoVisao = 0;
@@ -92,27 +97,24 @@ class EstadoApp extends ChangeNotifier {
   Future<void> iniciar() async {
     if (_iniciado || _iniciando) return;
     _iniciando = true;
-    if (falhaInicial != null || !carregando) {
-      falhaInicial = null;
-      carregando = true;
-      notifyListeners();
-    }
-    try {
-      final inicial = await _servicos.iniciar();
-      preferencias = inicial.preferencias;
-      mes = inicial.mesInicial;
-      erroConfig = inicial.erroConfig;
-    } catch (e) {
-      falhaInicial = textoFalha(e);
-      carregando = false;
-      _iniciando = false;
-      notifyListeners();
-      return;
+    if (!_inicialAplicado) {
+      if (falhaInicial != null) {
+        falhaInicial = null;
+        carregando = true;
+        notifyListeners();
+      }
+      try {
+        aplicarInicial(await _servicos.iniciar());
+      } catch (e) {
+        falhaInicial = textoFalha(e);
+        carregando = false;
+        _iniciando = false;
+        notifyListeners();
+        return;
+      }
     }
     _iniciado = true;
     _iniciando = false;
-    carregando = false;
-    notifyListeners();
     await Future.wait([
       _atualizarConta(),
       atualizarSaldo(),
@@ -123,14 +125,23 @@ class EstadoApp extends ChangeNotifier {
     unawaited(_verificarAtualizacao());
   }
 
-  /// Encerramento pedido pelo app: não mostra a faixa de serviços encerrados.
-  Future<void> encerrar() {
-    _encerrandoNormal = true;
-    return _servicos.encerrar();
+  /// Aplica o resultado de `servicos.iniciar()`. `iniciarApp` chama antes do
+  /// `runApp`, para o primeiro quadro já sair com o tema gravado; nesse caso
+  /// [iniciar] não chama os serviços de novo.
+  void aplicarInicial(EstadoInicial inicial) {
+    preferencias = inicial.preferencias;
+    mes = inicial.mesInicial;
+    erroConfig = inicial.erroConfig;
+    falhaInicial = null;
+    carregando = false;
+    _inicialAplicado = true;
+    notifyListeners();
   }
 
+  /// O fim do stream sem o app ter descartado o estado é a morte do isolate
+  /// (o app não tem encerramento normal que feche o stream antes).
   void _aoFecharEventos() {
-    if (_encerrandoNormal || _descartado) return;
+    if (_descartado) return;
     servicosEncerrados = true;
     notifyListeners();
   }
@@ -204,6 +215,7 @@ class EstadoApp extends ChangeNotifier {
     if (email == null) {
       carregandoAmigo = false;
       try {
+        _pedido = null;
         await _servicos.esquecerAmigo();
         final inicial = await _servicos.mesInicial();
         if (geracao != _geracaoVisao) return;
@@ -217,6 +229,7 @@ class EstadoApp extends ChangeNotifier {
       return;
     }
     carregandoAmigo = true;
+    _pedido = email;
     notifyListeners();
     try {
       final resumo = await _servicos.carregarAmigo(email);
@@ -227,6 +240,7 @@ class EstadoApp extends ChangeNotifier {
       if (geracao != _geracaoVisao) return;
       if (!_superado(e)) avisar('Não foi possível carregar', textoErro(e));
     }
+    _pedido = null;
     carregandoAmigo = false;
     notifyListeners();
   }
@@ -235,15 +249,33 @@ class EstadoApp extends ChangeNotifier {
 
   /// O serviço já limpou o amigo quando o usuário sai da conta ou o remove:
   /// aqui a visão acompanha, invalidando qualquer pedido em voo.
+  /// Conferências simultâneas viram uma só mais uma repetição.
   Future<void> _conferirVisao() async {
-    if (amigo == null && !carregandoAmigo) return;
+    if (_conferindo) {
+      _reconferir = true;
+      return;
+    }
+    _conferindo = true;
     try {
-      final email = (await _servicos.conta()).email;
-      var sumiu = email == null;
-      final aberto = amigo;
-      if (!sumiu && aberto != null) {
-        sumiu = !(await _servicos.amigos()).any((a) => a.email == aberto);
+      do {
+        _reconferir = false;
+        await _conferirUmaVez();
+      } while (_reconferir);
+    } finally {
+      _conferindo = false;
+    }
+  }
+
+  Future<void> _conferirUmaVez() async {
+    final alvo = amigo ?? _pedido;
+    if (alvo == null) return;
+    final geracao = _geracaoVisao;
+    try {
+      var sumiu = conta.email == null;
+      if (!sumiu) {
+        sumiu = !(await _servicos.amigos()).any((a) => a.email == alvo);
       }
+      if (geracao != _geracaoVisao) return;
       if (sumiu) await _voltarAosMeus();
     } catch (_) {
       // sem como conferir: o próximo evento tenta de novo
@@ -253,6 +285,7 @@ class EstadoApp extends ChangeNotifier {
   Future<void> _voltarAosMeus() async {
     final geracao = ++_geracaoVisao;
     amigo = null;
+    _pedido = null;
     carregandoAmigo = false;
     versaoDados++;
     notifyListeners();

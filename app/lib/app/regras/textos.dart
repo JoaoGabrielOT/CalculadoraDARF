@@ -62,8 +62,10 @@ String textoErro(Object e) {
   // PlatformException (flutter/services) e ProcessException (dart:io) não
   // podem ser importadas aqui: reconhecidas pelo nome do tipo.
   final plataforma = switch (nome) {
-    'PlatformException' =>
-      _campo(() => (e as dynamic).message) ?? _campo(() => (e as dynamic).code),
+    'PlatformException' => _primeiroTexto([
+      _campo(() => (e as dynamic).message),
+      _campo(() => (e as dynamic).code),
+    ]),
     'ProcessException' => _textoProcesso(e),
     _ => null,
   };
@@ -71,6 +73,13 @@ String textoErro(Object e) {
     return semPrefixoException(plataforma);
   }
   return 'Erro inesperado: $nome';
+}
+
+String? _primeiroTexto(List<String?> opcoes) {
+  for (final o in opcoes) {
+    if (o != null && o.isNotEmpty) return o;
+  }
+  return null;
 }
 
 String? _campo(Object? Function() ler) {
@@ -95,5 +104,5 @@ String? _textoProcesso(Object e) {
 String textoFalha(Object e) {
   final t = textoErro(e);
   if (!t.startsWith('Erro inesperado: ')) return t;
-  return '$t (${semPrefixoException(e.toString())})';
+  return semPrefixoException(e.toString());
 }

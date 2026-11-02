@@ -41,14 +41,24 @@ Future<void> iniciarApp({
   registrarLicencaRoboto();
   final plat = plataforma ?? PlataformaReal();
   Future<void> abrir() async {
+    ServicosApp? serv;
+    EstadoApp? estado;
     try {
-      final serv = servicos ?? await (criarServicos ?? _criarServicos)(plat);
+      serv = servicos ?? await (criarServicos ?? _criarServicos)(plat);
       // O estado assina os eventos já no construtor: o proxy só guarda os 256
       // últimos até a primeira assinatura.
-      final estado = EstadoApp(serv, plat);
+      estado = EstadoApp(serv, plat);
+      // O estado inicial chega antes do primeiro quadro: ele já sai com o
+      // tema gravado, sem passar pelo padrão.
+      estado.aplicarInicial(await serv.iniciar());
       runApp(AppCalculadora(servicos: serv, plataforma: plat, estado: estado));
       unawaited(estado.iniciar());
     } catch (e) {
+      estado?.dispose();
+      if (servicos == null && serv != null) {
+        // serviços criados por esta tentativa: não ficam isolates órfãos
+        unawaited(serv.encerrar().catchError((Object _) {}));
+      }
       runApp(AppFalhaInicial(textoFalha(e), aoTentar: abrir));
     }
   }

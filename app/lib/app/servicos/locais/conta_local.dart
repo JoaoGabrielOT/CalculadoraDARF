@@ -60,6 +60,10 @@ class ContaLocal {
 
   /// Aumenta a cada pedido de amigo e a cada limpeza: só o último vale.
   int _geracaoAmigo = 0;
+
+  /// Amigo cuja carga está em voo (ainda não há `_amigo`) e a geração dela.
+  String? _emVoo;
+  int _geracaoEmVoo = 0;
   bool _ocupadoEmitido = false;
 
   /// Dados do amigo carregado (somente leitura).
@@ -231,8 +235,11 @@ class ContaLocal {
     ];
     _repo.gravarConfig(cfg);
     agendar();
-    if (_amigo?.email == email) {
+    final carregando = _emVoo == email;
+    if (_amigo?.email == email || carregando) {
+      // a carga em voo, se houver, termina como pedido superado
       limparAmigo();
+      _emVoo = null;
       _emitir(const EventoDadosMudaram());
     }
   }
@@ -245,7 +252,14 @@ class ContaLocal {
       );
     }
     final geracao = ++_geracaoAmigo;
-    final dados = await _sync.lerAmigo(email);
+    _emVoo = email;
+    _geracaoEmVoo = geracao;
+    final DadosPlanilha dados;
+    try {
+      dados = await _sync.lerAmigo(email);
+    } finally {
+      if (_geracaoEmVoo == geracao) _emVoo = null;
+    }
     if (geracao != _geracaoAmigo || _conta.email != minha) {
       // vale o último pedido; sair ou novo login durante a rede descarta
       throw PedidoSuperado('O carregamento dos dados do amigo foi cancelado.');

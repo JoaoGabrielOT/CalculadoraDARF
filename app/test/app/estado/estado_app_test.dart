@@ -274,7 +274,7 @@ void main() {
     test('falha ao iniciar os serviços vira falha de inicialização', () async {
       final s = ServicosFalsos()..erros['iniciar'] = StateError('x');
       final (e, _, p) = await _criar(servicos: s);
-      expect(e.falhaInicial, contains('StateError'));
+      expect(e.falhaInicial, 'Bad state: x');
       expect(e.falhaInicial, isNot(contains('Exception:')));
       expect(e.carregando, isFalse);
       expect(e.avisos, isEmpty);
@@ -354,6 +354,7 @@ void main() {
       final (e, _, _) = await _criar(servicos: s);
       final pronto = e.trocarVisao('bia@gmail.com');
       expect(e.carregandoAmigo, isTrue);
+      e.trocarMes('2026-08');
       s.estadoConta = const EstadoConta();
       s.eventosFalsos.add(const EventoConta(EstadoConta()));
       await _soltar();
@@ -386,6 +387,73 @@ void main() {
       expect(e.amigo, 'bia@gmail.com');
     });
 
+    test('remover o amigo durante a carga não recoloca o amigo', () async {
+      final s = _AmigoLento()
+        ..estadoConta = const EstadoConta(email: 'ana@gmail.com')
+        ..listaAmigos = [Amigo(email: 'bia@gmail.com', desde: '2026-10-01')];
+      final (e, _, _) = await _criar(servicos: s);
+      final pronto = e.trocarVisao('bia@gmail.com');
+      e.trocarMes('2026-08');
+      s.eventosFalsos.add(const EventoDadosMudaram());
+      await _soltar();
+      expect(e.carregandoAmigo, isTrue); // ainda é amigo: a carga segue
+      s.listaAmigos = [];
+      s.eventosFalsos.add(const EventoDadosMudaram());
+      await _soltar();
+      expect(e.amigo, isNull);
+      expect(e.carregandoAmigo, isFalse);
+      expect(e.mes, s.mesAberto);
+      s.resposta.complete(
+        const ResumoAmigo(
+          email: 'bia@gmail.com',
+          meses: ['2026-08'],
+          mesInicial: '2026-08',
+        ),
+      );
+      await pronto;
+      expect(e.amigo, isNull);
+      expect(e.carregandoAmigo, isFalse);
+    });
+
+    test('eventos seguidos conferem a visão uma vez e mais uma', () async {
+      final s = _AmigosLentos()
+        ..estadoConta = const EstadoConta(email: 'ana@gmail.com')
+        ..listaAmigos = [Amigo(email: 'bia@gmail.com', desde: '2026-10-01')];
+      final (e, _, _) = await _criar(servicos: s);
+      await e.trocarVisao('bia@gmail.com');
+      s.chamadas.clear();
+      for (var i = 0; i < 5; i++) {
+        s.eventosFalsos.add(const EventoDadosMudaram());
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(
+        s.chamadas.where((c) => c.startsWith('amigos(')).length,
+        lessThan(3),
+      );
+      expect(e.amigo, 'bia@gmail.com');
+    });
+
+    test('aplicarInicial evita um segundo servicos.iniciar()', () async {
+      final s = ServicosFalsos();
+      final p = PlataformaFalsa();
+      final e = EstadoApp(s, p);
+      addTearDown(e.dispose);
+      e.aplicarInicial(
+        const EstadoInicial(
+          mesInicial: '2026-09',
+          mesesComDados: ['2026-09'],
+          preferencias: Preferencias(tema: TemaVisual.terminal),
+        ),
+      );
+      expect(e.carregando, isFalse);
+      expect(e.preferencias.tema, TemaVisual.terminal);
+      await e.iniciar();
+      await e.iniciar();
+      expect(s.chamadas.where((c) => c == 'iniciar()'), isEmpty);
+      expect(p.notificacoesIniciadas, 1);
+      expect(e.mes, '2026-09');
+    });
+
     test('morte do isolate mostra serviços encerrados', () async {
       final s = ServicosFalsos();
       final (e, _, _) = await _criar(servicos: s);
@@ -393,16 +461,6 @@ void main() {
       await s.eventosFalsos.close();
       await _soltar();
       expect(e.servicosEncerrados, isTrue);
-    });
-
-    test('encerrar normal não marca serviços encerrados', () async {
-      final s = ServicosFalsos();
-      final (e, _, _) = await _criar(servicos: s);
-      await e.encerrar();
-      await s.eventosFalsos.close();
-      await _soltar();
-      expect(e.servicosEncerrados, isFalse);
-      expect(s.chamadas, contains('encerrar()'));
     });
 
     test('irPara muda a aba', () async {
@@ -462,6 +520,10 @@ void main() {
           'Sem permissão',
         );
         expect(textoErro(PlatformException(code: 'sem_msg')), 'sem_msg');
+        expect(
+          textoErro(PlatformException(code: 'vazio', message: '')),
+          'vazio',
+        );
         final t = textoErro(
           ProcessException('instalador.exe', [], 'acesso negado'),
         );
@@ -470,6 +532,11 @@ void main() {
         expect(t, isNot(contains('Exception')));
       },
     );
+
+    test('textoFalha mostra só o texto da exceção', () {
+      expect(textoFalha(Exception('x')), 'x');
+      expect(textoFalha(ErroValidacao('Informe.')), 'Informe.');
+    });
 
     test('textoErro traduz o StateError de serviços encerrados', () {
       expect(
@@ -494,4 +561,12 @@ class _MesLento extends ServicosFalsos {
   @override
   Future<String> mesInicial({String? amigo}) =>
       travar ? mesPendente.future : super.mesInicial(amigo: amigo);
+}
+
+class _AmigosLentos extends ServicosFalsos {
+  @override
+  Future<List<Amigo>> amigos() async {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    return super.amigos();
+  }
 }
