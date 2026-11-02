@@ -71,8 +71,8 @@ Validacao<NovaCompra> validarCompra({
 /// Venda digitada (calculadora_darf.py:505-533). [inicioMes] é o primeiro dia
 /// do mês aberto; [permitida] diz se a data cabe no mês aberto ou em mês
 /// anterior que aceita venda retroativa; [reservado] é a quantidade da compra
-/// presa em metas. Ao editar, a data nunca é de mês anterior (a data deixa de
-/// ser permitida), então as regras de venda retroativa não valem.
+/// presa em metas. Ao editar, data de mês anterior é inválida
+/// (calculadora_darf.py:435-444); só uma venda nova pode ser retroativa.
 Validacao<NovaVenda> validarVenda({
   required Lote? lote,
   required String? data,
@@ -89,7 +89,9 @@ Validacao<NovaVenda> validarVenda({
   if (data == null || data.isEmpty) {
     return const Invalido('Selecione a data da venda.');
   }
-  if (!permitida || data.compareTo(lote.dataCompra) < 0) {
+  if (!permitida ||
+      (editando && data.compareTo(inicioMes) < 0) ||
+      data.compareTo(lote.dataCompra) < 0) {
     return const Invalido('Data da venda inválida para essa compra.');
   }
   final int q;
@@ -106,7 +108,7 @@ Validacao<NovaVenda> validarVenda({
   } on FormatException {
     return const Invalido('Preço inválido.');
   }
-  if (!editando && data.compareTo(inicioMes) < 0) {
+  if (data.compareTo(inicioMes) < 0) {
     if (lote.vendas.isNotEmpty) {
       return const Invalido(
         'Essa compra já tem venda neste mês. Para registrar uma venda de mês '

@@ -281,7 +281,7 @@ void main() {
       expect(erro(vender(lote: lote(), qtd: '100', reservado: 100)), isNull);
     });
 
-    test('editando: as regras de mês anterior não se aplicam', () {
+    test('editando: data de mês anterior é inválida (py:435-444)', () {
       final l = lote(
         dataCompra: '2026-02-10',
         vendas: [venda(10, '2026-03-05')],
@@ -290,8 +290,9 @@ void main() {
         erro(
           vender(lote: l, data: '2026-02-20', reservado: 90, editando: true),
         ),
-        isNull,
+        'Data da venda inválida para essa compra.',
       );
+      expect(erro(vender(lote: l, data: '2026-03-05', editando: true)), isNull);
     });
   });
 
