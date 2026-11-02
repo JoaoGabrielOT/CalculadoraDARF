@@ -51,6 +51,20 @@ class ServicosFalsos implements ServicosApp {
   /// Idem para `reservadoEmMetas`.
   Future<void>? esperaReserva;
 
+  /// Quando preenchido, `carregarMes` responde por ele (para deixar o
+  /// `Future` pendente).
+  Future<VisaoMes> Function(String mes, String? amigo)? carregarMesFn;
+
+  /// Resposta de `registrarCompra` no lugar da visão do mês (traz o lote novo).
+  VisaoMes? visaoAposCompra;
+
+  /// Resposta de `prepararFechamento`; [preparoFn] tem precedência.
+  PreparoFechamento? preparo;
+  Future<PreparoFechamento> Function(String mes)? preparoFn;
+
+  /// Quantas metas ativas `metas()` informa.
+  int metasAtivasFalsas = 0;
+
   Future<T> _segurar<T>(Future<T> resposta, Future<void>? espera) async {
     if (espera != null) await espera;
     return resposta;
@@ -110,8 +124,24 @@ class ServicosFalsos implements ServicosApp {
       _chamar('mesInicial', [amigo], () => mesAberto);
 
   @override
-  Future<VisaoMes> carregarMes(String mes, {String? amigo}) =>
-      _chamar('carregarMes', [mes, amigo], () => _visao(mes));
+  Future<VisaoMes> carregarMes(String mes, {String? amigo}) {
+    final fn = carregarMesFn;
+    if (fn != null) {
+      chamadas.add('carregarMes($mes, $amigo)');
+      return fn(mes, amigo);
+    }
+    return _chamar('carregarMes', [mes, amigo], () {
+      final v = _visao(mes);
+      if (amigo == null || v.amigo == amigo) return v;
+      return VisaoMes(
+        mes: v.mes,
+        dados: v.dados,
+        apuracao: v.apuracao,
+        amigo: amigo,
+        erroLeitura: v.erroLeitura,
+      );
+    });
+  }
 
   @override
   Future<SugestoesTicker> sugestoesTicker(
@@ -123,7 +153,7 @@ class ServicosFalsos implements ServicosApp {
   Future<VisaoMes> registrarCompra(String mes, NovaCompra c) => _segurar(
     _chamar('registrarCompra', [mes, c.ticker], () {
       ultimaCompra = c;
-      return _visao(mes);
+      return visaoAposCompra ?? _visao(mes);
     }),
     esperaGravacao,
   );
@@ -184,6 +214,30 @@ class ServicosFalsos implements ServicosApp {
   Future<int> reservadoEmMetas(String loteId) => _segurar(
     _chamar('reservadoEmMetas', [loteId], () => reservadoMetas),
     esperaReserva,
+  );
+
+  @override
+  Future<PreparoFechamento> prepararFechamento(String mes) {
+    final fn = preparoFn;
+    if (fn != null) {
+      chamadas.add('prepararFechamento($mes)');
+      return fn(mes);
+    }
+    return _chamar('prepararFechamento', [
+      mes,
+    ], () => preparo ?? PreparoFechamento());
+  }
+
+  @override
+  Future<VisaoMetas> metas() => _chamar(
+    'metas',
+    [],
+    () => VisaoMetas(
+      metas: [],
+      descricoes: {},
+      lotes: [],
+      ativas: metasAtivasFalsas,
+    ),
   );
 
   @override

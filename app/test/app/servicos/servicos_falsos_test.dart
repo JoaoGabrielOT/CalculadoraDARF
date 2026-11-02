@@ -39,8 +39,8 @@ void main() {
       f.eventosFalsos.add(const EventoDadosMudaram());
       await Future<void>.delayed(Duration.zero);
       expect(recebidos.single, isA<EventoDadosMudaram>());
-      await expectLater(f.metas(), throwsA(isA<UnimplementedError>()));
-      expect(f.chamadas, ['metas()']);
+      await expectLater(f.radar(), throwsA(isA<UnimplementedError>()));
+      expect(f.chamadas, ['radar()']);
     },
   );
 
