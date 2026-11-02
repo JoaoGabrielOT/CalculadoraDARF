@@ -38,6 +38,16 @@ class ServicosFalsos implements ServicosApp {
     tipos: {'PETR4': 'Ação', 'VALE3': 'Ação'},
   );
   VendaRegistrada? vendaRegistrada;
+
+  /// Últimos argumentos recebidos pelas gravações, para os testes conferirem.
+  NovaCompra? ultimaCompra;
+  NovaVenda? ultimaVenda;
+  ({ModoSaldo modo, double valor})? ultimoSaldo;
+
+  /// Resposta de `precoVenda`; nula = falha. [precoVendaFn] tem precedência
+  /// (para deixar o `Future` pendente).
+  (double, String)? precoVendaResp;
+  Future<(double, String)> Function(String ticker, String dia)? precoVendaFn;
   Fechamento? fechamento;
   Set<String> semVendaRetroativa = {};
   int reservadoMetas = 0;
@@ -99,26 +109,35 @@ class ServicosFalsos implements ServicosApp {
 
   @override
   Future<VisaoMes> registrarCompra(String mes, NovaCompra c) =>
-      _chamar('registrarCompra', [mes, c.ticker], () => _visao(mes));
+      _chamar('registrarCompra', [mes, c.ticker], () {
+        ultimaCompra = c;
+        return _visao(mes);
+      });
 
   @override
   Future<VisaoMes> editarCompra(String mes, String loteId, NovaCompra c) =>
-      _chamar('editarCompra', [mes, loteId, c.ticker], () => _visao(mes));
+      _chamar('editarCompra', [mes, loteId, c.ticker], () {
+        ultimaCompra = c;
+        return _visao(mes);
+      });
 
   @override
   Future<VisaoMes> excluirCompra(String mes, String loteId) =>
       _chamar('excluirCompra', [mes, loteId], () => _visao(mes));
 
   @override
-  Future<VendaRegistrada> registrarVenda(String mes, NovaVenda v) => _chamar(
-    'registrarVenda',
-    [mes, v.loteId, v.data, v.qtd],
-    () => vendaRegistrada ?? VendaRegistrada(visao: _visao(mes)),
-  );
+  Future<VendaRegistrada> registrarVenda(String mes, NovaVenda v) =>
+      _chamar('registrarVenda', [mes, v.loteId, v.data, v.qtd], () {
+        ultimaVenda = v;
+        return vendaRegistrada ?? VendaRegistrada(visao: _visao(mes));
+      });
 
   @override
   Future<VisaoMes> editarVenda(String mes, String vendaId, NovaVenda v) =>
-      _chamar('editarVenda', [mes, vendaId, v.data, v.qtd], () => _visao(mes));
+      _chamar('editarVenda', [mes, vendaId, v.data, v.qtd], () {
+        ultimaVenda = v;
+        return _visao(mes);
+      });
 
   @override
   Future<VisaoMes> excluirVenda(String mes, String vendaId) =>
@@ -127,6 +146,17 @@ class ServicosFalsos implements ServicosApp {
   @override
   Future<Set<String>> mesesSemVendaRetroativa(String mesAtual) =>
       _chamar('mesesSemVendaRetroativa', [mesAtual], () => semVendaRetroativa);
+
+  @override
+  Future<(double, String)> precoVenda(String ticker, String dia) {
+    chamadas.add('precoVenda($ticker, $dia)');
+    final erro = erros['precoVenda'];
+    if (erro != null) return Future.error(erro);
+    final fn = precoVendaFn;
+    if (fn != null) return fn(ticker, dia);
+    final r = precoVendaResp;
+    return r == null ? Future.error(Exception('sem cotação')) : Future.value(r);
+  }
 
   @override
   Future<int> reservadoEmMetas(String loteId) =>
@@ -146,11 +176,11 @@ class ServicosFalsos implements ServicosApp {
       _chamar('caixa', [amigo], () => visaoCaixa ?? caixaExemplo());
 
   @override
-  Future<VisaoCaixa> alterarSaldo(ModoSaldo modo, double valor) => _chamar(
-    'alterarSaldo',
-    [modo.name, valor],
-    () => visaoCaixa ?? caixaExemplo(),
-  );
+  Future<VisaoCaixa> alterarSaldo(ModoSaldo modo, double valor) =>
+      _chamar('alterarSaldo', [modo.name, valor], () {
+        ultimoSaldo = (modo: modo, valor: valor);
+        return visaoCaixa ?? caixaExemplo();
+      });
 
   // conta, sincronização e amigos
   EstadoConta estadoConta = const EstadoConta();

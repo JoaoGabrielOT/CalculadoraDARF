@@ -244,8 +244,11 @@ List<String> violacoesImportsProibidosNaUi(Map<String, String> arquivos) {
 }
 
 /// Plugins (e `package:flutter/services.dart`) só em plataforma/, salvo os
-/// arquivos da lista explícita (HapticFeedback/Clipboard em telas): vazia por ora.
-const List<String> excecoesServices = [];
+/// arquivos da lista explícita (HapticFeedback/Clipboard em telas). Os
+/// formulários usam só `LogicalKeyboardKey` (Enter salva, Esc cancela).
+const List<String> excecoesServices = [
+  'lib/app/telas/formularios/abrir_formulario.dart',
+];
 
 List<String> violacoesPluginsForaDePlataforma(
   Map<String, String> arquivos, {
