@@ -21,12 +21,6 @@ import 'tema/temas.dart';
 import 'tema/tema_visual.dart';
 import '../integracoes/integracoes.dart';
 
-/// Largura lógica a partir da qual o app usa o layout de PC.
-const larguraExpandida = 840.0;
-
-bool expandido(BuildContext context) =>
-    MediaQuery.sizeOf(context).width >= larguraExpandida;
-
 /// Raiz capturável (imagem da tela, usada pelos goldens e pela captura).
 final chaveCaptura = GlobalKey();
 

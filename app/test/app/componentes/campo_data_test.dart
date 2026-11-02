@@ -144,6 +144,18 @@ void main() {
     expect(valor, '2000-01-01');
   });
 
+  testWidgets('CampoData: desmontar com o foco no campo não dá erro', (
+    t,
+  ) async {
+    await montarComponente(t, CampoData(aoMudar: (_) {}));
+    await t.enterText(find.byType(TextField), '12/1');
+    await t.pump();
+    expect(FocusManager.instance.primaryFocus, isNotNull);
+    await montarComponente(t, const SizedBox());
+    await t.pump();
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('CampoData: calendário respeita os dias permitidos', (t) async {
     String? valor;
     await montarComponente(

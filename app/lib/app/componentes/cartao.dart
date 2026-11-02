@@ -3,7 +3,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../app.dart' show expandido;
+import '../tema/layout.dart';
 import '../tema/cores_app.dart';
 
 /// Fundo do chip comum: no tema Moderno o token é translúcido.

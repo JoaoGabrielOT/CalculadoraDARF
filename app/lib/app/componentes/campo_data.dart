@@ -48,6 +48,8 @@ class _CampoDataState extends State<CampoData> {
 
   @override
   void dispose() {
+    // Sem o ouvinte, perder o foco ao desmontar não chama setState.
+    _foco.removeListener(_aoMudarFoco);
     _foco.dispose();
     _texto.dispose();
     super.dispose();

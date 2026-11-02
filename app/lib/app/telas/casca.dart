@@ -8,10 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../integracoes/integracoes.dart';
-import '../app.dart';
 import '../estado/estado_app.dart';
 import '../regras/textos.dart';
 import '../tema/cores_app.dart';
+import '../tema/layout.dart';
 import 'falha_inicial.dart';
 
 extension on Aba {

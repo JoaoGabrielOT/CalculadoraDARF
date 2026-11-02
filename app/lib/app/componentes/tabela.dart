@@ -39,9 +39,10 @@ int _flex(double largura) => math.max(1, (largura * 100).round());
 /// Tabela ordenável. Com altura limitada pelo pai, o corpo rola e é lazy
 /// (`ListView.builder`). Sem altura limitada, o corpo vira uma `Column` com
 /// todas as linhas, que NÃO é lazy: telas com muitas linhas devem limitar a
-/// altura (`Expanded`, `SizedBox`). A ordenação fica guardada enquanto a
-/// lista [linhas] (a mesma instância), a coluna e o sentido não mudam; ao
-/// trocar os dados, passe uma lista nova.
+/// altura (`Expanded`, `SizedBox`). A ordenação fica guardada com uma cópia
+/// das linhas e das chaves: só é refeita se a coluna, o sentido, algum
+/// elemento (por identidade) ou alguma chave mudar, então alterar a lista no
+/// lugar também funciona. Cada rebuild custa uma passada O(n) nas chaves.
 class Tabela<T> extends StatefulWidget {
   const Tabela({
     super.key,
@@ -66,7 +67,8 @@ class Tabela<T> extends StatefulWidget {
   /// [id] da linha selecionada; exige [id].
   final String? selecionado;
 
-  /// Identificador único de cada linha (Key e seleção). Sem ele nenhuma linha
+  /// Identificador único de cada linha (Key e seleção; repetido dá assert em
+  /// debug). Sem ele nenhuma linha
   /// é marcada e as Keys usam a posição.
   final String Function(T)? id;
 
@@ -78,10 +80,32 @@ class _TabelaState<T> extends State<Tabela<T>> {
   int? _coluna;
   bool _decrescente = false;
 
+  // Cache da ordenação: cópia das linhas e das chaves da última ordenação.
+  // Vale se a coluna, o sentido, os elementos (por identidade) e as chaves
+  // forem os mesmos; assim a lista alterada no lugar nunca serve dado velho.
   List<T>? _cacheLinhas;
+  List<Object?> _cacheChaves = const [];
   int? _cacheColuna;
   bool _cacheDecrescente = false;
   List<T> _cacheResultado = const [];
+
+  bool _cacheValido(int i, List<T> linhas, List<Object?> chaves) {
+    final antigas = _cacheLinhas;
+    if (antigas == null ||
+        _cacheColuna != i ||
+        _cacheDecrescente != _decrescente ||
+        antigas.length != linhas.length) {
+      return false;
+    }
+    for (var k = 0; k < linhas.length; k++) {
+      if (!identical(antigas[k], linhas[k])) return false;
+      final a = _cacheChaves[k];
+      final b = chaves[k];
+      final igual = a == b || (a is num && b is num && a.isNaN && b.isNaN);
+      if (!igual) return false;
+    }
+    return true;
+  }
 
   void _ordenarPor(int i) => setState(() {
     if (_coluna == i) {
@@ -97,13 +121,9 @@ class _TabelaState<T> extends State<Tabela<T>> {
     if (i == null || i >= widget.colunas.length) return widget.linhas;
     final chave = widget.colunas[i].chave;
     if (chave == null) return widget.linhas;
-    if (identical(_cacheLinhas, widget.linhas) &&
-        _cacheColuna == i &&
-        _cacheDecrescente == _decrescente) {
-      return _cacheResultado;
-    }
     final linhas = widget.linhas;
     final valores = [for (final l in linhas) chave(l)];
+    if (_cacheValido(i, linhas, valores)) return _cacheResultado;
     // Só números (e booleanos) ordenam como número, com ausente e NaN em
     // -infinito; qualquer outra mistura cai para a comparação de texto.
     final numerico = valores.every((v) => v == null || v is bool || v is num);
@@ -118,7 +138,8 @@ class _TabelaState<T> extends State<Tabela<T>> {
       }
       return [v == null ? '' : v.toString().toLowerCase()];
     }, reverso: _decrescente);
-    _cacheLinhas = linhas;
+    _cacheLinhas = List.of(linhas);
+    _cacheChaves = valores;
     _cacheColuna = i;
     _cacheDecrescente = _decrescente;
     return _cacheResultado = [for (final k in indices) linhas[k]];
@@ -134,6 +155,22 @@ class _TabelaState<T> extends State<Tabela<T>> {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
+    assert(() {
+      final ids = widget.id;
+      if (ids != null) {
+        final vistos = <String>{};
+        for (final l in widget.linhas) {
+          final id = ids(l);
+          if (!vistos.add(id)) {
+            throw AssertionError(
+              'Tabela: o id "$id" se repete; cada linha precisa de um id '
+              'único (Key e seleção).',
+            );
+          }
+        }
+      }
+      return true;
+    }());
     final linhas = _ordenadas();
     final cabecalho = Row(
       children: [

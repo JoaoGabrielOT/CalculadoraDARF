@@ -14,8 +14,9 @@ void main() {
     WidgetTester t, {
     String atual = '2026-10',
     Set<String> comDados = const {'2026-03'},
+    Size tamanho = const Size(800, 600),
   }) async {
-    await montarComponente(t, const SizedBox());
+    await montarComponente(t, const SizedBox(), tamanho: tamanho);
     final c = t.element(find.byType(SizedBox).first);
     return () =>
         escolherMes(c, atual: atual, comDados: comDados, maximo: '2026-10');
@@ -77,10 +78,16 @@ void main() {
     expect(await f, '2026-09');
   });
 
-  testWidgets('escolherMes: alvos de toque de 48 dp no celular', (t) async {
-    final abrir = await preparar(t);
+  testWidgets('escolherMes: alvos de toque de 48 dp em 360x800', (t) async {
+    final abrir = await preparar(t, tamanho: const Size(360, 800));
     unawaited(abrir());
     await t.pumpAndSettle();
+    expect(t.view.physicalSize, const Size(360, 800));
+    final celula = find.ancestor(
+      of: find.text('Jan'),
+      matching: find.byType(InkWell),
+    );
+    expect(t.getSize(celula.first).height, 48);
     await expectLater(t, meetsGuideline(androidTapTargetGuideline));
   });
 

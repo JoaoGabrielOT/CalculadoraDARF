@@ -96,6 +96,25 @@ void main() {
       expect(violacoesSort({'lib/app/a.dart': 'ordenadoPor(l, f);'}), isEmpty);
     });
 
+    test('componentes/ não importa a raiz app.dart', () {
+      expect(
+        violacoesComponenteImportaRaiz({
+          'lib/app/componentes/a.dart': "import '../app.dart' show expandido;",
+          'lib/app/componentes/b.dart':
+              "import 'package:calculadoradarf/app/app.dart';",
+        }),
+        hasLength(2),
+      );
+      expect(
+        violacoesComponenteImportaRaiz({
+          'lib/app/componentes/a.dart': "import '../tema/layout.dart';",
+          'lib/app/componentes/b.dart': "// import '../app.dart';",
+          'lib/app/telas/c.dart': "import '../app.dart';",
+        }),
+        isEmpty,
+      );
+    });
+
     test('nucleo e integracoes que importam app/ geram violação', () {
       expect(
         violacoesImportaApp({
@@ -147,6 +166,10 @@ void main() {
       expect(violacoesSort(app), isEmpty);
     });
 
+    test('componentes/ não importa a raiz app.dart', () {
+      expect(violacoesComponenteImportaRaiz(app), isEmpty);
+    });
+
     test('nucleo e integracoes não importam app/', () {
       expect(nucleo, isNotEmpty);
       expect(integracoes, isNotEmpty);
@@ -177,6 +200,22 @@ List<String> violacoesFlutterEmServicos(Map<String, String> arquivos) {
         caminho.endsWith('lib/app/tema/tema_visual.dart');
     if (alvo && _semComentarios(bruto).contains('package:flutter')) {
       violacoes.add('$caminho usa package:flutter');
+    }
+  });
+  return violacoes;
+}
+
+/// Componentes são folhas: nada de importar `app.dart` (a raiz importa as
+/// telas, que importam os componentes).
+List<String> violacoesComponenteImportaRaiz(Map<String, String> arquivos) {
+  final violacoes = <String>[];
+  arquivos.forEach((caminho, bruto) {
+    if (!_emPasta(caminho, 'componentes')) return;
+    for (final imp in _imports(bruto)) {
+      if (RegExp(r'''['"](\.\./app\.dart|package:calculadoradarf/app/app\.dart)['"]''')
+          .hasMatch(imp)) {
+        violacoes.add('$caminho importa app.dart');
+      }
     }
   });
   return violacoes;

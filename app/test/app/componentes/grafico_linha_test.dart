@@ -85,12 +85,21 @@ void main() {
 
   testWidgets('GraficoLinha: fica num RepaintBoundary próprio', (t) async {
     await montarComponente(t, grafico());
+    final fronteira = find.descendant(
+      of: find.byType(GraficoLinha),
+      matching: find.byType(RepaintBoundary),
+    );
+    expect(fronteira, findsOneWidget);
+    // O CustomPaint é o filho direto: só o gráfico repinta com o cursor.
     expect(
-      find.descendant(
-        of: find.byType(GraficoLinha),
-        matching: find.byType(RepaintBoundary),
+      find.ancestor(
+        of: find.descendant(
+          of: find.byType(GraficoLinha),
+          matching: find.byType(CustomPaint),
+        ),
+        matching: find.byWidget(t.widget(fronteira)),
       ),
-      findsWidgets,
+      findsOneWidget,
     );
   });
 
