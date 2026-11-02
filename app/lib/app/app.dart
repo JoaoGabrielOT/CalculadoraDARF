@@ -36,16 +36,23 @@ Future<void> iniciarApp({
   ServicosApp? servicos,
   Plataforma? plataforma,
   Future<ServicosApp> Function(Plataforma plataforma)? criarServicos,
+  Duration esperaEncerramento = const Duration(seconds: 5),
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
   registrarLicencaRoboto();
   final plat = plataforma ?? PlataformaReal();
   Future<void>? encerrando;
-  Future<void> abrir() async {
+  Future<void>? emCurso;
+
+  late final Future<void> Function() abrir;
+
+  Future<void> tentar() async {
     ServicosApp? serv;
     EstadoApp? estado;
     try {
-      await encerrando; // a tentativa anterior sai antes de criar outra
+      // a tentativa anterior sai antes de criar outra, sem prender o botão
+      // para sempre se o encerramento travar
+      await encerrando?.timeout(esperaEncerramento, onTimeout: () {});
       serv = servicos ?? await (criarServicos ?? _criarServicos)(plat);
       // O estado assina os eventos já no construtor: o proxy só guarda os 256
       // últimos até a primeira assinatura.
@@ -65,6 +72,9 @@ Future<void> iniciarApp({
     }
   }
 
+  // Toques repetidos em "Tentar de novo" enquanto uma tentativa corre não
+  // criam outra.
+  abrir = () => emCurso ??= tentar().whenComplete(() => emCurso = null);
   await abrir();
 }
 

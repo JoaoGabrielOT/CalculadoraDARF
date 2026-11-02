@@ -122,6 +122,7 @@ void main() {
     );
     await t.pump();
     await t.tap(find.text('Tentar de novo'));
+    await t.tap(find.text('Tentar de novo')); // toque repetido: ignorado
     await t.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
@@ -129,6 +130,30 @@ void main() {
     primeiro.encerrado.complete();
     await t.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await t.pump(const Duration(seconds: 1));
+    expect(criados, 2); // um só serviço a mais, por mais toques que houve
+    expect(find.byType(Casca), findsOneWidget);
+  });
+
+  testWidgets('encerramento que nunca termina não prende o Tentar de novo', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final preso = _EncerraLento()..erros['iniciar'] = StateError('x');
+    final novo = ServicosFalsos();
+    var criados = 0;
+    await iniciarApp(
+      plataforma: PlataformaFalsa(),
+      esperaEncerramento: const Duration(milliseconds: 30),
+      criarServicos: (_) async => ++criados == 1 ? preso : novo,
+    );
+    await t.pump();
+    await t.tap(find.text('Tentar de novo'));
+    await t.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 150)),
     );
     await t.pump(const Duration(seconds: 1));
     expect(criados, 2);
