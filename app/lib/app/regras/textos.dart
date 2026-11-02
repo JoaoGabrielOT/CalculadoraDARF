@@ -108,3 +108,24 @@ String textoFalha(Object e) {
   if (e is Exception) return semPrefixoException(e.toString());
   return '$t (${e.toString()})';
 }
+
+/// Subtexto do cartão da DARF (calculadora_darf.py:1587-1592).
+String textoInfoDarf(Apuracao r, String mes) => infoDarf(r, mes);
+
+/// "N venda(s) no mês" (py:1584).
+String textoVendasNoMes(Apuracao r) {
+  final n = r.ops.length;
+  return '$n venda${n != 1 ? 's' : ''} no mês';
+}
+
+/// Subtexto do cartão do imposto (py:1586).
+String textoIrrfRetido(Apuracao r) => 'IRRF já retido: ${brl(r.irrf)}';
+
+/// Texto do limite de isenção (py:1596), com dois espaços ao redor do "de".
+String textoLimiteIsencao(Apuracao r) =>
+    '${brl(r.vendasAcoesSt)}  de  ${brl(limiteIsencao)}';
+
+/// Situação da isenção de swing trade de ações (py:1598-1603).
+String textoIsencao(Apuracao r) => r.isento
+    ? 'Isento de IR em swing trade de ações'
+    : 'Acima do limite · lucro tributado em 15%';
