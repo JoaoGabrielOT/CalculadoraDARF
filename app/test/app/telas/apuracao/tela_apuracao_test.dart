@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
+import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
@@ -291,7 +292,11 @@ void main() {
         );
         expect(find.byKey(const ValueKey('progresso-tela')), findsOneWidget);
         expect(_habilitado(_botaoFechar, t), isFalse);
-        await t.tap(_botaoFechar, warnIfMissed: false);
+        // o controle também recusa chamadas repetidas, sem depender do botão
+        final contexto = t.element(find.text('Lucro bruto'));
+        final controle = Provider.of<ControleApuracao>(contexto, listen: false);
+        await controle.fecharMes(contexto); // recusada na hora
+        await controle.fecharMes(contexto);
         await t.pump();
         expect(_chamadasA(s, 'prepararFechamento'), 1);
         pendente.complete(PreparoFechamento()..bloqueio = 'Fim.');
@@ -643,6 +648,19 @@ void main() {
         expect(abriu, 1);
       },
     );
+
+    testWidgets('cartão de metas sem ação não parece tocável', (t) async {
+      final s = ServicosFalsos()..metasAtivasFalsas = 1;
+      await _montar(t, servicos: s, tamanho: _celular);
+      final texto = find.text('Meta de lucro / Preço-alvo · 1 ativa');
+      expect(texto, findsOneWidget);
+      expect(
+        find.ancestor(of: texto, matching: find.byType(InkWell)),
+        findsNothing,
+      );
+      // só o cartão de saldo leva a outra tela e mostra a seta
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+    });
 
     testWidgets('cartão de saldo mostra o caixa e leva à aba Caixa', (t) async {
       final s = ServicosFalsos();

@@ -73,11 +73,15 @@ void main() {
         preferencias: Preferencias(tema: TemaVisual.terminal),
       );
     await iniciarApp(servicos: s, plataforma: PlataformaFalsa());
-    // a Apuração começa a carregar o mês com uma barra animada no 1º quadro
+    // O primeiro quadro (montado pelo runApp, antes de qualquer pump) já sai
+    // com o tema gravado e sem a tela de carregamento da casca.
+    expect(find.byType(Casca), findsOneWidget);
+    expect(_cores(t).destaque, const Color(0xFF2EA043)); // Terminal
+    // A barra de progresso da Apuração começa a animar nesse quadro; o
+    // primeiro pump precisa de duração para o relógio do teste não voltar.
     await t.pump(const Duration(seconds: 1));
     await t.pump();
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(_cores(t).destaque, const Color(0xFF2EA043)); // Terminal
+    expect(_cores(t).destaque, const Color(0xFF2EA043));
     expect(s.chamadas.where((c) => c == 'iniciar()'), hasLength(1));
   });
 

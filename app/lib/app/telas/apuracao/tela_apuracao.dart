@@ -375,25 +375,29 @@ class _CartaoLink extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
+    final cartao = Cartao(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        spacing: 8,
+        children: [
+          Icon(icone, size: 18, color: c.textoSuave),
+          Expanded(
+            child: Text(
+              texto,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (aoTocar != null)
+            Icon(Icons.chevron_right, size: 18, color: c.textoSuave),
+        ],
+      ),
+    );
+    // sem ação (diálogo de metas ainda não ligado) não parece tocável
+    if (aoTocar == null) return cartao;
     return InkWell(
       borderRadius: BorderRadius.circular(c.raioCartao),
       onTap: aoTocar,
-      child: Cartao(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          spacing: 8,
-          children: [
-            Icon(icone, size: 18, color: c.textoSuave),
-            Expanded(
-              child: Text(
-                texto,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            Icon(Icons.chevron_right, size: 18, color: c.textoSuave),
-          ],
-        ),
-      ),
+      child: cartao,
     );
   }
 }
