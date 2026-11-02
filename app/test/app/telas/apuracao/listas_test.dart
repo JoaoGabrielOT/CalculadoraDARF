@@ -810,4 +810,86 @@ void main() {
     await t.pumpAndSettle();
     expect(_habilitado(t, 'Excluir'), isTrue);
   });
+
+  Future<Completer<void>> pendenteNoCelular(
+    WidgetTester t,
+    ServicosFalsos s,
+  ) async {
+    final espera = Completer<void>();
+    s.esperaExclusao = espera.future;
+    await _montar(t, servicos: s, tamanho: _celular, windows: false);
+    await t.tap(find.byKey(const Key('menu-lote-L2')));
+    await t.pumpAndSettle();
+    await t.tap(_item('Excluir compra'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Excluir').last);
+    await t.pumpAndSettle();
+    expect(_chamadasA(s, 'excluirCompra'), 1);
+    return espera;
+  }
+
+  testWidgets('exclusão pendente desabilita FAB, nova compra e menus de item', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    final espera = await pendenteNoCelular(t, s);
+    expect(
+      t
+          .widget<FloatingActionButton>(find.byType(FloatingActionButton))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      t
+          .widget<PopupMenuButton<String>>(
+            find.byKey(const Key('menu-lote-L1')),
+          )
+          .enabled,
+      isFalse,
+    );
+    expect(
+      t
+          .widget<PopupMenuButton<String>>(
+            find.byKey(const Key('menu-venda-V1')),
+          )
+          .enabled,
+      isFalse,
+    );
+    final ctx = t.element(find.byType(CustomScrollView));
+    await Provider.of<ControleApuracao>(ctx, listen: false).novaCompra(ctx);
+    await t.pumpAndSettle();
+    expect(find.text('Novo ativo'), findsNothing);
+    espera.complete();
+    await t.pumpAndSettle();
+    expect(
+      t
+          .widget<FloatingActionButton>(find.byType(FloatingActionButton))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('confirmação negada ou exclusão com erro liberam o Excluir', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    await _montar(t, servicos: s);
+    await _selecionar(t, 'L2');
+    await t.tap(_botao('Excluir'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Cancelar'));
+    await t.pumpAndSettle();
+    expect(_habilitado(t, 'Excluir'), isTrue);
+    expect(_chamadasA(s, 'excluirCompra'), 0);
+
+    s.erros['excluirCompra'] = ErroValidacao('Mês fechado.');
+    await t.tap(_botao('Excluir'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Excluir').last);
+    await t.pumpAndSettle();
+    await t.tap(find.text('OK'));
+    await t.pumpAndSettle();
+    expect(_habilitado(t, 'Excluir'), isTrue);
+    expect(_habilitado(t, '+  Novo ativo'), isTrue);
+  });
 }

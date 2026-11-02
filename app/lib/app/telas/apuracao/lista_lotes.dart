@@ -411,7 +411,9 @@ class _Compacto extends StatelessWidget {
               ),
               if (editavel)
                 FilledButton.icon(
-                  onPressed: () => controle.novaCompra(context),
+                  onPressed: controle.gravando
+                      ? null
+                      : () => controle.novaCompra(context),
                   icon: const Icon(Icons.add),
                   label: const Text('Nova compra'),
                 ),
@@ -551,6 +553,7 @@ class _CartaoLote extends StatelessWidget {
           if (editavel)
             PopupMenuButton<String>(
               key: Key('menu-lote-${l.id}'),
+              enabled: !controle.gravando,
               tooltip: 'Ações de ${l.ticker}',
               onSelected: (v) => switch (v) {
                 'vender' => controle.registrarVenda(context, lote: l),

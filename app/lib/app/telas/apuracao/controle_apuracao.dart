@@ -225,7 +225,9 @@ class ControleApuracao extends ChangeNotifier {
 
   /// Nova compra; numa compra nova pergunta se a venda já aconteceu
   /// (android/main.py:1304).
-  Future<void> novaCompra(BuildContext c) async {
+  Future<void> novaCompra(BuildContext c) => _unica(() => _novaCompra(c));
+
+  Future<void> _novaCompra(BuildContext c) async {
     final atual = visao;
     if (atual == null || !atual.editavel) return;
     final antes = {for (final l in atual.dados.lotes) l.id};

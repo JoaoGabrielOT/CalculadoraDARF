@@ -343,6 +343,7 @@ class _CartaoVenda extends StatelessWidget {
           if (editavel)
             PopupMenuButton<String>(
               key: Key('menu-venda-${o.vendaId}'),
+              enabled: !controle.gravando,
               tooltip: 'Ações da venda de ${o.ticker}',
               onSelected: (v) => v == 'editar'
                   ? controle.editarVenda(context, id: o.vendaId)

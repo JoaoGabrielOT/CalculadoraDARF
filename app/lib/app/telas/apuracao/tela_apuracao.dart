@@ -29,13 +29,16 @@ class TelaApuracao extends StatelessWidget {
     this.aoAbrirMetas,
     this.conteudo,
     this.sliversCompactos,
-  });
+  }) : assert(
+         conteudo == null || sliversCompactos != null,
+         'TelaApuracao: o celular só mostra [conteudo] por [sliversCompactos].',
+       );
 
   final VoidCallback? aoAbrirMetas;
   final WidgetBuilder? conteudo;
 
   /// Conteúdo do celular como slivers (listas lazy); sem ele o celular usa
-  /// [conteudo] numa caixa só.
+  /// [conteudo] numa caixa só. Obrigatório quando há [conteudo].
   final List<Widget> Function(BuildContext)? sliversCompactos;
 
   @override
@@ -73,7 +76,9 @@ class _Corpo extends StatelessWidget {
       floatingActionButton: !grande && visao != null && visao.editavel
           ? FloatingActionButton(
               tooltip: 'Nova compra',
-              onPressed: () => controle.novaCompra(context),
+              onPressed: controle.gravando
+                  ? null
+                  : () => controle.novaCompra(context),
               child: const Icon(Icons.add),
             )
           : null,
