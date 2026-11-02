@@ -9,19 +9,25 @@ import '../../componentes/cartao.dart';
 import '../../componentes/tabela.dart';
 import '../../regras/filtros.dart';
 import '../../tema/cores_app.dart';
-import '../../tema/layout.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
 import 'lista_lotes.dart' show CabecalhoLista, alturaTabela, estiloPerigo;
 
+/// Vendas do mês; [sliver] como em `ListaLotes`.
 class ListaVendas extends StatelessWidget {
-  const ListaVendas({super.key});
+  const ListaVendas({super.key, this.sliver = false});
+
+  final bool sliver;
 
   @override
   Widget build(BuildContext context) {
     final controle = context.watch<ControleApuracao>();
     final visao = controle.visao;
-    if (visao == null) return const SizedBox.shrink();
+    if (visao == null) {
+      return sliver
+          ? const SliverToBoxAdapter(child: SizedBox.shrink())
+          : const SizedBox.shrink();
+    }
     final todas = visao.apuracao.ops;
     final f = controle.filtroVendas;
     final itens = filtrarVendas(todas, f);
@@ -34,15 +40,15 @@ class ListaVendas extends StatelessWidget {
     final vazioTexto = todas.isEmpty
         ? 'Nenhuma venda registrada neste mês.'
         : 'Nenhuma venda para esse filtro.';
-    return expandido(context)
-        ? _Expandido(
+    return sliver
+        ? _Compacto(
             controle: controle,
             itens: itens,
             contagem: contagem,
             barra: barra,
             vazio: vazioTexto,
           )
-        : _Compacto(
+        : _Expandido(
             controle: controle,
             itens: itens,
             contagem: contagem,
@@ -70,6 +76,7 @@ class _Expandido extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final editavel = controle.visao?.editavel ?? false;
+    final livre = editavel && !controle.gravando;
     Color? negativo(BuildContext ctx, Operacao o) =>
         o.liquido < 0 ? CoresApp.de(ctx).queda : null;
     final colunas = <ColunaTabela<Operacao>>[
@@ -162,16 +169,12 @@ class _Expandido extends StatelessWidget {
             contagem: contagem,
             acoes: [
               OutlinedButton(
-                onPressed: editavel
-                    ? () => controle.editarVenda(context)
-                    : null,
+                onPressed: livre ? () => controle.editarVenda(context) : null,
                 child: const Text('Editar venda'),
               ),
               OutlinedButton(
                 style: estiloPerigo(context),
-                onPressed: editavel
-                    ? () => controle.excluirVenda(context)
-                    : null,
+                onPressed: livre ? () => controle.excluirVenda(context) : null,
                 child: const Text('Excluir venda'),
               ),
             ],
@@ -181,6 +184,10 @@ class _Expandido extends StatelessWidget {
             height: alturaTabela(itens.length),
             child: Tabela<Operacao>(
               key: const Key('tabela-vendas'),
+              reiniciarOrdem: (
+                controle.filtroVendas.ordem,
+                controle.filtroVendas.desc,
+              ),
               colunas: colunas,
               linhas: itens,
               vazio: vazio,
@@ -220,31 +227,43 @@ class _Compacto extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     final editavel = controle.visao?.editavel ?? false;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 12,
-      children: [
-        CabecalhoLista(
-          titulo: 'Vendas do mês',
-          contagemKey: const Key('contagem-vendas'),
-          contagem: contagem,
-        ),
-        ?barra,
-        if (itens.isEmpty)
-          Text(vazio, style: TextStyle(color: c.textoSuave))
-        else
-          Column(
+    final Widget corpo = itens.isEmpty
+        ? SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(vazio, style: TextStyle(color: c.textoSuave)),
+            ),
+          )
+        : SliverPadding(
+            padding: const EdgeInsets.only(top: 12),
+            sliver: SliverList.separated(
+              itemCount: itens.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (_, i) => _CartaoVenda(
+                key: Key('cartao-venda-${itens[i].vendaId}'),
+                op: itens[i],
+                controle: controle,
+                editavel: editavel,
+              ),
+            ),
+          );
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 12,
             children: [
-              for (final o in itens)
-                _CartaoVenda(
-                  key: Key('cartao-venda-${o.vendaId}'),
-                  op: o,
-                  controle: controle,
-                  editavel: editavel,
-                ),
+              CabecalhoLista(
+                titulo: 'Vendas do mês',
+                contagemKey: const Key('contagem-vendas'),
+                contagem: contagem,
+              ),
+              ?barra,
             ],
           ),
+        ),
+        corpo,
       ],
     );
   }

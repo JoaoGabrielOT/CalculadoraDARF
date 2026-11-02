@@ -53,6 +53,7 @@ class Tabela<T> extends StatefulWidget {
     this.aoDuploClique,
     this.selecionado,
     this.id,
+    this.reiniciarOrdem,
   }) : assert(
          selecionado == null || id != null,
          'Tabela: para marcar uma linha selecionada informe `id`.',
@@ -71,6 +72,11 @@ class Tabela<T> extends StatefulWidget {
   /// debug). Sem ele nenhuma linha
   /// é marcada e as Keys usam a posição.
   final String Function(T)? id;
+
+  /// Quando este valor muda, a ordenação feita pelo clique no título é
+  /// descartada (a rolagem fica): quem ordena por outro meio (chip) passa aqui
+  /// a ordem escolhida.
+  final Object? reiniciarOrdem;
 
   @override
   State<Tabela<T>> createState() => _TabelaState<T>();
@@ -105,6 +111,15 @@ class _TabelaState<T> extends State<Tabela<T>> {
       if (!igual) return false;
     }
     return true;
+  }
+
+  @override
+  void didUpdateWidget(Tabela<T> antigo) {
+    super.didUpdateWidget(antigo);
+    if (widget.reiniciarOrdem != antigo.reiniciarOrdem) {
+      _coluna = null;
+      _decrescente = false;
+    }
   }
 
   void _ordenarPor(int i) => setState(() {

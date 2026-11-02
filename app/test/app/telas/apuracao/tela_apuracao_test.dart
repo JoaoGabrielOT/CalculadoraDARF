@@ -587,7 +587,7 @@ void main() {
     // a lista rola de verdade com o carregamento pendente
     final rolagem = t.state<ScrollableState>(find.byType(Scrollable).first);
     expect(rolagem.position.pixels, 0);
-    await t.drag(find.byType(ListView), const Offset(0, -200));
+    await t.drag(find.byType(CustomScrollView), const Offset(0, -200));
     await t.pump();
     expect(rolagem.position.pixels, greaterThan(0));
     pendente.complete(_visaoComValores());

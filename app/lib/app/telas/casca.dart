@@ -422,7 +422,10 @@ class _PaginaState extends State<_Pagina> with AutomaticKeepAliveClientMixin {
 /// A tela de cada aba; as que ainda não existem mostram um espaço reservado
 /// (trocado tarefa a tarefa).
 Widget _telaPadrao(Aba a) => a == Aba.apuracao
-    ? const TelaApuracao(conteudo: listasApuracao)
+    ? const TelaApuracao(
+        conteudo: listasApuracao,
+        sliversCompactos: listasSliversApuracao,
+      )
     : _Provisoria(a);
 
 /// Espaço da aba até a tela dela existir.

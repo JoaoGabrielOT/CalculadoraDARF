@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
+import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
+import 'package:calculadoradarf/app/telas/apuracao/lista_lotes.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +12,7 @@ import 'package:provider/provider.dart';
 
 import '../../apoio/dados_exemplo.dart';
 import '../../apoio/montar.dart';
+import '../../apoio/plataforma_falsa.dart';
 import '../../apoio/servicos_falsos.dart';
 
 const _pc = Size(1366, 1400);
@@ -39,13 +42,18 @@ Future<ServicosFalsos> _montar(
   WidgetTester t, {
   ServicosFalsos? servicos,
   Size tamanho = _pc,
+  bool windows = true,
 }) async {
   final s = servicos ?? ServicosFalsos();
   await montarApp(
     t,
     servicos: s,
+    plataforma: PlataformaFalsa(windows: windows),
     tamanho: tamanho,
-    tela: const TelaApuracao(conteudo: listasApuracao),
+    tela: const TelaApuracao(
+      conteudo: listasApuracao,
+      sliversCompactos: listasSliversApuracao,
+    ),
   );
   await t.pumpAndSettle();
   return s;
@@ -452,7 +460,7 @@ void main() {
   testWidgets('compacto: cartões com menu de item nas compras e vendas', (
     t,
   ) async {
-    final s = await _montar(t, tamanho: _celular);
+    final s = await _montar(t, tamanho: _celular, windows: false);
     expect(find.text('Ativos comprados'), findsOneWidget);
     expect(find.text('Vendas do mês'), findsOneWidget);
     expect(find.text('Restante: 60'), findsOneWidget);
@@ -591,7 +599,10 @@ void main() {
         t,
         servicos: s,
         tamanho: tamanho,
-        tela: const TelaApuracao(conteudo: listasApuracao),
+        tela: const TelaApuracao(
+          conteudo: listasApuracao,
+          sliversCompactos: listasSliversApuracao,
+        ),
       );
       await t.pump(const Duration(milliseconds: 100));
       await t.pump(const Duration(milliseconds: 100));
@@ -672,5 +683,131 @@ void main() {
     );
     await _montar(t, servicos: s);
     expect(_habilitado(t, '+  Novo ativo'), isFalse);
+  });
+
+  testWidgets('seleção invisível pelo filtro some: Excluir avisa e não chama '
+      'o serviço', (t) async {
+    final s = await _montar(t);
+    await _selecionar(t, 'L2'); // VALE3
+    await t.tap(find.byTooltip('Buscar ticker').first);
+    await t.pumpAndSettle();
+    await t.enterText(find.byKey(const Key('busca-lotes')), 'petr');
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('linha-L2')), findsNothing);
+    await t.tap(_botao('Excluir'));
+    await t.pumpAndSettle();
+    expect(
+      _noDialogo('Selecione um ativo na tabela de ativos comprados.'),
+      findsOneWidget,
+    );
+    expect(_chamadasA(s, 'excluirCompra'), 0);
+  });
+
+  testWidgets('venda marcada e escondida pelo filtro some da seleção', (
+    t,
+  ) async {
+    final s = await _montar(t);
+    await _selecionar(t, 'V1');
+    await t.tap(find.byKey(const Key('chip-vendas-operacao')));
+    await t.pumpAndSettle();
+    await t.tap(_item('Day trade'));
+    await t.pumpAndSettle();
+    await t.tap(_botao('Excluir venda'));
+    await t.pumpAndSettle();
+    expect(
+      _noDialogo('Selecione uma venda na tabela de vendas.'),
+      findsOneWidget,
+    );
+    expect(_chamadasA(s, 'excluirVenda'), 0);
+  });
+
+  testWidgets('expandido: o chip Ordenar vale depois do clique no título', (
+    t,
+  ) async {
+    await _montar(t);
+    await t.tap(_tituloLotes('TICKER ↕'));
+    await t.pumpAndSettle();
+    expect(_y(t, 'AAPL34') < _y(t, 'PETR4'), isTrue);
+    await t.tap(find.byKey(const Key('chip-lotes-ordem')));
+    await t.pumpAndSettle();
+    await t.tap(
+      _item('Preço de compra'),
+    ); // PETR4 32,5 < AAPL34 55 < VALE3 60,1
+    await t.pumpAndSettle();
+    expect(_tituloLotes('TICKER ↕'), findsOneWidget);
+    expect(_y(t, 'PETR4') < _y(t, 'AAPL34'), isTrue);
+    expect(_y(t, 'AAPL34') < _y(t, 'VALE3'), isTrue);
+    await t.tap(find.byKey(const Key('inverter-lotes')));
+    await t.pumpAndSettle();
+    expect(_y(t, 'VALE3') < _y(t, 'AAPL34'), isTrue);
+  });
+
+  testWidgets('compacto: 1000 compras montam só os cartões à vista e a '
+      'rolagem chega ao fim', (t) async {
+    final s = ServicosFalsos();
+    s.visoes['2026-10'] = visaoExemplo(
+      Mes(
+        mes: '2026-10',
+        lotes: [
+          for (var i = 0; i < 1000; i++)
+            Lote(
+              id: 'M$i',
+              ticker: 'TICK$i',
+              tipo: 'Ação',
+              dataCompra: '2026-10-05',
+              qtd: 10,
+              preco: 10,
+            ),
+        ],
+      ),
+    );
+    await _montar(t, servicos: s, tamanho: const Size(360, 800));
+    int cartoes() => find
+        .byWidgetPredicate(
+          (w) => w.key is Key && w.key.toString().contains('cartao-lote-'),
+        )
+        .evaluate()
+        .length;
+    expect(cartoes(), lessThan(40));
+    final pos = t
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position;
+    pos.jumpTo(1500);
+    await t.pump();
+    expect(cartoes(), inInclusiveRange(1, 39));
+    for (var i = 0; i < 6; i++) {
+      pos.jumpTo(pos.maxScrollExtent);
+      await t.pump();
+    }
+    expect(cartoes(), lessThan(40));
+    expect(find.byKey(const Key('cartao-lote-M999')), findsOneWidget);
+    expect(find.text('Nenhuma venda registrada neste mês.'), findsOneWidget);
+  });
+
+  testWidgets('exclusão pendente bloqueia outra ação de editar ou excluir', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    final espera = Completer<void>();
+    s.esperaExclusao = espera.future;
+    await _montar(t, servicos: s);
+    await _selecionar(t, 'L2');
+    await t.tap(_botao('Excluir'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Excluir').last);
+    await t.pumpAndSettle();
+    expect(_chamadasA(s, 'excluirCompra'), 1);
+    expect(_habilitado(t, 'Excluir'), isFalse);
+    expect(_habilitado(t, 'Editar'), isFalse);
+    final controle = Provider.of<ControleApuracao>(
+      t.element(find.byType(ListaLotes)),
+      listen: false,
+    );
+    await controle.excluirLote(t.element(find.byType(ListaLotes)));
+    await t.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    espera.complete();
+    await t.pumpAndSettle();
+    expect(_habilitado(t, 'Excluir'), isTrue);
   });
 }

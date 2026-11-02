@@ -24,26 +24,44 @@ import 'seletor_visao.dart';
 class TelaApuracao extends StatelessWidget {
   /// [aoAbrirMetas] abre o diálogo de metas (cartão do celular);
   /// [conteudo] é a área das tabelas, que lê o [ControleApuracao] do contexto.
-  const TelaApuracao({super.key, this.aoAbrirMetas, this.conteudo});
+  const TelaApuracao({
+    super.key,
+    this.aoAbrirMetas,
+    this.conteudo,
+    this.sliversCompactos,
+  });
 
   final VoidCallback? aoAbrirMetas;
   final WidgetBuilder? conteudo;
+
+  /// Conteúdo do celular como slivers (listas lazy); sem ele o celular usa
+  /// [conteudo] numa caixa só.
+  final List<Widget> Function(BuildContext)? sliversCompactos;
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ControleApuracao>(
       create: (c) =>
           ControleApuracao(c.read<ServicosApp>(), c.read<EstadoApp>()),
-      child: _Corpo(aoAbrirMetas: aoAbrirMetas, conteudo: conteudo),
+      child: _Corpo(
+        aoAbrirMetas: aoAbrirMetas,
+        conteudo: conteudo,
+        sliversCompactos: sliversCompactos,
+      ),
     );
   }
 }
 
 class _Corpo extends StatelessWidget {
-  const _Corpo({required this.aoAbrirMetas, required this.conteudo});
+  const _Corpo({
+    required this.aoAbrirMetas,
+    required this.conteudo,
+    required this.sliversCompactos,
+  });
 
   final VoidCallback? aoAbrirMetas;
   final WidgetBuilder? conteudo;
+  final List<Widget> Function(BuildContext)? sliversCompactos;
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +83,7 @@ class _Corpo extends StatelessWidget {
               controle: controle,
               aoAbrirMetas: aoAbrirMetas,
               conteudo: conteudo,
+              slivers: sliversCompactos,
             ),
     );
   }
@@ -135,63 +154,75 @@ class _Compacto extends StatelessWidget {
     required this.controle,
     required this.aoAbrirMetas,
     required this.conteudo,
+    required this.slivers,
   });
 
   final ControleApuracao controle;
   final VoidCallback? aoAbrirMetas;
   final WidgetBuilder? conteudo;
+  final List<Widget> Function(BuildContext)? slivers;
 
   @override
   Widget build(BuildContext context) {
     final estado = context.watch<EstadoApp>();
     final visao = controle.visao;
     final ativas = estado.metasAtivas;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-      children: [
-        _Progresso(controle.carregando || controle.verificando),
+    final listas = visao == null ? null : slivers?.call(context);
+    final topo = <Widget>[
+      _Progresso(controle.carregando || controle.verificando),
+      const SizedBox(height: 12),
+      _Barra(controle: controle, compacto: true),
+      _Avisos(controle),
+      if (estado.amigo == null) ...[
         const SizedBox(height: 12),
-        _Barra(controle: controle, compacto: true),
-        _Avisos(controle),
-        if (estado.amigo == null) ...[
+        _CartaoLink(
+          icone: Icons.account_balance_wallet,
+          texto: controle.textoSaldo ?? 'Definir saldo em conta',
+          aoTocar: () => estado.irPara(Aba.caixa),
+        ),
+        const SizedBox(height: 12),
+        _CartaoLink(
+          icone: Icons.track_changes,
+          texto:
+              'Meta de lucro / Preço-alvo'
+              '${ativas > 0 ? ' · $ativas ativa${ativas != 1 ? 's' : ''}' : ''}',
+          aoTocar: aoAbrirMetas,
+        ),
+      ],
+      const SizedBox(height: 12),
+      const SeletorVisao(largura: double.infinity),
+      if (visao == null && controle.erro == null)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          child: Carregando(),
+        )
+      else if (visao != null) ...[
+        const SizedBox(height: 12),
+        Indicadores(apuracao: visao.apuracao, mes: visao.mes, compacto: true),
+        const SizedBox(height: 12),
+        CartoesRegime(apuracao: visao.apuracao),
+        const SizedBox(height: 12),
+        Detalhamento(apuracao: visao.apuracao, mes: visao.mes, compacto: true),
+        if (conteudo != null && listas == null) ...[
           const SizedBox(height: 12),
-          _CartaoLink(
-            icone: Icons.account_balance_wallet,
-            texto: controle.textoSaldo ?? 'Definir saldo em conta',
-            aoTocar: () => estado.irPara(Aba.caixa),
-          ),
-          const SizedBox(height: 12),
-          _CartaoLink(
-            icone: Icons.track_changes,
-            texto:
-                'Meta de lucro / Preço-alvo'
-                '${ativas > 0 ? ' · $ativas ativa${ativas != 1 ? 's' : ''}' : ''}',
-            aoTocar: aoAbrirMetas,
-          ),
+          conteudo!(context),
         ],
-        const SizedBox(height: 12),
-        const SeletorVisao(largura: double.infinity),
-        if (visao == null && controle.erro == null)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 48),
-            child: Carregando(),
+      ],
+    ];
+    // CustomScrollView: as listas são slivers e só montam os cartões à vista.
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+          sliver: SliverList(delegate: SliverChildListDelegate(topo)),
+        ),
+        if (listas != null)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+            sliver: SliverMainAxisGroup(slivers: listas),
           )
-        else if (visao != null) ...[
-          const SizedBox(height: 12),
-          Indicadores(apuracao: visao.apuracao, mes: visao.mes, compacto: true),
-          const SizedBox(height: 12),
-          CartoesRegime(apuracao: visao.apuracao),
-          const SizedBox(height: 12),
-          Detalhamento(
-            apuracao: visao.apuracao,
-            mes: visao.mes,
-            compacto: true,
-          ),
-          if (conteudo != null) ...[
-            const SizedBox(height: 12),
-            conteudo!(context),
-          ],
-        ],
+        else
+          const SliverToBoxAdapter(child: SizedBox(height: 96)),
       ],
     );
   }
@@ -413,26 +444,27 @@ const larguraMinimaListas = 900.0;
 Widget listasApuracao(BuildContext c) {
   const lotes = ListaLotes();
   const vendas = ListaVendas();
-  if (expandido(c)) {
-    return LayoutBuilder(
-      builder: (context, caixa) {
-        final lista = ListView(
-          children: const [lotes, SizedBox(height: 16), vendas],
-        );
-        if (caixa.maxWidth >= larguraMinimaListas) return lista;
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: larguraMinimaListas,
-            height: caixa.maxHeight,
-            child: lista,
-          ),
-        );
-      },
-    );
-  }
-  return const Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [lotes, SizedBox(height: 24), vendas],
+  return LayoutBuilder(
+    builder: (context, caixa) {
+      final lista = ListView(
+        children: const [lotes, SizedBox(height: 16), vendas],
+      );
+      if (caixa.maxWidth >= larguraMinimaListas) return lista;
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: larguraMinimaListas,
+          height: caixa.maxHeight,
+          child: lista,
+        ),
+      );
+    },
   );
 }
+
+/// Conteúdo do celular: cartões das compras e vendas, montados sob demanda.
+List<Widget> listasSliversApuracao(BuildContext c) => const [
+  ListaLotes(sliver: true),
+  SliverToBoxAdapter(child: SizedBox(height: 24)),
+  ListaVendas(sliver: true),
+];

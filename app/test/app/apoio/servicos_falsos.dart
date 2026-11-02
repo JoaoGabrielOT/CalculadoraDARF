@@ -48,6 +48,9 @@ class ServicosFalsos implements ServicosApp {
   /// a chamada já fica registrada em [chamadas].
   Future<void>? esperaGravacao;
 
+  /// Idem para `excluirCompra`.
+  Future<void>? esperaExclusao;
+
   /// Idem para `reservadoEmMetas`.
   Future<void>? esperaReserva;
 
@@ -193,8 +196,10 @@ class ServicosFalsos implements ServicosApp {
   }
 
   @override
-  Future<VisaoMes> excluirCompra(String mes, String loteId) =>
-      _chamar('excluirCompra', [mes, loteId], () => _visao(mes));
+  Future<VisaoMes> excluirCompra(String mes, String loteId) => _segurar(
+    _chamar('excluirCompra', [mes, loteId], () => _visao(mes)),
+    esperaExclusao,
+  );
 
   @override
   Future<VendaRegistrada> registrarVenda(String mes, NovaVenda v) => _segurar(

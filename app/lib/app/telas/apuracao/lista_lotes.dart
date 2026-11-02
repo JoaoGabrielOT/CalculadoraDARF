@@ -12,7 +12,6 @@ import '../../componentes/cartao.dart';
 import '../../componentes/tabela.dart';
 import '../../regras/filtros.dart';
 import '../../tema/cores_app.dart';
-import '../../tema/layout.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
 
@@ -78,18 +77,25 @@ ButtonStyle estiloPerigo(BuildContext context) {
   );
 }
 
+/// Ativos comprados. [sliver] (celular) devolve um sliver com os cartões
+/// montados sob demanda; sem ele, o cartão com tabela do layout expandido.
 class ListaLotes extends StatelessWidget {
-  const ListaLotes({super.key});
+  const ListaLotes({super.key, this.sliver = false});
+
+  final bool sliver;
 
   @override
   Widget build(BuildContext context) {
     final controle = context.watch<ControleApuracao>();
     final visao = controle.visao;
-    if (visao == null) return const SizedBox.shrink();
+    if (visao == null) {
+      return sliver
+          ? const SliverToBoxAdapter(child: SizedBox.shrink())
+          : const SizedBox.shrink();
+    }
     final todos = visao.dados.lotes;
     final f = controle.filtroLotes;
     final itens = filtrarLotes(todos, f, (t) => controle.precos[t]);
-    final grande = expandido(context);
     final contagem = f.filtrado
         ? '${itens.length}/${todos.length}'
         : '${todos.length}';
@@ -98,17 +104,17 @@ class ListaLotes extends StatelessWidget {
         : BarraFiltrosLotes(
             filtro: f,
             aoMudar: controle.definirFiltroLotes,
-            segmentada: grande,
+            segmentada: !sliver,
           );
-    return grande
-        ? _Expandido(
+    return sliver
+        ? _Compacto(
             controle: controle,
             itens: itens,
             vazio: todos.isEmpty,
             contagem: contagem,
             barra: barra,
           )
-        : _Compacto(
+        : _Expandido(
             controle: controle,
             itens: itens,
             vazio: todos.isEmpty,
@@ -159,6 +165,7 @@ class _Expandido extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     final editavel = controle.visao?.editavel ?? false;
+    final livre = editavel && !controle.gravando;
     final precos = controle.precos;
     Color? mudo(BuildContext ctx, Lote l) =>
         restante(l) == 0 ? CoresApp.de(ctx).textoSuave : null;
@@ -273,24 +280,22 @@ class _Expandido extends StatelessWidget {
             contagem: contagem,
             acoes: [
               FilledButton(
-                onPressed: editavel ? () => controle.novaCompra(context) : null,
+                onPressed: livre ? () => controle.novaCompra(context) : null,
                 child: const Text('+  Novo ativo'),
               ),
               OutlinedButton(
-                onPressed: editavel
+                onPressed: livre
                     ? () => controle.registrarVenda(context)
                     : null,
                 child: const Text('Registrar venda'),
               ),
               OutlinedButton(
-                onPressed: editavel ? () => controle.editarLote(context) : null,
+                onPressed: livre ? () => controle.editarLote(context) : null,
                 child: const Text('Editar'),
               ),
               OutlinedButton(
                 style: estiloPerigo(context),
-                onPressed: editavel
-                    ? () => controle.excluirLote(context)
-                    : null,
+                onPressed: livre ? () => controle.excluirLote(context) : null,
                 child: const Text('Excluir'),
               ),
             ],
@@ -304,6 +309,10 @@ class _Expandido extends StatelessWidget {
             height: alturaTabela(itens.length),
             child: Tabela<Lote>(
               key: const Key('tabela-lotes'),
+              reiniciarOrdem: (
+                controle.filtroLotes.ordem,
+                controle.filtroLotes.desc,
+              ),
               colunas: colunas,
               linhas: itens,
               vazio: vazioTexto,
@@ -343,48 +352,7 @@ class _Compacto extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     final editavel = controle.visao?.editavel ?? false;
-    final Widget corpo;
-    if (itens.isNotEmpty) {
-      corpo = Column(
-        spacing: 12,
-        children: [
-          for (final l in itens)
-            _CartaoLote(
-              key: Key('cartao-lote-${l.id}'),
-              lote: l,
-              controle: controle,
-              editavel: editavel,
-            ),
-        ],
-      );
-    } else if (vazio) {
-      corpo = Column(
-        spacing: 10,
-        children: [
-          Icon(Icons.inventory_2_outlined, size: 40, color: c.textoSuave),
-          const Text(
-            'Nenhuma compra neste mês',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            'Cadastre a primeira compra para começar.',
-            style: TextStyle(color: c.textoSuave, fontSize: 12),
-          ),
-          if (editavel)
-            FilledButton.icon(
-              onPressed: () => controle.novaCompra(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Nova compra'),
-            ),
-        ],
-      );
-    } else {
-      corpo = Text(
-        'Nenhum ativo para esse filtro.',
-        style: TextStyle(color: c.textoSuave),
-      );
-    }
-    return Column(
+    final cabecalho = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 12,
       children: [
@@ -399,14 +367,75 @@ class _Compacto extends StatelessWidget {
             ),
             if (editavel)
               OutlinedButton.icon(
-                onPressed: () => controle.registrarVenda(context),
+                onPressed: controle.gravando
+                    ? null
+                    : () => controle.registrarVenda(context),
                 icon: const Icon(Icons.sell),
                 label: const Text('Registrar venda'),
               ),
           ],
         ),
         ?barra,
-        Center(child: corpo),
+      ],
+    );
+    final Widget corpo;
+    if (itens.isNotEmpty) {
+      corpo = SliverPadding(
+        padding: const EdgeInsets.only(top: 12),
+        sliver: SliverList.separated(
+          itemCount: itens.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
+          itemBuilder: (_, i) => _CartaoLote(
+            key: Key('cartao-lote-${itens[i].id}'),
+            lote: itens[i],
+            controle: controle,
+            editavel: editavel,
+          ),
+        ),
+      );
+    } else if (vazio) {
+      corpo = SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Column(
+            spacing: 10,
+            children: [
+              Icon(Icons.inventory_2_outlined, size: 40, color: c.textoSuave),
+              const Text(
+                'Nenhuma compra neste mês',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'Cadastre a primeira compra para começar.',
+                style: TextStyle(color: c.textoSuave, fontSize: 12),
+              ),
+              if (editavel)
+                FilledButton.icon(
+                  onPressed: () => controle.novaCompra(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nova compra'),
+                ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      corpo = SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Center(
+            child: Text(
+              'Nenhum ativo para esse filtro.',
+              style: TextStyle(color: c.textoSuave),
+            ),
+          ),
+        ),
+      );
+    }
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverToBoxAdapter(child: cabecalho),
+        corpo,
       ],
     );
   }

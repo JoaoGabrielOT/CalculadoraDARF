@@ -5,15 +5,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/dialogos.dart';
 import '../../componentes/seletor_mes.dart';
 import '../../estado/estado_app.dart';
+import '../../plataforma/plataforma.dart';
 import '../../regras/filtros.dart';
 import '../../regras/textos.dart';
 import '../../servicos/api.dart';
-import '../../tema/layout.dart';
 import '../formularios/abrir_formulario.dart';
 
 class ControleApuracao extends ChangeNotifier {
@@ -71,6 +72,9 @@ class ControleApuracao extends ChangeNotifier {
   String? loteSelecionado;
   String? vendaSelecionada;
 
+  /// Há uma edição ou exclusão em andamento: as outras ações esperam.
+  bool gravando = false;
+
   /// O mês escolhido no estado do app (o seletor muda por lá).
   String get mes => _estado.mes;
 
@@ -109,6 +113,7 @@ class ControleApuracao extends ChangeNotifier {
     final atual = visao;
     if (atual != null && (atual.mes != mes || atual.amigo != amigo)) {
       visao = null;
+      _podarSelecao();
     }
     carregando = true;
     notifyListeners();
@@ -120,6 +125,7 @@ class ControleApuracao extends ChangeNotifier {
     } catch (e) {
       if (geracao != _geracao) return;
       visao = null;
+      _podarSelecao();
       erro = e is PedidoSuperado ? null : textoErro(e);
     }
     carregando = false;
@@ -131,11 +137,21 @@ class ControleApuracao extends ChangeNotifier {
   /// A seleção some quando a compra ou a venda deixa de existir.
   void _definirVisao(VisaoMes nova) {
     visao = nova;
-    final lotes = nova.dados.lotes;
-    if (!lotes.any((l) => l.id == loteSelecionado)) loteSelecionado = null;
-    if (!lotes.any((l) => l.vendas.any((v) => v.id == vendaSelecionada))) {
-      vendaSelecionada = null;
+    _podarSelecao();
+  }
+
+  /// A seleção só vale para o que está à vista: some se a linha deixou de
+  /// existir ou foi escondida pelo filtro (Excluir não age no invisível).
+  void _podarSelecao() {
+    final v = visao;
+    if (v == null) {
+      loteSelecionado = vendaSelecionada = null;
+      return;
     }
+    final lotes = filtrarLotes(v.dados.lotes, filtroLotes, (t) => precos[t]);
+    if (!lotes.any((l) => l.id == loteSelecionado)) loteSelecionado = null;
+    final ops = filtrarVendas(v.apuracao.ops, filtroVendas);
+    if (!ops.any((o) => o.vendaId == vendaSelecionada)) vendaSelecionada = null;
   }
 
   /// Cotações das compras em aberto, sem bloquear a tela: cada ticker mostra
@@ -243,11 +259,13 @@ class ControleApuracao extends ChangeNotifier {
 
   void definirFiltroLotes(FiltroLotes f) {
     filtroLotes = f;
+    _podarSelecao();
     notifyListeners();
   }
 
   void definirFiltroVendas(FiltroVendas f) {
     filtroVendas = f;
+    _podarSelecao();
     notifyListeners();
   }
 
@@ -279,9 +297,25 @@ class ControleApuracao extends ChangeNotifier {
 
   // --- ações das listas (calculadora_darf.py:1613-1732)
 
+  /// Uma ação de gravação por vez (edição, venda, exclusão).
+  Future<void> _unica(Future<void> Function() acao) async {
+    if (gravando) return;
+    gravando = true;
+    notifyListeners();
+    try {
+      await acao();
+    } finally {
+      gravando = false;
+      notifyListeners();
+    }
+  }
+
   /// Registrar venda; sem [lote] usa a compra marcada, se ainda tiver saldo.
   /// Os avisos (sem compra em aberto, venda retroativa) são do formulário.
-  Future<void> registrarVenda(BuildContext c, {Lote? lote}) async {
+  Future<void> registrarVenda(BuildContext c, {Lote? lote}) =>
+      _unica(() => _registrarVenda(c, lote: lote));
+
+  Future<void> _registrarVenda(BuildContext c, {Lote? lote}) async {
     final atual = visao;
     if (atual == null || !atual.editavel) return;
     var alvo = lote ?? _lote(loteSelecionado);
@@ -290,7 +324,10 @@ class ControleApuracao extends ChangeNotifier {
     if (r != null) _aceitar(r.visao);
   }
 
-  Future<void> editarLote(BuildContext c, {String? id}) async {
+  Future<void> editarLote(BuildContext c, {String? id}) =>
+      _unica(() => _editarLote(c, id: id));
+
+  Future<void> _editarLote(BuildContext c, {String? id}) async {
     final atual = visao;
     if (atual == null || !atual.editavel) return;
     final lote = _lote(id ?? loteSelecionado);
@@ -306,7 +343,10 @@ class ControleApuracao extends ChangeNotifier {
     if (nova != null) _aceitar(nova);
   }
 
-  Future<void> editarVenda(BuildContext c, {String? id}) async {
+  Future<void> editarVenda(BuildContext c, {String? id}) =>
+      _unica(() => _editarVenda(c, id: id));
+
+  Future<void> _editarVenda(BuildContext c, {String? id}) async {
     final atual = visao;
     if (atual == null || !atual.editavel) return;
     final par = _venda(id ?? vendaSelecionada);
@@ -318,7 +358,10 @@ class ControleApuracao extends ChangeNotifier {
     if (r != null) _aceitar(r.visao);
   }
 
-  Future<void> excluirLote(BuildContext c, {String? id}) async {
+  Future<void> excluirLote(BuildContext c, {String? id}) =>
+      _unica(() => _excluirLote(c, id: id));
+
+  Future<void> _excluirLote(BuildContext c, {String? id}) async {
     final atual = visao;
     if (atual == null || !atual.editavel) return;
     final lote = _lote(id ?? loteSelecionado);
@@ -332,7 +375,7 @@ class ControleApuracao extends ChangeNotifier {
     }
     final sim = await confirmar(
       c,
-      expandido(c) ? 'Excluir ativo' : 'Excluir compra',
+      c.read<Plataforma>().windows ? 'Excluir ativo' : 'Excluir compra',
       'Excluir ${lote.ticker}'
       '${lote.vendas.isNotEmpty ? ' e todas as vendas dele?' : '?'}',
       sim: 'Excluir',
@@ -346,7 +389,10 @@ class ControleApuracao extends ChangeNotifier {
     );
   }
 
-  Future<void> excluirVenda(BuildContext c, {String? id}) async {
+  Future<void> excluirVenda(BuildContext c, {String? id}) =>
+      _unica(() => _excluirVenda(c, id: id));
+
+  Future<void> _excluirVenda(BuildContext c, {String? id}) async {
     final atual = visao;
     if (atual == null || !atual.editavel) return;
     final par = _venda(id ?? vendaSelecionada);
