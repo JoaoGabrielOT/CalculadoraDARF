@@ -1,7 +1,7 @@
 // Tela de Apuração: barra (Visualizando, Atualizar, Mês, selo, Fechar mês),
 // indicadores e Detalhamento (calculadora_darf.py:1279-1345, 1408-1443;
 // android/main.py:725-866). As tabelas de compras e vendas entram em [conteudo]
-// (Tarefa 14). Expandido: conteúdo e Detalhamento lado a lado; compacto: lista
+// ([listasApuracao], Tarefa 14). Expandido: conteúdo e Detalhamento lado a lado; compacto: lista
 // rolável com FAB.
 
 import 'package:flutter/material.dart';
@@ -17,6 +17,8 @@ import '../../tema/layout.dart';
 import 'controle_apuracao.dart';
 import 'detalhamento.dart';
 import 'indicadores.dart';
+import 'lista_lotes.dart';
+import 'lista_vendas.dart';
 import 'seletor_visao.dart';
 
 class TelaApuracao extends StatelessWidget {
@@ -400,4 +402,37 @@ class _CartaoLink extends StatelessWidget {
       child: cartao,
     );
   }
+}
+
+/// Ativos comprados e Vendas do mês, para o parâmetro `conteudo`. Expandido:
+/// duas tabelas numa lista rolável (com menos de [larguraMinimaListas] px, as
+/// colunas não se espremem: a área rola na horizontal); compacto: cartões (a
+/// rolagem é da tela).
+const larguraMinimaListas = 900.0;
+
+Widget listasApuracao(BuildContext c) {
+  const lotes = ListaLotes();
+  const vendas = ListaVendas();
+  if (expandido(c)) {
+    return LayoutBuilder(
+      builder: (context, caixa) {
+        final lista = ListView(
+          children: const [lotes, SizedBox(height: 16), vendas],
+        );
+        if (caixa.maxWidth >= larguraMinimaListas) return lista;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: larguraMinimaListas,
+            height: caixa.maxHeight,
+            child: lista,
+          ),
+        );
+      },
+    );
+  }
+  return const Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [lotes, SizedBox(height: 24), vendas],
+  );
 }

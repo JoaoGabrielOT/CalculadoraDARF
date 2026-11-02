@@ -21,6 +21,25 @@ class FiltroLotes {
   final String busca;
   final String ordem;
   final bool desc;
+
+  /// Algum filtro fora do padrão (a ordem não conta), como o `filtrado` do
+  /// Android (android/main.py:884).
+  bool get filtrado =>
+      situacao != 'Todos' || tipo != 'Todos' || busca.trim().isNotEmpty;
+
+  FiltroLotes copiarCom({
+    String? situacao,
+    String? tipo,
+    String? busca,
+    String? ordem,
+    bool? desc,
+  }) => FiltroLotes(
+    situacao: situacao ?? this.situacao,
+    tipo: tipo ?? this.tipo,
+    busca: busca ?? this.busca,
+    ordem: ordem ?? this.ordem,
+    desc: desc ?? this.desc,
+  );
 }
 
 /// Estado do filtro da lista de vendas (android/main.py:55).
@@ -38,6 +57,23 @@ class FiltroVendas {
   final String busca;
   final String ordem;
   final bool desc;
+
+  bool get filtrado =>
+      operacao != 'Todas' || tipo != 'Todos' || busca.trim().isNotEmpty;
+
+  FiltroVendas copiarCom({
+    String? operacao,
+    String? tipo,
+    String? busca,
+    String? ordem,
+    bool? desc,
+  }) => FiltroVendas(
+    operacao: operacao ?? this.operacao,
+    tipo: tipo ?? this.tipo,
+    busca: busca ?? this.busca,
+    ordem: ordem ?? this.ordem,
+    desc: desc ?? this.desc,
+  );
 }
 
 /// Ordens que começam decrescentes ao serem escolhidas (android/main.py:873).

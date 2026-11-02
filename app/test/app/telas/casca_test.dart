@@ -105,6 +105,7 @@ void main() {
     expect(find.byType(TelaApuracao), findsOneWidget);
     expect(find.text('Apuração (em construção)'), findsNothing);
     expect(find.text('Lucro bruto'), findsOneWidget);
+    expect(find.text('Ativos comprados'), findsOneWidget);
   });
 
   testWidgets('tocar nas abas troca a tela', (t) async {

@@ -10,8 +10,10 @@ import '../../../nucleo/nucleo.dart';
 import '../../componentes/dialogos.dart';
 import '../../componentes/seletor_mes.dart';
 import '../../estado/estado_app.dart';
+import '../../regras/filtros.dart';
 import '../../regras/textos.dart';
 import '../../servicos/api.dart';
+import '../../tema/layout.dart';
 import '../formularios/abrir_formulario.dart';
 
 class ControleApuracao extends ChangeNotifier {
@@ -20,8 +22,17 @@ class ControleApuracao extends ChangeNotifier {
     _amigo = _estado.amigo;
     _versao = _estado.versaoDados;
     _estado.addListener(_aoMudarEstado);
+    // cotações da carteira a cada 60 s, só com a Apuração à vista e meus
+    // dados (calculadora_darf.py:2578-2585)
+    _timer = Timer.periodic(intervaloCotacoes, (_) {
+      if (_estado.aba == Aba.apuracao && _estado.amigo == null) {
+        unawaited(_buscarPrecos());
+      }
+    });
     unawaited(recarregar());
   }
+
+  static const intervaloCotacoes = Duration(seconds: 60);
 
   final ServicosApp _servicos;
   final EstadoApp _estado;
@@ -31,6 +42,8 @@ class ControleApuracao extends ChangeNotifier {
   late int _versao;
   int _geracao = 0;
   bool _descartado = false;
+  Timer? _timer;
+  int _geracaoPrecos = 0;
 
   /// O mês na tela; null enquanto o primeiro carregamento (ou o de outro mês
   /// ou visão) não chega, ou quando ele falhou ([erro]).
@@ -47,8 +60,16 @@ class ControleApuracao extends ChangeNotifier {
   /// Texto do cartão de saldo do celular; null até o caixa chegar.
   String? textoSaldo;
 
-  /// Preço atual por ticker em carteira, preenchido pela Tarefa 14.
+  /// Preço atual por ticker em carteira: ausente = ainda não chegou ("…");
+  /// nulo = a cotação falhou ("—").
   Map<String, double?> precos = {};
+
+  FiltroLotes filtroLotes = FiltroLotes();
+  FiltroVendas filtroVendas = FiltroVendas();
+
+  /// Ids da compra e da venda marcadas na tabela (layout expandido).
+  String? loteSelecionado;
+  String? vendaSelecionada;
 
   /// O mês escolhido no estado do app (o seletor muda por lá).
   String get mes => _estado.mes;
@@ -61,6 +82,7 @@ class ControleApuracao extends ChangeNotifier {
   @override
   void dispose() {
     _descartado = true;
+    _timer?.cancel();
     _estado.removeListener(_aoMudarEstado);
     super.dispose();
   }
@@ -93,7 +115,7 @@ class ControleApuracao extends ChangeNotifier {
     try {
       final nova = await _servicos.carregarMes(mes, amigo: amigo);
       if (geracao != _geracao) return;
-      visao = nova;
+      _definirVisao(nova);
       erro = null;
     } catch (e) {
       if (geracao != _geracao) return;
@@ -102,7 +124,46 @@ class ControleApuracao extends ChangeNotifier {
     }
     carregando = false;
     notifyListeners();
+    unawaited(_buscarPrecos());
     if (amigo == null) unawaited(_carregarSaldo(geracao));
+  }
+
+  /// A seleção some quando a compra ou a venda deixa de existir.
+  void _definirVisao(VisaoMes nova) {
+    visao = nova;
+    final lotes = nova.dados.lotes;
+    if (!lotes.any((l) => l.id == loteSelecionado)) loteSelecionado = null;
+    if (!lotes.any((l) => l.vendas.any((v) => v.id == vendaSelecionada))) {
+      vendaSelecionada = null;
+    }
+  }
+
+  /// Cotações das compras em aberto, sem bloquear a tela: cada ticker mostra
+  /// "…" até a resposta chegar. Se a busca falha, o que faltava vira "—".
+  Future<void> _buscarPrecos() async {
+    final atual = visao;
+    if (atual == null || atual.erroLeitura != null || _descartado) return;
+    final tickers = {
+      for (final l in atual.dados.lotes)
+        if (restante(l) > 0) l.ticker,
+    };
+    if (tickers.isEmpty) return;
+    final geracao = ++_geracaoPrecos;
+    try {
+      final r = await _servicos.precosCarteira(tickers);
+      if (geracao != _geracaoPrecos || _descartado) return;
+      precos = {...precos, ...r};
+    } catch (e) {
+      if (geracao != _geracaoPrecos || _descartado || e is PedidoSuperado) {
+        return;
+      }
+      precos = {
+        ...precos,
+        for (final t in tickers)
+          if (!precos.containsKey(t)) t: null,
+      };
+    }
+    notifyListeners();
   }
 
   Future<void> _carregarSaldo(int geracao) async {
@@ -173,8 +234,152 @@ class ControleApuracao extends ChangeNotifier {
   /// A visão que um formulário devolveu vale se ainda é a do mês aberto.
   void _aceitar(VisaoMes nova) {
     if (nova.mes != _estado.mes || _estado.amigo != null) return;
-    visao = nova;
+    _definirVisao(nova);
     notifyListeners();
+    unawaited(_buscarPrecos());
+  }
+
+  // --- filtros e seleção das listas
+
+  void definirFiltroLotes(FiltroLotes f) {
+    filtroLotes = f;
+    notifyListeners();
+  }
+
+  void definirFiltroVendas(FiltroVendas f) {
+    filtroVendas = f;
+    notifyListeners();
+  }
+
+  void selecionarLote(String? id) {
+    loteSelecionado = id;
+    notifyListeners();
+  }
+
+  void selecionarVenda(String? id) {
+    vendaSelecionada = id;
+    notifyListeners();
+  }
+
+  Lote? _lote(String? id) {
+    for (final l in visao?.dados.lotes ?? const <Lote>[]) {
+      if (l.id == id) return l;
+    }
+    return null;
+  }
+
+  (Lote, Venda)? _venda(String? id) {
+    for (final l in visao?.dados.lotes ?? const <Lote>[]) {
+      for (final v in l.vendas) {
+        if (v.id == id) return (l, v);
+      }
+    }
+    return null;
+  }
+
+  // --- ações das listas (calculadora_darf.py:1613-1732)
+
+  /// Registrar venda; sem [lote] usa a compra marcada, se ainda tiver saldo.
+  /// Os avisos (sem compra em aberto, venda retroativa) são do formulário.
+  Future<void> registrarVenda(BuildContext c, {Lote? lote}) async {
+    final atual = visao;
+    if (atual == null || !atual.editavel) return;
+    var alvo = lote ?? _lote(loteSelecionado);
+    if (alvo != null && restante(alvo) == 0) alvo = null;
+    final r = await abrirFormVenda(c, atual, lote: alvo);
+    if (r != null) _aceitar(r.visao);
+  }
+
+  Future<void> editarLote(BuildContext c, {String? id}) async {
+    final atual = visao;
+    if (atual == null || !atual.editavel) return;
+    final lote = _lote(id ?? loteSelecionado);
+    if (lote == null) {
+      await avisar(
+        c,
+        'Editar',
+        'Selecione uma compra na tabela de ativos comprados.',
+      );
+      return;
+    }
+    final nova = await abrirFormCompra(c, atual, editar: lote);
+    if (nova != null) _aceitar(nova);
+  }
+
+  Future<void> editarVenda(BuildContext c, {String? id}) async {
+    final atual = visao;
+    if (atual == null || !atual.editavel) return;
+    final par = _venda(id ?? vendaSelecionada);
+    if (par == null) {
+      await avisar(c, 'Editar', 'Selecione uma venda na tabela de vendas.');
+      return;
+    }
+    final r = await abrirFormVenda(c, atual, editar: par);
+    if (r != null) _aceitar(r.visao);
+  }
+
+  Future<void> excluirLote(BuildContext c, {String? id}) async {
+    final atual = visao;
+    if (atual == null || !atual.editavel) return;
+    final lote = _lote(id ?? loteSelecionado);
+    if (lote == null) {
+      await avisar(
+        c,
+        'Excluir',
+        'Selecione um ativo na tabela de ativos comprados.',
+      );
+      return;
+    }
+    final sim = await confirmar(
+      c,
+      expandido(c) ? 'Excluir ativo' : 'Excluir compra',
+      'Excluir ${lote.ticker}'
+      '${lote.vendas.isNotEmpty ? ' e todas as vendas dele?' : '?'}',
+      sim: 'Excluir',
+      perigo: true,
+    );
+    if (!sim || !c.mounted) return;
+    await _excluir(
+      c,
+      atual.mes,
+      () => _servicos.excluirCompra(atual.mes, lote.id),
+    );
+  }
+
+  Future<void> excluirVenda(BuildContext c, {String? id}) async {
+    final atual = visao;
+    if (atual == null || !atual.editavel) return;
+    final par = _venda(id ?? vendaSelecionada);
+    if (par == null) {
+      await avisar(c, 'Excluir', 'Selecione uma venda na tabela de vendas.');
+      return;
+    }
+    final sim = await confirmar(
+      c,
+      'Excluir venda',
+      'Excluir esta venda?',
+      sim: 'Excluir',
+      perigo: true,
+    );
+    if (!sim || !c.mounted) return;
+    await _excluir(
+      c,
+      atual.mes,
+      () => _servicos.excluirVenda(atual.mes, par.$2.id),
+    );
+  }
+
+  Future<void> _excluir(
+    BuildContext c,
+    String mes,
+    Future<VisaoMes> Function() acao,
+  ) async {
+    try {
+      _aceitar(await acao());
+    } catch (e) {
+      if (e is PedidoSuperado || _mudou(mes) || !c.mounted) return;
+      await avisar(c, 'Não foi possível excluir', textoErro(e));
+    }
   }
 
   /// Antes de fechar, verifica as metas do mês: uma meta já atingida é

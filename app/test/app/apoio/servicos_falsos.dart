@@ -78,6 +78,12 @@ class ServicosFalsos implements ServicosApp {
   Set<String> semVendaRetroativa = {};
   int reservadoMetas = 0;
 
+  /// Resposta de `precosCarteira`: ticker ausente = ainda sem tentar; valor
+  /// nulo = tentou e falhou. [precosFn] tem precedência (para deixar o
+  /// `Future` pendente).
+  Map<String, double?> precos = {};
+  Future<Map<String, double?>> Function(Set<String> tickers)? precosFn;
+
   // caixa
   VisaoCaixa? visaoCaixa;
 
@@ -167,6 +173,24 @@ class ServicosFalsos implements ServicosApp {
         }),
         esperaGravacao,
       );
+
+  @override
+  Future<Map<String, double?>> precosCarteira(Set<String> tickers) {
+    final lista = tickers.toList()..sort();
+    final fn = precosFn;
+    if (fn != null) {
+      chamadas.add('precosCarteira(${lista.join(',')})');
+      return fn(tickers);
+    }
+    return _chamar(
+      'precosCarteira',
+      [lista.join(',')],
+      () => {
+        for (final t in tickers)
+          if (precos.containsKey(t)) t: precos[t],
+      },
+    );
+  }
 
   @override
   Future<VisaoMes> excluirCompra(String mes, String loteId) =>
