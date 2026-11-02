@@ -104,5 +104,7 @@ String? _textoProcesso(Object e) {
 String textoFalha(Object e) {
   final t = textoErro(e);
   if (!t.startsWith('Erro inesperado: ')) return t;
-  return semPrefixoException(e.toString());
+  // Exception('x') mostra só "x"; um Error (bug) mantém o cabeçalho.
+  if (e is Exception) return semPrefixoException(e.toString());
+  return '$t (${e.toString()})';
 }

@@ -274,7 +274,7 @@ void main() {
     test('falha ao iniciar os serviços vira falha de inicialização', () async {
       final s = ServicosFalsos()..erros['iniciar'] = StateError('x');
       final (e, _, p) = await _criar(servicos: s);
-      expect(e.falhaInicial, 'Bad state: x');
+      expect(e.falhaInicial, 'Erro inesperado: StateError (Bad state: x)');
       expect(e.falhaInicial, isNot(contains('Exception:')));
       expect(e.carregando, isFalse);
       expect(e.avisos, isEmpty);
@@ -433,6 +433,54 @@ void main() {
       expect(e.amigo, 'bia@gmail.com');
     });
 
+    test('remover a carga em voo não limpa o amigo já aberto', () async {
+      final s = _DoisAmigos()
+        ..estadoConta = const EstadoConta(email: 'ana@gmail.com')
+        ..listaAmigos = [
+          Amigo(email: 'bia@gmail.com', desde: '2026-10-01'),
+          Amigo(email: 'caio@gmail.com', desde: '2026-10-01'),
+        ];
+      final (e, _, _) = await _criar(servicos: s);
+      await e.trocarVisao('bia@gmail.com');
+      final pronto = e.trocarVisao('caio@gmail.com');
+      expect(e.carregandoAmigo, isTrue);
+      s.listaAmigos = [Amigo(email: 'bia@gmail.com', desde: '2026-10-01')];
+      s.eventosFalsos.add(const EventoDadosMudaram());
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(e.amigo, 'bia@gmail.com');
+      expect(e.carregandoAmigo, isFalse);
+      s.cargaCaio.complete(
+        const ResumoAmigo(
+          email: 'caio@gmail.com',
+          meses: ['2026-08'],
+          mesInicial: '2026-08',
+        ),
+      );
+      await pronto;
+      expect(e.amigo, 'bia@gmail.com');
+    });
+
+    test('geração que muda durante a conferência reconfere', () async {
+      final s = _DoisAmigos()
+        ..demora = const Duration(milliseconds: 20)
+        ..estadoConta = const EstadoConta(email: 'ana@gmail.com')
+        ..listaAmigos = [
+          Amigo(email: 'bia@gmail.com', desde: '2026-10-01'),
+          Amigo(email: 'caio@gmail.com', desde: '2026-10-01'),
+        ];
+      final (e, _, _) = await _criar(servicos: s);
+      await e.trocarVisao('bia@gmail.com');
+      s.listaAmigos = [Amigo(email: 'caio@gmail.com', desde: '2026-10-01')];
+      s.eventosFalsos.add(const EventoDadosMudaram()); // conferência em curso
+      await _soltar();
+      final pronto = e.trocarVisao('caio@gmail.com'); // muda a geração
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      s.cargaCaio.completeError(Offline('x'));
+      await pronto;
+      expect(e.amigo, isNull);
+      expect(e.carregandoAmigo, isFalse);
+    });
+
     test('aplicarInicial evita um segundo servicos.iniciar()', () async {
       final s = ServicosFalsos();
       final p = PlataformaFalsa();
@@ -535,6 +583,10 @@ void main() {
 
     test('textoFalha mostra só o texto da exceção', () {
       expect(textoFalha(Exception('x')), 'x');
+      expect(
+        textoFalha(StateError('y')),
+        'Erro inesperado: StateError (Bad state: y)',
+      );
       expect(textoFalha(ErroValidacao('Informe.')), 'Informe.');
     });
 
@@ -567,6 +619,21 @@ class _AmigosLentos extends ServicosFalsos {
   @override
   Future<List<Amigo>> amigos() async {
     await Future<void>.delayed(const Duration(milliseconds: 20));
+    return super.amigos();
+  }
+}
+
+class _DoisAmigos extends ServicosFalsos {
+  final Completer<ResumoAmigo> cargaCaio = Completer<ResumoAmigo>();
+  Duration demora = Duration.zero;
+
+  @override
+  Future<ResumoAmigo> carregarAmigo(String email) =>
+      email.startsWith('caio') ? cargaCaio.future : super.carregarAmigo(email);
+
+  @override
+  Future<List<Amigo>> amigos() async {
+    await Future<void>.delayed(demora);
     return super.amigos();
   }
 }

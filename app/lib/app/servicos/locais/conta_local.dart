@@ -236,12 +236,15 @@ class ContaLocal {
     _repo.gravarConfig(cfg);
     agendar();
     final carregando = _emVoo == email;
-    if (_amigo?.email == email || carregando) {
-      // a carga em voo, se houver, termina como pedido superado
-      limparAmigo();
+    final aberto = _amigo?.email == email;
+    // a carga em voo desse amigo termina como pedido superado, sem tocar no
+    // amigo que já estava carregado (outro e-mail)
+    if (carregando) {
+      _geracaoAmigo++;
       _emVoo = null;
-      _emitir(const EventoDadosMudaram());
     }
+    if (aberto) limparAmigo();
+    if (carregando || aberto) _emitir(const EventoDadosMudaram());
   }
 
   Future<ResumoAmigo> carregarAmigo(String email) async {

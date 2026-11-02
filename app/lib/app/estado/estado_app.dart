@@ -267,19 +267,34 @@ class EstadoApp extends ChangeNotifier {
   }
 
   Future<void> _conferirUmaVez() async {
-    final alvo = amigo ?? _pedido;
-    if (alvo == null) return;
+    final aberto = amigo;
+    final pedido = _pedido;
+    if (aberto == null && pedido == null) return;
     final geracao = _geracaoVisao;
     try {
-      var sumiu = conta.email == null;
-      if (!sumiu) {
-        sumiu = !(await _servicos.amigos()).any((a) => a.email == alvo);
+      final semConta = conta.email == null;
+      final lista = semConta ? <Amigo>[] : await _servicos.amigos();
+      if (geracao != _geracaoVisao) {
+        _reconferir = true; // o que vimos já é velho: confere de novo
+        return;
       }
-      if (geracao != _geracaoVisao) return;
-      if (sumiu) await _voltarAosMeus();
+      bool sumiu(String? e) =>
+          e != null && (semConta || !lista.any((a) => a.email == e));
+      if (sumiu(aberto) || (aberto == null && sumiu(pedido))) {
+        await _voltarAosMeus();
+      } else if (sumiu(pedido)) {
+        _cancelarPedido(); // só a carga em voo; o amigo aberto fica
+      }
     } catch (_) {
       // sem como conferir: o próximo evento tenta de novo
     }
+  }
+
+  void _cancelarPedido() {
+    _geracaoVisao++;
+    _pedido = null;
+    carregandoAmigo = false;
+    notifyListeners();
   }
 
   Future<void> _voltarAosMeus() async {

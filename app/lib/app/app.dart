@@ -40,10 +40,12 @@ Future<void> iniciarApp({
   WidgetsFlutterBinding.ensureInitialized();
   registrarLicencaRoboto();
   final plat = plataforma ?? PlataformaReal();
+  Future<void>? encerrando;
   Future<void> abrir() async {
     ServicosApp? serv;
     EstadoApp? estado;
     try {
+      await encerrando; // a tentativa anterior sai antes de criar outra
       serv = servicos ?? await (criarServicos ?? _criarServicos)(plat);
       // O estado assina os eventos já no construtor: o proxy só guarda os 256
       // últimos até a primeira assinatura.
@@ -57,7 +59,7 @@ Future<void> iniciarApp({
       estado?.dispose();
       if (servicos == null && serv != null) {
         // serviços criados por esta tentativa: não ficam isolates órfãos
-        unawaited(serv.encerrar().catchError((Object _) {}));
+        encerrando = serv.encerrar().catchError((Object _) {});
       }
       runApp(AppFalhaInicial(textoFalha(e), aoTentar: abrir));
     }

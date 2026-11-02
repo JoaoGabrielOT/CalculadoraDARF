@@ -107,6 +107,34 @@ void main() {
     expect(chamadas, 1);
   });
 
+  testWidgets('Tentar de novo espera o encerramento da tentativa anterior', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final primeiro = _EncerraLento()..erros['iniciar'] = StateError('x');
+    final segundo = ServicosFalsos();
+    var criados = 0;
+    await iniciarApp(
+      plataforma: PlataformaFalsa(),
+      criarServicos: (_) async => ++criados == 1 ? primeiro : segundo,
+    );
+    await t.pump();
+    await t.tap(find.text('Tentar de novo'));
+    await t.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    expect(criados, 1); // ainda esperando o encerramento
+    primeiro.encerrado.complete();
+    await t.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await t.pump(const Duration(seconds: 1));
+    expect(criados, 2);
+    expect(find.byType(Casca), findsOneWidget);
+  });
+
   testWidgets('exatamente em 840 usa o layout de PC sem estourar', (t) async {
     await montarApp(t, tamanho: const Size(840, 700));
     expect(find.byType(NavigationRail), findsOneWidget);
@@ -146,4 +174,11 @@ void main() {
     expect(find.byType(Casca), findsOneWidget);
     expect(s.chamadas, contains('iniciar()'));
   });
+}
+
+class _EncerraLento extends ServicosFalsos {
+  final Completer<void> encerrado = Completer<void>();
+
+  @override
+  Future<void> encerrar() => encerrado.future;
 }

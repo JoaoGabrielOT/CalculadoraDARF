@@ -494,6 +494,28 @@ void main() {
       expect(c.local.amigo, isNull);
     });
 
+    test(
+      'removerAmigo da carga em voo não limpa o amigo já carregado',
+      () async {
+        final c = _Cenario()..comPlanilha();
+        c.planilhaDaBia();
+        await c.local.adicionarAmigo('bia@gmail.com');
+        await c.local.adicionarAmigo('caio@gmail.com');
+        await c.local.carregarAmigo('bia@gmail.com');
+        final segura = Completer<void>();
+        c.conta.aoLer = () => segura.future;
+        final carga = c.local.carregarAmigo('caio@gmail.com');
+        final erro = expectLater(carga, throwsA(isA<PedidoSuperado>()));
+        await _pausa(5);
+        c.eventos.clear();
+        await c.local.removerAmigo('caio@gmail.com');
+        expect(c.eventos.whereType<EventoDadosMudaram>(), isNotEmpty);
+        segura.complete();
+        await erro;
+        expect(c.local.amigoCarregado!.email, 'bia@gmail.com');
+      },
+    );
+
     test('carregarAmigo devolve meses e primeiro mês aberto', () async {
       final c = _Cenario()..comPlanilha();
       c.planilhaDaBia();
