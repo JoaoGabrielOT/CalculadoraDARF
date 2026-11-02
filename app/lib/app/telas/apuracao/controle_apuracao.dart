@@ -41,6 +41,9 @@ class ControleApuracao extends ChangeNotifier {
   /// Verifica metas e fecha o mês (os botões ficam desabilitados).
   bool fechando = false;
 
+  /// Lendo e verificando as metas antes de fechar ("Verificando...").
+  bool verificando = false;
+
   /// Texto do cartão de saldo do celular; null até o caixa chegar.
   String? textoSaldo;
 
@@ -119,7 +122,10 @@ class ControleApuracao extends ChangeNotifier {
   /// "Atualizar" (visão de amigo): baixa os dados dele de novo.
   Future<void> atualizarAmigo() async {
     final amigo = _estado.amigo;
-    if (amigo != null) await _estado.trocarVisao(amigo);
+    if (amigo == null) return;
+    // baixa de novo; versaoDados não muda, então a tela recarrega aqui
+    await _estado.trocarVisao(amigo);
+    if (_estado.amigo == amigo) await recarregar();
   }
 
   /// Grade de meses; os com dados vêm marcados (py:2989-2990).
@@ -189,22 +195,39 @@ class ControleApuracao extends ChangeNotifier {
 
   bool _mudou(String mes) => _descartado || _estado.mes != mes;
 
+  /// Preço a que a meta vendeu (`execucao.preco_usado`), se registrado.
+  String _aPreco(Meta m) {
+    final p = m.execucao?['preco_usado'];
+    return p is num ? ' a ${brl(p.toDouble())}' : '';
+  }
+
   Future<void> _fechar(BuildContext c, String mes) async {
-    if (_estado.metasAtivas > 0) {
-      final PreparoFechamento preparo;
-      try {
-        preparo = await _servicos.prepararFechamento(mes);
-      } catch (e) {
-        if (!c.mounted || _mudou(mes)) return;
-        await avisar(
-          c,
-          'Não foi possível fechar o mês',
-          'Falha ao verificar as metas antes de fechar: '
-              '${String.fromCharCodes(textoErro(e).runes.take(120))}',
-        );
-        return;
-      }
-      if (!c.mounted || _mudou(mes)) return;
+    // As metas são lidas na hora (como o Python lê a config), não do valor
+    // em cache do estado, que outro aparelho pode ter deixado velho.
+    PreparoFechamento? preparo;
+    Object? falha;
+    verificando = true;
+    notifyListeners();
+    try {
+      final ativas = (await _servicos.metas()).ativas;
+      if (ativas > 0) preparo = await _servicos.prepararFechamento(mes);
+    } catch (e) {
+      falha = e;
+    } finally {
+      verificando = false;
+      notifyListeners();
+    }
+    if (!c.mounted || _mudou(mes)) return;
+    if (falha != null) {
+      await avisar(
+        c,
+        'Não foi possível fechar o mês',
+        'Falha ao verificar as metas antes de fechar: '
+            '${String.fromCharCodes(textoErro(falha).runes.take(120))}',
+      );
+      return;
+    }
+    if (preparo != null) {
       final bloqueio = preparo.bloqueio;
       if (bloqueio != null && bloqueio.isNotEmpty) {
         await avisar(c, 'Não foi possível fechar o mês', bloqueio);
@@ -213,9 +236,14 @@ class ControleApuracao extends ChangeNotifier {
       if (preparo.executadas.isNotEmpty || preparo.invalidas.isNotEmpty) {
         await recarregar();
         if (!c.mounted || _mudou(mes)) return;
+        final erroCarga = erro;
+        if (visao == null && erroCarga != null) {
+          await avisar(c, 'Não foi possível carregar', erroCarga);
+          return;
+        }
         final linhas = [
           for (final m in preparo.executadas)
-            '${m.ticker}: venda de ${m.qtd} registrada pela meta.',
+            '${m.ticker}: venda de ${m.qtd} registrada pela meta${_aPreco(m)}.',
           for (final m in preparo.invalidas)
             '${m.ticker}: meta inválida. ${m.ultimoErro ?? ''}',
         ];

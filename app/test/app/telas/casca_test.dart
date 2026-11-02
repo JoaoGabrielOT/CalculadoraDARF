@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
+import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:flutter/material.dart';
@@ -94,6 +95,16 @@ void main() {
     for (final r in ['Apuração', 'Caixa', 'Radar', 'Notícias', 'Conta']) {
       expect(_naBarra(r), findsOneWidget);
     }
+  });
+
+  testWidgets('a aba Apuração mostra a tela de Apuração, não o espaço', (
+    t,
+  ) async {
+    await montarApp(t);
+    await t.pumpAndSettle();
+    expect(find.byType(TelaApuracao), findsOneWidget);
+    expect(find.text('Apuração (em construção)'), findsNothing);
+    expect(find.text('Lucro bruto'), findsOneWidget);
   });
 
   testWidgets('tocar nas abas troca a tela', (t) async {

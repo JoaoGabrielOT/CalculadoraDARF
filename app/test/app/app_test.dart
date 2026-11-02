@@ -73,6 +73,8 @@ void main() {
         preferencias: Preferencias(tema: TemaVisual.terminal),
       );
     await iniciarApp(servicos: s, plataforma: PlataformaFalsa());
+    // a Apuração começa a carregar o mês com uma barra animada no 1º quadro
+    await t.pump(const Duration(seconds: 1));
     await t.pump();
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(_cores(t).destaque, const Color(0xFF2EA043)); // Terminal

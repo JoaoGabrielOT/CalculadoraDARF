@@ -207,7 +207,7 @@ void main() {
   });
 
   group('Fechar mês', () {
-    Meta meta(String id, String ticker, {String? erro}) => Meta(
+    Meta meta(String id, String ticker, {String? erro, double? preco}) => Meta(
       id: id,
       ticker: ticker,
       loteId: 'L1',
@@ -215,7 +215,115 @@ void main() {
       precoAlvo: 40,
       criadaEm: '2026-10-21T11:00:00-03:00',
       ultimoErro: erro,
+      execucao: preco == null ? null : {'preco_usado': preco},
     );
+
+    testWidgets('lê as metas ativas na hora, não o valor em cache', (t) async {
+      final s = ServicosFalsos();
+      await _montar(t, servicos: s);
+      expect(_estado(t).metasAtivas, 0);
+      s.metasAtivasFalsas = 1; // outro aparelho criou uma meta
+      s.preparo = PreparoFechamento()..bloqueio = 'Yahoo fora do ar.';
+      await t.tap(_botaoFechar);
+      await t.pumpAndSettle();
+      expect(_chamadasA(s, 'prepararFechamento'), 1);
+      expect(find.text('Yahoo fora do ar.'), findsOneWidget);
+    });
+
+    testWidgets('falha ao ler as metas bloqueia o fechamento', (t) async {
+      final s = ServicosFalsos();
+      await _montar(t, servicos: s);
+      s.erros['metas'] = ErroValidacao('config ilegível.');
+      await t.tap(_botaoFechar);
+      await t.pumpAndSettle();
+      expect(find.text('Não foi possível fechar o mês'), findsOneWidget);
+      expect(
+        find.text(
+          'Falha ao verificar as metas antes de fechar: config ilegível.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Fechar 10/2026'), findsNothing);
+    });
+
+    testWidgets(
+      'recarregar falhando depois das metas executadas mostra o erro',
+      (t) async {
+        final s = ServicosFalsos()
+          ..metasAtivasFalsas = 1
+          ..preparo = (PreparoFechamento()
+            ..executadas.add(meta('M1', 'PETR4')));
+        await _montar(t, servicos: s);
+        s.carregarMesFn = (mes, amigo) =>
+            Future.error(ErroValidacao('Mês ilegível depois da meta.'));
+        await t.tap(_botaoFechar);
+        await t.pumpAndSettle();
+        expect(find.text('Não foi possível carregar'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Mês ilegível depois da meta.'),
+          ),
+          findsOneWidget,
+        );
+        await t.tap(find.text('OK'));
+        await t.pumpAndSettle();
+        expect(find.text('Fechar 10/2026'), findsNothing);
+        expect(_chamadasA(s, 'fecharMes'), 0);
+      },
+    );
+
+    testWidgets(
+      'durante a verificação mostra o aviso e o progresso, e um segundo toque '
+      'não repete a chamada',
+      (t) async {
+        final pendente = Completer<PreparoFechamento>();
+        final s = ServicosFalsos()
+          ..metasAtivasFalsas = 1
+          ..preparoFn = (_) => pendente.future;
+        await _montar(t, servicos: s);
+        expect(find.byKey(const ValueKey('progresso-tela')), findsNothing);
+        await t.tap(_botaoFechar);
+        await t.pump();
+        expect(
+          find.text('Verificando as metas antes de fechar…'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('progresso-tela')), findsOneWidget);
+        expect(_habilitado(_botaoFechar, t), isFalse);
+        await t.tap(_botaoFechar, warnIfMissed: false);
+        await t.pump();
+        expect(_chamadasA(s, 'prepararFechamento'), 1);
+        pendente.complete(PreparoFechamento()..bloqueio = 'Fim.');
+        await t.pumpAndSettle();
+        expect(
+          find.text('Verificando as metas antes de fechar…'),
+          findsNothing,
+        );
+        await t.tap(find.text('OK'));
+        await t.pumpAndSettle();
+        expect(find.byKey(const ValueKey('progresso-tela')), findsNothing);
+      },
+    );
+
+    testWidgets('compacto: aviso e progresso durante a verificação', (t) async {
+      final pendente = Completer<PreparoFechamento>();
+      final s = ServicosFalsos()
+        ..metasAtivasFalsas = 1
+        ..preparoFn = (_) => pendente.future;
+      await _montar(t, servicos: s, tamanho: _celular);
+      await t.tap(find.byType(PopupMenuButton<String>));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Fechar mês'));
+      await t.pump();
+      expect(
+        find.text('Verificando as metas antes de fechar…'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('progresso-tela')), findsOneWidget);
+      pendente.complete(PreparoFechamento()..bloqueio = 'Fim.');
+      await t.pumpAndSettle();
+    });
 
     testWidgets('sem metas ativas vai direto à confirmação e fecha', (t) async {
       final s = await _montar(t);
@@ -266,7 +374,7 @@ void main() {
         final s = ServicosFalsos()
           ..metasAtivasFalsas = 2
           ..preparo = (PreparoFechamento()
-            ..executadas.add(meta('M1', 'PETR4'))
+            ..executadas.add(meta('M1', 'PETR4', preco: 40))
             ..invalidas.add(meta('M2', 'VALE3', erro: 'Sem histórico.')));
         await _montar(t, servicos: s);
         await t.tap(_botaoFechar);
@@ -274,7 +382,7 @@ void main() {
         expect(find.text('Metas verificadas antes de fechar'), findsOneWidget);
         expect(
           find.text(
-            'PETR4: venda de 60 registrada pela meta.\n'
+            'PETR4: venda de 60 registrada pela meta a R\$ 40,00.\n'
             'VALE3: meta inválida. Sem histórico.',
           ),
           findsOneWidget,
@@ -318,7 +426,8 @@ void main() {
       await t.pump();
       // a tela segue viva durante a verificação
       _estado(t).trocarMes('2026-09');
-      await t.pumpAndSettle();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
       pendente.complete(PreparoFechamento()..bloqueio = 'Tarde demais.');
       await t.pumpAndSettle();
       expect(find.text('Tarde demais.'), findsNothing);
@@ -352,6 +461,31 @@ void main() {
     await t.tap(atualizar);
     await t.pumpAndSettle();
     expect(_chamadasA(s, 'carregarAmigo'), antes + 1);
+  });
+
+  testWidgets('Atualizar do amigo mostra os dados novos na tela', (t) async {
+    final s = ServicosFalsos();
+    await _montar(t, servicos: s);
+    await _estado(t).trocarVisao('ana@exemplo.com');
+    await t.pumpAndSettle();
+    expect(find.text('R\$ 1.234,56'), findsNothing);
+    s.visoes['2026-10'] = _visaoComValores(amigo: 'ana@exemplo.com');
+    await t.tap(find.widgetWithText(OutlinedButton, 'Atualizar'));
+    await t.pumpAndSettle();
+    expect(find.text('R\$ 1.234,56'), findsOneWidget);
+  });
+
+  testWidgets('compacto: Atualizar só aparece com amigo e atualiza', (t) async {
+    final s = ServicosFalsos();
+    await _montar(t, servicos: s, tamanho: _celular);
+    expect(find.byTooltip('Atualizar'), findsNothing);
+    await _estado(t).trocarVisao('ana@exemplo.com');
+    await t.pumpAndSettle();
+    expect(find.byTooltip('Atualizar'), findsOneWidget);
+    s.visoes['2026-10'] = _visaoComValores(amigo: 'ana@exemplo.com');
+    await t.tap(find.byTooltip('Atualizar'));
+    await t.pumpAndSettle();
+    expect(find.text('R\$ 1.234,56'), findsOneWidget);
   });
 
   testWidgets('o seletor Visualizando lista Meus dados e os amigos', (t) async {
@@ -435,24 +569,25 @@ void main() {
 
   testWidgets('compacto: a lista rola enquanto o mês carrega', (t) async {
     final s = ServicosFalsos();
+    await _montar(t, servicos: s, tamanho: const Size(360, 500));
+    final barreiras = find.byType(ModalBarrier).evaluate().length;
     final pendente = Completer<VisaoMes>();
     s.carregarMesFn = (mes, amigo) => pendente.future;
-    await montarApp(
-      t,
-      servicos: s,
-      tamanho: _celular,
-      tela: const TelaApuracao(),
-    );
+    s.eventosFalsos.add(const EventoDadosMudaram());
     await t.pump();
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(find.byType(ModalBarrier).evaluate().length, lessThanOrEqualTo(1));
-    // arrastar não lança nada e a lista continua respondendo
+    await t.pump();
+    expect(find.byKey(const ValueKey('progresso-tela')), findsOneWidget);
+    // nada cobre a tela durante a carga
+    expect(find.byType(ModalBarrier).evaluate().length, barreiras);
+    // a lista rola de verdade com o carregamento pendente
+    final rolagem = t.state<ScrollableState>(find.byType(Scrollable).first);
+    expect(rolagem.position.pixels, 0);
     await t.drag(find.byType(ListView), const Offset(0, -200));
     await t.pump();
-    expect(find.text('10/2026  ▾'), findsOneWidget);
+    expect(rolagem.position.pixels, greaterThan(0));
     pendente.complete(_visaoComValores());
     await t.pumpAndSettle();
-    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byKey(const ValueKey('progresso-tela')), findsNothing);
     expect(find.text('R\$ 1.234,56'), findsOneWidget);
   });
 

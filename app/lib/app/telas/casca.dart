@@ -12,6 +12,7 @@ import '../estado/estado_app.dart';
 import '../regras/textos.dart';
 import '../tema/cores_app.dart';
 import '../tema/layout.dart';
+import 'apuracao/tela_apuracao.dart';
 import 'falha_inicial.dart';
 
 extension on Aba {
@@ -96,7 +97,7 @@ class _CascaState extends State<Casca> {
         for (final a in Aba.values)
           _Pagina(
             key: ValueKey(a),
-            child: widget.telaDaAba?.call(a) ?? _Provisoria(a),
+            child: widget.telaDaAba?.call(a) ?? _telaPadrao(a),
           ),
       ],
     );
@@ -417,6 +418,11 @@ class _PaginaState extends State<_Pagina> with AutomaticKeepAliveClientMixin {
     return widget.child;
   }
 }
+
+/// A tela de cada aba; as que ainda não existem mostram um espaço reservado
+/// (trocado tarefa a tarefa).
+Widget _telaPadrao(Aba a) =>
+    a == Aba.apuracao ? const TelaApuracao() : _Provisoria(a);
 
 /// Espaço da aba até a tela dela existir.
 class _Provisoria extends StatelessWidget {

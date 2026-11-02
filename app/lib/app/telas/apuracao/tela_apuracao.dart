@@ -79,7 +79,7 @@ class _Expandido extends StatelessWidget {
     final visao = controle.visao;
     return Column(
       children: [
-        _Progresso(controle.carregando),
+        _Progresso(controle.carregando || controle.verificando),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
           child: _Barra(controle: controle, compacto: false),
@@ -147,7 +147,7 @@ class _Compacto extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
       children: [
-        _Progresso(controle.carregando),
+        _Progresso(controle.carregando || controle.verificando),
         const SizedBox(height: 12),
         _Barra(controle: controle, compacto: true),
         _Avisos(controle),
@@ -204,7 +204,9 @@ class _Progresso extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     height: 3,
-    child: ativo ? const LinearProgressIndicator() : null,
+    child: ativo
+        ? const LinearProgressIndicator(key: ValueKey('progresso-tela'))
+        : null,
   );
 }
 
@@ -216,9 +218,21 @@ class _Avisos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    if (controle.verificando) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Semantics(
+          liveRegion: true,
+          child: Text(
+            'Verificando as metas antes de fechar…',
+            style: TextStyle(color: c.textoSuave),
+          ),
+        ),
+      );
+    }
     final texto = controle.erro ?? controle.visao?.erroLeitura;
     if (texto == null) return const SizedBox.shrink();
-    final c = CoresApp.de(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
       child: Material(
@@ -269,6 +283,14 @@ class _Barra extends StatelessWidget {
           botaoMes,
           ?selo,
           const Spacer(),
+          if (estado.amigo != null)
+            IconButton(
+              tooltip: 'Atualizar',
+              icon: const Icon(Icons.refresh),
+              onPressed: estado.carregandoAmigo
+                  ? null
+                  : () => controle.atualizarAmigo(),
+            ),
           if (visao != null && visao.editavel)
             PopupMenuButton<String>(
               tooltip: 'Mais ações',
