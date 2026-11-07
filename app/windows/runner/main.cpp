@@ -20,7 +20,7 @@ constexpr int kMargem = 10;
 // monitor em que a janela abre, considerando a escala de DPI; o Win32Window
 // recebe valores lógicos e os multiplica pela escala do monitor.
 void AjustarJanelaInicial(Win32Window::Point *origin, Win32Window::Size *size) {
-  POINT ponto = {origin->x, origin->y};
+  POINT ponto = {static_cast<LONG>(origin->x), static_cast<LONG>(origin->y)};
   HMONITOR monitor = ::MonitorFromPoint(ponto, MONITOR_DEFAULTTONEAREST);
   MONITORINFO info = {sizeof(MONITORINFO)};
   if (!::GetMonitorInfo(monitor, &info)) {
