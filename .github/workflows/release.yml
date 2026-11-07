@@ -319,9 +319,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          name: android
           path: saida
-          pattern: "{android,windows}"
-          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: saida
 
       - name: Publicar a release (pré-release até o dono aprovar)
         uses: softprops/action-gh-release@v2
