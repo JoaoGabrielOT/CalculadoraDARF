@@ -34,12 +34,13 @@ if [ "$abis" = "'arm64-v8a' 'armeabi-v7a'" ]; then ok "ABIs $abis"; else
   erro "ABIs" "$abis"
   # quais bibliotecas nativas trouxeram ABIs a mais
   extras="$(unzip -l "$NOVO" | awk '{print $4}' | grep -E '^lib/(x86|x86_64|mips)' | head -n 8 | tr '
-' ' ')"
+' ' ' || true)"
   echo "::notice title=APK::bibliotecas de ABIs extras: $extras"
 fi
 
 # 3. o res/raw/keep.xml sobreviveu ao shrinkResources
-if "$AAPT2" dump resources "$NOVO" | grep -q "drawable/ic_notificacao"; then
+recursos="$("$AAPT2" dump resources "$NOVO")"  # em variável: grep -q fecharia o pipe (SIGPIPE) sob pipefail
+if grep -q "drawable/ic_notificacao" <<< "$recursos"; then
   ok "drawable/ic_notificacao presente"
 else
   erro "drawable/ic_notificacao" "ausente"

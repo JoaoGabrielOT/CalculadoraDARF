@@ -147,7 +147,94 @@ jobs:
           name: android
           path: CalculadoraDARF.apk
 
-  # A Tarefa 5 acrescenta o job windows, com o mesmo passo "Preparar versão e credencial".
+  windows:
+    needs: versao
+    runs-on: windows-latest
+    env:
+      VERSAO: ${{ needs.versao.outputs.versao }}
+      NUMERO: ${{ needs.versao.outputs.numero }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+
+      - name: Preparar versão e credencial
+        shell: pwsh
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
+            Set-Content -Path app/lib/versao.dart -Encoding utf8 -Value @(
+              '/// Versão do aplicativo (comparada com a do GitHub pelo atualizador).',
+              "const String versaoApp = '${{ needs.versao.outputs.versao }}';")
+          }
+          if (-not $env:GOOGLE_CREDENTIALS -or $env:GOOGLE_CREDENTIALS -notmatch '"installed"') {
+            Write-Output "::error::Segredo GOOGLE_CREDENTIALS ausente ou sem a chave 'installed'"
+            exit 1
+          }
+          New-Item -ItemType Directory -Force -Path app/assets/google | Out-Null
+          Set-Content -Path app/assets/google/credentials.json -Encoding utf8 -Value $env:GOOGLE_CREDENTIALS
+
+      - name: Dependências
+        working-directory: app
+        run: flutter pub get
+
+      - name: Compilar o Windows
+        shell: pwsh
+        working-directory: app
+        run: flutter build windows --release --build-name $env:VERSAO --build-number $env:NUMERO
+
+      - name: Implantar as DLLs do runtime do Visual C++
+        shell: pwsh
+        working-directory: app
+        run: |
+          $destino = "build\windows\x64\runner\Release"
+          foreach ($dll in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
+            $origem = Join-Path $env:SystemRoot "System32\$dll"
+            if (-not (Test-Path $origem)) {
+              Write-Output "::error::$origem não encontrada"
+              exit 1
+            }
+            Copy-Item $origem $destino
+          }
+          $dlls = (Get-ChildItem $destino -Filter *.dll | ForEach-Object Name) -join ", "
+          Write-Output "::notice title=Windows::DLLs em Release: $dlls"
+          $exe = Test-Path "$destino\calculadoradarf.exe"
+          Write-Output "::notice title=Windows::calculadoradarf.exe presente: $exe"
+
+      - name: Teste de integração no Windows
+        shell: pwsh
+        working-directory: app
+        run: |
+          New-Item -ItemType Directory -Force -Path build\capturas | Out-Null
+          flutter test integration_test -d windows --dart-define=CAPTURAS=$env:GITHUB_WORKSPACE\app\build\capturas
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error::Teste de integração falhou (código $LASTEXITCODE)"
+            exit $LASTEXITCODE
+          }
+          Write-Output "::notice title=Integração::teste de integração passou"
+
+      - name: Contar as capturas
+        if: always()
+        shell: pwsh
+        run: |
+          $n = @(Get-ChildItem app\build\capturas -Filter *.png -ErrorAction SilentlyContinue).Count
+          Write-Output "::notice title=Capturas::$n capturas em app/build/capturas"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-windows
+          path: app/build/capturas
 
   publicar:
     if: github.event_name == 'push' && github.ref_type == 'tag'
