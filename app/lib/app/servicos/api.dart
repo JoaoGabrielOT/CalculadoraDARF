@@ -364,6 +364,7 @@ class VisaoNoticias {
     required this.erros,
     required this.rodando,
     required this.radar,
+    this.novas = const {},
   });
 
   final List<Noticia> itens;
@@ -373,7 +374,13 @@ class VisaoNoticias {
   final double lidasAte;
   final Map<String, String> erros;
   final bool rodando;
+
+  /// (ticker, nome) na ordem escolhida pelo usuário.
   final List<(String, String)> radar;
+
+  /// Ids das matérias que chegaram depois da última abertura da aba
+  /// (`ehNova`): ganham o selo "Nova".
+  final Set<String> novas;
 }
 
 class ImagemBytes {

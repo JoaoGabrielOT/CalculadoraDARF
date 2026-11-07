@@ -37,7 +37,13 @@ class NoticiasLocal {
     for (final r in lerConfigParaGravar(repo).radar) (r.ticker, r.nome),
   ];
 
-  VisaoNoticias _visao(List<(String, String)> radar) {
+  /// O radar na ordem escolhida pelo usuário (opções do filtro de ativo).
+  List<(String, String)> _radarOrdenado() => [
+    for (final r in ordenarRadar(lerConfigParaGravar(repo).radar))
+      (r.ticker, r.nome),
+  ];
+
+  VisaoNoticias _visao() {
     final d = lerEstado(_disco);
     return VisaoNoticias(
       itens: d.itens,
@@ -47,21 +53,25 @@ class NoticiasLocal {
       lidasAte: d.lidasAte,
       erros: d.erros,
       rodando: _rodando,
-      radar: radar,
+      radar: _radarOrdenado(),
+      novas: {
+        for (final i in d.itens)
+          if (ehNova(d, i)) i.id,
+      },
     );
   }
 
-  Future<VisaoNoticias> noticias() async => _visao(_radar());
+  Future<VisaoNoticias> noticias() async => _visao();
 
   /// Busca as notícias do radar (calculadora_darf.py:2299-2311). Sem `forcar`,
   /// só busca se passaram 10 min ou se há ativo do radar ainda desconhecido.
   Future<VisaoNoticias> atualizarNoticias({bool forcar = false}) async {
     final radar = _radar();
-    if (_rodando || radar.isEmpty) return _visao(radar);
+    if (_rodando || radar.isEmpty) return _visao();
     if (!forcar) {
       final d = lerEstado(_disco);
       final semNoticias = radar.any((r) => !d.conhecidos.contains(r.$1));
-      if (!precisaAtualizar(d) && !semNoticias) return _visao(radar);
+      if (!precisaAtualizar(d) && !semNoticias) return _visao();
     }
     _rodando = true;
     final List<Noticia> novas;
@@ -70,7 +80,7 @@ class NoticiasLocal {
     } finally {
       _rodando = false;
     }
-    final visao = _visao(radar);
+    final visao = _visao();
     emitir(EventoNoticias(visao, textosNotificacao(novas)));
     return visao;
   }

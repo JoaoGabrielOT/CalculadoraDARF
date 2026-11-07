@@ -493,6 +493,60 @@ void main() {
     expect(_linha('PETR4'), findsOneWidget);
   });
 
+  testWidgets('notícias: adicionar e importar buscam as notícias; remover só '
+      'relê (py:2488, 2502, 2519, 2528)', (t) async {
+    final s = ServicosFalsos()
+      ..visaoRadarAmigo = _radarAmigo()
+      ..cotacoesFalsas = {
+        'PETR4': _ok('PETR4'),
+        'WEGE3': _ok('WEGE3'),
+        'MXRF11': _ok('MXRF11'),
+        'BBAS3': _ok('BBAS3'),
+        'AAPL34': _ok('AAPL34'),
+      };
+    await _montar(t, servicos: s);
+    int buscas() =>
+        s.chamadas.where((c) => c.startsWith('atualizarNoticias')).length;
+
+    await t.enterText(find.byKey(const Key('campo-ticker')), 'BBAS3');
+    await t.tap(find.text('+  Adicionar'));
+    await t.pumpAndSettle();
+    expect(buscas(), 1);
+    expect(s.chamadas, contains('atualizarNoticias(false)'));
+
+    final versao = _estado(t).versaoNoticias;
+    await t.tap(_na(_linha('WEGE3'), find.text('Remover')));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Remover'));
+    await t.pumpAndSettle();
+    expect(buscas(), 1); // remover não busca
+    expect(_estado(t).versaoNoticias, greaterThan(versao));
+
+    await _estado(t).trocarVisao('ana@exemplo.com');
+    await t.pumpAndSettle();
+    await t.tap(find.text('+  Meu radar'));
+    await t.pumpAndSettle();
+    expect(buscas(), 2);
+    await t.tap(find.text('+  Importar todos para o meu radar'));
+    await t.pumpAndSettle();
+    // nada novo: só avisa, sem buscar
+    await t.tap(find.text('OK'));
+    await t.pumpAndSettle();
+    expect(buscas(), 2);
+  });
+
+  testWidgets('notícias: importar todos busca as notícias', (t) async {
+    final s = ServicosFalsos()..visaoRadarAmigo = _radarAmigo();
+    await _montar(t, servicos: s);
+    await _estado(t).trocarVisao('ana@exemplo.com');
+    await t.pumpAndSettle();
+    await t.tap(find.text('+  Importar todos para o meu radar'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Importar'));
+    await t.pumpAndSettle();
+    expect(s.chamadas, contains('atualizarNoticias(false)'));
+  });
+
   testWidgets("radar do amigo: título 'Radar de <email>', '+ Meu radar' some "
       "para quem já tenho, 'Importar todos' confirma e importa", (t) async {
     final s = ServicosFalsos()

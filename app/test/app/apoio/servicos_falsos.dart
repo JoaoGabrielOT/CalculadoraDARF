@@ -4,6 +4,7 @@
 // resposta registra a chamada e lança `UnimplementedError`.
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
@@ -342,6 +343,57 @@ class ServicosFalsos implements ServicosApp {
 
   @override
   Future<void> esquecerAmigo() => _chamar('esquecerAmigo', [], () {});
+
+  // notícias
+  VisaoNoticias visaoNoticias = const VisaoNoticias(
+    itens: [],
+    detalhes: {},
+    naoLidas: 0,
+    hora: 0,
+    lidasAte: 0,
+    erros: {},
+    rodando: false,
+    radar: [],
+  );
+
+  /// Quando preenchidos, `noticias`, `atualizarNoticias`, `favicon` e
+  /// `imagemNoticia` respondem por eles (para deixar o `Future` pendente).
+  Future<VisaoNoticias> Function()? noticiasFn;
+  Future<VisaoNoticias> Function(bool forcar)? atualizarNoticiasFn;
+  Future<Uint8List?> Function(Noticia item)? faviconFn;
+  Future<Uint8List?> Function(String url)? imagemNoticiaFn;
+
+  @override
+  Future<VisaoNoticias> noticias() {
+    chamadas.add('noticias()');
+    final erro = erros['noticias'];
+    if (erro != null) return Future.error(erro);
+    return noticiasFn?.call() ?? Future.value(visaoNoticias);
+  }
+
+  @override
+  Future<VisaoNoticias> atualizarNoticias({bool forcar = false}) {
+    chamadas.add('atualizarNoticias($forcar)');
+    final erro = erros['atualizarNoticias'];
+    if (erro != null) return Future.error(erro);
+    return atualizarNoticiasFn?.call(forcar) ?? Future.value(visaoNoticias);
+  }
+
+  @override
+  Future<void> marcarNoticiasLidas() =>
+      _chamar('marcarNoticiasLidas', [], () {});
+
+  @override
+  Future<Uint8List?> favicon(Noticia item) {
+    chamadas.add('favicon(${item.id})');
+    return faviconFn?.call(item) ?? Future.value();
+  }
+
+  @override
+  Future<Uint8List?> imagemNoticia(String url) {
+    chamadas.add('imagemNoticia($url)');
+    return imagemNoticiaFn?.call(url) ?? Future.value();
+  }
 
   // radar e cotações
   VisaoRadar visaoRadar = VisaoRadar(

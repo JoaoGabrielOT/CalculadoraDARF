@@ -162,6 +162,70 @@ class EstadoApp extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A tela de Notícias já aplicou o filtro, ou o usuário o tirou.
+  void limparFiltroNoticias() {
+    if (filtroNoticias == null) return;
+    filtroNoticias = null;
+    notifyListeners();
+  }
+
+  // --- notícias (a busca é do estado: acontece também com a aba fechada)
+
+  /// Sobe a cada mudança que a tela de Notícias deve reler: evento dos
+  /// serviços, fim de uma busca ou alteração do radar.
+  int versaoNoticias = 0;
+
+  /// Texto do último erro de busca; null quando a última busca deu certo.
+  String? erroNoticias;
+
+  int _buscasNoticias = 0;
+  int _proximaNotificacao = 1;
+
+  bool get buscandoNoticias => _buscasNoticias > 0;
+
+  /// Busca as notícias do radar (calculadora_darf.py:2299-2311). A falha vira
+  /// [erroNoticias] e devolve null.
+  Future<VisaoNoticias?> atualizarNoticias({bool forcar = false}) async {
+    _buscasNoticias++;
+    notifyListeners();
+    try {
+      final visao = await _servicos.atualizarNoticias(forcar: forcar);
+      erroNoticias = null;
+      return visao;
+    } catch (e) {
+      final texto = textoErro(e);
+      final corte = texto.runes.length > 120
+          ? String.fromCharCodes(texto.runes.take(120))
+          : texto;
+      erroNoticias = 'Não foi possível buscar notícias: $corte';
+      return null;
+    } finally {
+      _buscasNoticias--;
+      versaoNoticias++;
+      notifyListeners();
+    }
+  }
+
+  /// O radar mudou: [buscar] (adicionou ou importou) busca as notícias dos
+  /// ativos novos (py:2488, 2502, 2519); sem ele (removeu) só a tela relê o
+  /// que já existe (py:2528).
+  void radarMudou({required bool buscar}) {
+    versaoNoticias++;
+    notifyListeners();
+    if (buscar) unawaited(atualizarNoticias());
+  }
+
+  /// Zera o selo: a aba Notícias foi vista (py:1789; android:681).
+  Future<void> marcarNoticiasLidas() async {
+    try {
+      await _servicos.marcarNoticiasLidas();
+      naoLidas = 0;
+      notifyListeners();
+    } catch (_) {
+      // o selo corrige no próximo evento de notícias
+    }
+  }
+
   void avisar(String titulo, String texto) {
     avisos.add(EventoAviso(titulo, texto));
     notifyListeners();
@@ -381,6 +445,7 @@ class EstadoApp extends ChangeNotifier {
         unawaited(_conferirVisao());
       case EventoDadosMudaram():
         versaoDados++;
+        versaoNoticias++; // o radar pode ter mudado pela sincronização
         notifyListeners();
         unawaited(_conferirVisao());
         unawaited(atualizarSaldo());
@@ -392,6 +457,7 @@ class EstadoApp extends ChangeNotifier {
         notifyListeners();
       case EventoNoticias():
         naoLidas = e.visao.naoLidas;
+        versaoNoticias++;
         notifyListeners();
         unawaited(_notificarNoticias(e.notificar));
       case EventoMetas():
@@ -465,10 +531,11 @@ class EstadoApp extends ChangeNotifier {
       irPara(Aba.noticias);
       return;
     }
-    unawaited(_abrirLink(uri));
+    unawaited(abrirLink(uri));
   }
 
-  Future<void> _abrirLink(Uri uri) async {
+  /// Abre no navegador; se não abrir, avisa.
+  Future<void> abrirLink(Uri uri) async {
     try {
       if (await _plataforma.abrirUrl(uri)) return;
       avisar('Não foi possível abrir', 'Não foi possível abrir o navegador.');
@@ -481,8 +548,7 @@ class EstadoApp extends ChangeNotifier {
     if (!preferencias.notificarNoticias) return;
     for (final (titulo, corpo, link) in novas) {
       try {
-        final id = (link.isEmpty ? titulo : link).hashCode.abs() % 2000000000;
-        await _plataforma.notificar(id, titulo, corpo, link);
+        await _plataforma.notificar(_proximaNotificacao++, titulo, corpo, link);
       } catch (e) {
         _avisarNotificacao(e);
         return;

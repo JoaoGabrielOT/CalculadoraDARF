@@ -95,6 +95,30 @@ void main() {
   tearDown(() => ambiente = Ambiente.sistema());
 
   group('atualizarNoticias', () {
+    test(
+      'a visão traz o radar na ordem do usuário e os ids das novas',
+      () async {
+        radar(['PETR4', 'VALE3']);
+        final cfg = repo.lerConfig();
+        reordenarRadar(cfg, ['VALE3', 'PETR4']);
+        repo.gravarConfig(cfg, carimbar: false);
+        gravarEstado(
+          disco,
+          EstadoNoticias(
+            itens: [materia('velha'), materia('nova')],
+            vistos: {'velha': 100, 'nova': 300},
+            lidasAte: 200,
+            hora: ambiente.agora(),
+            conhecidos: ['PETR4', 'VALE3'],
+          ),
+        );
+        final v = await noticias.noticias();
+        expect([for (final r in v.radar) r.$1], ['VALE3', 'PETR4']);
+        expect(v.novas, {'nova'});
+        expect(v.naoLidas, 1);
+      },
+    );
+
     test('atualizarNoticias sem radar não busca', () async {
       final v = await noticias.atualizarNoticias(forcar: true);
       expect(falso.pedidos, isEmpty);

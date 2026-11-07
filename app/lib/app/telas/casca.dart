@@ -15,6 +15,7 @@ import '../tema/layout.dart';
 import 'apuracao/tela_apuracao.dart';
 import 'caixa/tela_caixa.dart';
 import 'falha_inicial.dart';
+import 'noticias/tela_noticias.dart';
 import 'radar/tela_radar.dart';
 
 extension on Aba {
@@ -430,6 +431,7 @@ Widget _telaPadrao(Aba a) => switch (a) {
   ),
   Aba.caixa => const TelaCaixa(),
   Aba.radar => const TelaRadar(),
+  Aba.noticias => const TelaNoticias(),
   _ => _Provisoria(a),
 };
 

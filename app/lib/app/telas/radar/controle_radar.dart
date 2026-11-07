@@ -307,8 +307,9 @@ class ControleRadar extends ChangeNotifier {
         }
         return false;
       }
-      // só o ativo novo busca cotação (py:2518)
+      // só o ativo novo busca cotação (py:2518); as notícias dele também
       unawaited(atualizar(apenas: [item.ticker]));
+      _estado.radarMudou(buscar: true);
       await recarregar();
       return true;
     } finally {
@@ -335,6 +336,7 @@ class ControleRadar extends ChangeNotifier {
     }
     cotacoes.remove(ticker);
     minis.remove(ticker);
+    _estado.radarMudou(buscar: false); // as notícias dele saem da lista
     await recarregar();
   }
 
@@ -344,6 +346,7 @@ class ControleRadar extends ChangeNotifier {
     _ocupado = true;
     try {
       await _servicos.importarRadar([item]);
+      _estado.radarMudou(buscar: true);
       await recarregar();
       if (c.mounted && !expandido(c)) {
         ScaffoldMessenger.maybeOf(c)?.showSnackBar(
@@ -381,6 +384,7 @@ class ControleRadar extends ChangeNotifier {
     _ocupado = true;
     try {
       await _servicos.importarRadar(novos);
+      _estado.radarMudou(buscar: true);
       await recarregar();
     } catch (e) {
       if (e is! PedidoSuperado && c.mounted) {

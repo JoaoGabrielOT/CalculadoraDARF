@@ -6,6 +6,7 @@ import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/app/telas/caixa/tela_caixa.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
+import 'package:calculadoradarf/app/telas/noticias/tela_noticias.dart';
 import 'package:calculadoradarf/app/telas/radar/tela_radar.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:flutter/material.dart';
@@ -120,7 +121,8 @@ void main() {
     expect(find.text('Radar (em construção)'), findsNothing);
     await t.tap(_naBarra('Notícias'));
     await t.pumpAndSettle();
-    expect(find.text('Notícias (em construção)'), findsOneWidget);
+    expect(find.byType(TelaNoticias), findsOneWidget);
+    expect(find.text('Notícias (em construção)'), findsNothing);
   });
 
   testWidgets('tocar na barra lateral troca a tela', (t) async {
