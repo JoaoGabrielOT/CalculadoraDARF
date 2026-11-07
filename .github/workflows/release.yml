@@ -192,10 +192,10 @@ jobs:
         shell: pwsh
         working-directory: app
         run: |
-          flutter build windows --release --build-name $env:VERSAO --build-number $env:NUMERO -v 2>&1 | Tee-Object -FilePath $env:RUNNER_TEMPuild.log
+          flutter build windows --release --build-name $env:VERSAO --build-number $env:NUMERO -v 2>&1 | Tee-Object -FilePath $env:RUNNER_TEMP/build.log
           if ($LASTEXITCODE -ne 0) {
             # os logs exigem login; as linhas de erro vão como anotação
-            $erros = (Select-String -Path $env:RUNNER_TEMPuild.log -Pattern 'error|fatal|FAILED' | Select-Object -First 25 | ForEach-Object { $_.Line.Trim() }) -join '%0A'
+            $erros = (Select-String -Path $env:RUNNER_TEMP/build.log -Pattern 'error|fatal|FAILED' | Select-Object -First 25 | ForEach-Object { $_.Line.Trim() }) -join '%0A'
             Write-Output "::error title=Build Windows::$erros"
             exit $LASTEXITCODE
           }
