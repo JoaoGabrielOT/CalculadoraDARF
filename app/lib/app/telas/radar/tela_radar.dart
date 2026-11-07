@@ -17,10 +17,12 @@ import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
 import '../../tema/temas.dart';
 import '../apuracao/seletor_visao.dart';
+import '../grafico/tela_grafico.dart';
 import 'controle_radar.dart';
 import 'linha_radar.dart';
 
-/// Abre o gráfico do ativo (Tarefa 17); sem ele, tocar na linha não faz nada.
+/// Troca a abertura do gráfico do ativo (os testes); sem ele, tocar na linha
+/// abre `abrirGrafico`.
 typedef AbrirGraficoRadar = void Function(
   BuildContext c, {
   required String ticker,
@@ -79,23 +81,42 @@ AcoesRadar _acoes(
   final meus = visao?.meus ?? const <String>{};
   final cotacao = controle.cotacoes[t];
   final dados = cotacao is CotacaoOk ? cotacao.dados : null;
+  final nome = item.nome.isNotEmpty ? item.nome : (dados?.nome ?? '');
+  final comprar = amigo ? null : () => unawaited(controle.comprar(c, t));
+  final vender = amigo || !(visao?.custodia.contains(t) ?? false)
+      ? null
+      : () => unawaited(controle.vender(c, t));
+  final importar = amigo && !meus.contains(t)
+      ? () => unawaited(controle.importar(c, t))
+      : null;
   return AcoesRadar(
-    aoAbrir: () => abrir?.call(
-      c,
-      ticker: t,
-      nome: item.nome.isNotEmpty ? item.nome : (dados?.nome ?? ''),
-      dados: dados,
-      amigo: amigo,
-      jaTenho: meus.contains(t),
-    ),
-    aoComprar: amigo ? null : () => unawaited(controle.comprar(c, t)),
-    aoVender: amigo || !(visao?.custodia.contains(t) ?? false)
-        ? null
-        : () => unawaited(controle.vender(c, t)),
+    aoAbrir: () => abrir != null
+        ? abrir(
+            c,
+            ticker: t,
+            nome: nome,
+            dados: dados,
+            amigo: amigo,
+            jaTenho: meus.contains(t),
+          )
+        : unawaited(
+            abrirGrafico(
+              c,
+              ticker: t,
+              nome: nome,
+              dados: dados,
+              amigo: amigo,
+              jaTenho: meus.contains(t),
+              aoComprar: comprar,
+              aoVender: vender,
+              aoImportar: importar,
+              aoVerNoticias: () => c.read<EstadoApp>().verNoticias(t),
+            ),
+          ),
+    aoComprar: comprar,
+    aoVender: vender,
     aoRemover: amigo ? null : () => unawaited(controle.remover(c, t)),
-    aoImportar: amigo && !meus.contains(t)
-        ? () => unawaited(controle.importar(c, t))
-        : null,
+    aoImportar: importar,
   );
 }
 

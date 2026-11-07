@@ -152,6 +152,16 @@ class EstadoApp extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ticker pelo qual a aba Notícias está filtrada (vem do gráfico do ativo).
+  String? filtroNoticias;
+
+  /// Abre Notícias filtrada pelo [ticker] (py:3098; android:403).
+  void verNoticias(String ticker) {
+    filtroNoticias = ticker;
+    aba = Aba.noticias;
+    notifyListeners();
+  }
+
   void avisar(String titulo, String texto) {
     avisos.add(EventoAviso(titulo, texto));
     notifyListeners();
