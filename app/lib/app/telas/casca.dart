@@ -12,6 +12,7 @@ import '../estado/estado_app.dart';
 import '../regras/textos.dart';
 import '../tema/cores_app.dart';
 import '../tema/layout.dart';
+import 'amigos/tela_amigos.dart';
 import 'apuracao/tela_apuracao.dart';
 import 'caixa/tela_caixa.dart';
 import 'falha_inicial.dart';
@@ -349,8 +350,10 @@ class _Cabecalho extends StatelessWidget {
                     '${ativas > 0 ? ' · $ativas ativa${ativas == 1 ? '' : 's'}' : ''}',
                   ),
                 ),
-                // Amigos ganha o diálogo na tarefa dele.
-                const OutlinedButton(onPressed: null, child: Text('Amigos')),
+                OutlinedButton(
+                  onPressed: () => unawaited(abrirAmigos(context)),
+                  child: const Text('Amigos'),
+                ),
                 OutlinedButton(
                   onPressed: () => estado.irPara(Aba.conta),
                   child: Text(
