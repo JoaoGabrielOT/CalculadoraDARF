@@ -217,6 +217,8 @@ class ContaLocal {
     }
     _repo.gravarConfig(cfg);
     agendar();
+    // o seletor "Visualizando" relê a lista (atualizar_conta, py:3800-3820)
+    _emitir(const EventoDadosMudaram());
   }
 
   Future<void> removerAmigo(String email) async {
@@ -244,7 +246,7 @@ class ContaLocal {
       _emVoo = null;
     }
     if (aberto) limparAmigo();
-    if (carregando || aberto) _emitir(const EventoDadosMudaram());
+    _emitir(const EventoDadosMudaram());
   }
 
   Future<ResumoAmigo> carregarAmigo(String email) async {

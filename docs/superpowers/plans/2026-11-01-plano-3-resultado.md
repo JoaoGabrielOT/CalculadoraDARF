@@ -41,7 +41,8 @@ As 15 capturas (`apuracao|caixa|radar|noticias|conta` × `terminal|claro|moderno
 - Ícones do app (Windows `app_icon.ico`, Android mipmap) a partir de `assets/icone.ico` e `assets/icone_janela.png`.
 - Windows: build e `flutter test integration_test -d windows --dart-define=CAPTURAS=...` no executor `windows-latest` (aqui exigem o Modo Desenvolvedor); publicar as capturas como artefato. FFI de `flutter_local_notifications_windows`/`jni` pode exigir JDK no build.
 - Windows troca o .exe portátil por instalador destacado (o Python usava script .cmd, atualizador.py:122-139); registrar AUMID/atalho para o toast.
-- Android: `ic_notificacao` referenciado só por nome pode sumir com `shrinkResources`; conferir `res/raw/keep.xml`.
+- Android: `ic_notificacao` referenciado só por nome pode sumir com `shrinkResources`; `res/raw/keep.xml` (`tools:keep="@drawable/ic_notificacao"`) já foi adicionado, conferir com `flutter build apk --release` no CI.
+- Windows: a janela inicial (1360x860 lógicos) agora é limitada à área útil do monitor em `windows/runner/main.cpp` (`AjustarJanelaInicial`); C++ não compilado aqui, conferir no `flutter build windows` do CI e em 1366x768 e 1920x1080@125%.
 
 ## Pendências menores registradas (não bloqueiam)
 Ficam no `progress.md` por tarefa ("minor (deferred)"). As que tocam o teste do dono: altura de linha de 44 px e "Total a pagar" fora da vista em 768 px; tabela do radar rola abaixo de 1040 px; dois convites de atualização podem empilhar; timer de 60 s segue no Android em segundo plano (igual ao Python); custo de rebuild da Tabela com dezenas de milhares de linhas não medido.

@@ -358,6 +358,31 @@ void main() {
       expect((await c.local.amigos()).single.email, 'bia@gmail.com');
     });
 
+    test(
+      'adicionar amigo aparece no seletor (emite EventoDadosMudaram)',
+      () async {
+        final c = _Cenario()..comPlanilha();
+        c.eventos.clear();
+        await c.local.adicionarAmigo('bia@gmail.com');
+        expect(c.eventos.whereType<EventoDadosMudaram>(), hasLength(1));
+      },
+    );
+
+    test('adicionarAmigo que falha não emite EventoDadosMudaram', () async {
+      final c = _Cenario()..comPlanilha();
+      c.eventos.clear();
+      await _espera(c.local.adicionarAmigo('bia'), 'E-mail inválido.');
+      expect(c.eventos.whereType<EventoDadosMudaram>(), isEmpty);
+    });
+
+    test('remover amigo some do seletor (emite EventoDadosMudaram)', () async {
+      final c = _Cenario()..comPlanilha();
+      await c.local.adicionarAmigo('bia@gmail.com');
+      c.eventos.clear();
+      await c.local.removerAmigo('bia@gmail.com');
+      expect(c.eventos.whereType<EventoDadosMudaram>(), hasLength(1));
+    });
+
     test('adicionarAmigo: e-mail inválido, o próprio e repetido', () async {
       final c = _Cenario()..comPlanilha();
       await _espera(c.local.adicionarAmigo('bia'), 'E-mail inválido.');

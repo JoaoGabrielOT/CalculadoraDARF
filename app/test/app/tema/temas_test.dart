@@ -7,6 +7,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'o ✓ do chip selecionado usa o texto do chip ativo, em todos os temas',
+    () {
+      for (final v in [
+        TemaVisual.terminal,
+        TemaVisual.claro,
+        TemaVisual.moderno,
+      ]) {
+        final th = temaDe(v);
+        expect(
+          th.chipTheme.checkmarkColor,
+          th.extension<CoresApp>()!.chipAtivoTexto,
+          reason: v.name,
+        );
+      }
+    },
+  );
+
   test('cores do spec e dos mockups', () {
     final t = temaDe(TemaVisual.terminal).extension<CoresApp>()!;
     expect(t.fundo, const Color(0xFF0D1117));

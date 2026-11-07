@@ -257,8 +257,17 @@ void main() {
       expect(p.notificacoes, isEmpty);
     });
 
-    test('voltar ao primeiro plano verifica as metas', () async {
-      final (e, s, _) = await _criar();
+    test('voltar ao primeiro plano no Windows não verifica as metas', () async {
+      final (e, s, _) = await _criar(plataforma: PlataformaFalsa());
+      e.aoMudarCiclo(AppLifecycleState.resumed);
+      await _soltar();
+      expect(s.chamadas.where((c) => c.startsWith('verificarMetas')), isEmpty);
+    });
+
+    test('voltar ao primeiro plano verifica as metas (Android)', () async {
+      final (e, s, _) = await _criar(
+        plataforma: PlataformaFalsa(windows: false),
+      );
       e.aoMudarCiclo(AppLifecycleState.paused);
       await _soltar();
       expect(s.chamadas.where((c) => c.startsWith('verificarMetas')), isEmpty);
@@ -292,7 +301,10 @@ void main() {
         ..resultadoVerificacao = VerificacaoConcluida(
           RelatorioMetas()..executadas.add(meta),
         );
-      final (e, _, _) = await _criar(servicos: s);
+      final (e, _, _) = await _criar(
+        servicos: s,
+        plataforma: PlataformaFalsa(windows: false),
+      );
       e.aoMudarCiclo(AppLifecycleState.resumed);
       await _soltar();
       expect(e.avisos.map((a) => a.titulo), ['Meta atingida']);

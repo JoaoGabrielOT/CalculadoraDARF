@@ -322,6 +322,7 @@ ThemeData _montar(
     chipTheme: ChipThemeData(
       backgroundColor: Color.alphaBlend(c.chipFundo, c.fundo),
       selectedColor: c.chipAtivoFundo,
+      checkmarkColor: c.chipAtivoTexto,
       labelStyle: TextStyle(
         color: c.chipTexto,
         fontFamily: 'Roboto',

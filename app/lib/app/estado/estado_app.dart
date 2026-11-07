@@ -449,9 +449,12 @@ class EstadoApp extends ChangeNotifier {
 
   // --- ciclo de vida
 
-  /// Ao voltar ao primeiro plano, verifica as metas (android/main.py:644-646).
+  /// No Android, ao voltar ao primeiro plano, verifica as metas
+  /// (android/main.py:644-646); no Windows o foco da janela não faz isso.
   void aoMudarCiclo(AppLifecycleState estado) {
-    if (estado == AppLifecycleState.resumed) unawaited(_verificarMetas());
+    if (estado == AppLifecycleState.resumed && !_plataforma.windows) {
+      unawaited(_verificarMetas());
+    }
   }
 
   Future<void> _verificarMetas() async {
