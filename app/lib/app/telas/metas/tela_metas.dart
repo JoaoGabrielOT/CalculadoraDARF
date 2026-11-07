@@ -14,6 +14,7 @@ import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
 import '../../../nucleo/nucleo.dart';
 import 'aba_calculadora.dart';
+import 'aba_sugestoes.dart';
 import 'controle_metas.dart';
 import 'lista_metas.dart';
 
@@ -179,29 +180,6 @@ class _Cheia extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Sugestões de alvo e stop pela volatilidade (py:3352-3489). Ponto de
-/// entrada da tarefa seguinte: ela troca o corpo deste painel; o
-/// [ControleMetas] do contexto já lê as compras e recarrega ao cancelar.
-class PainelSugestoes extends StatelessWidget {
-  const PainelSugestoes({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Text(
-        'SUGESTÕES PARA SUAS COMPRAS',
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: c.textoSuave,
         ),
       ),
     );

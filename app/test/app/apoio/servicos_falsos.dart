@@ -274,6 +274,68 @@ class ServicosFalsos implements ServicosApp {
   /// Últimos argumentos de `criarMetaAlvo`.
   ({String loteId, int qtd, double preco, double? lucro})? ultimaMetaAlvo;
 
+  /// `ocoCom` da última chamada de `criarMetaAlvo`.
+  String? ultimoOcoAlvo;
+
+  /// Resposta de `sugestoesMetas`; [sugestoesMetasFn] tem precedência.
+  VisaoSugestoes? visaoSugestoes;
+  Future<VisaoSugestoes> Function()? sugestoesMetasFn;
+
+  /// Resposta de `parceiraOco` (por gatilho); sem entrada = sem parceira.
+  Map<String, Meta?> parceirasOco = {};
+
+  /// Últimos argumentos de `criarStop`.
+  ({
+    String loteId,
+    int qtd,
+    double preco,
+    bool movel,
+    String? ocoCom,
+    double? precoAtual,
+    Map<String, Object?>? sugestao,
+  })?
+  ultimoStop;
+
+  @override
+  Future<VisaoSugestoes> sugestoesMetas() {
+    final fn = sugestoesMetasFn;
+    if (fn != null) {
+      chamadas.add('sugestoesMetas()');
+      return fn();
+    }
+    return _chamar(
+      'sugestoesMetas',
+      [],
+      () => visaoSugestoes ?? const VisaoSugestoes(itens: [], rodape: []),
+    );
+  }
+
+  @override
+  Future<Meta?> parceiraOco(String loteId, String gatilho) =>
+      _chamar('parceiraOco', [loteId, gatilho], () => parceirasOco[gatilho]);
+
+  @override
+  Future<Meta> criarStop(
+    String loteId,
+    int qtd,
+    double precoStop, {
+    bool movel = false,
+    String? ocoCom,
+    double? precoAtual,
+    Map<String, Object?>? sugestao,
+  }) => _chamar('criarStop', [loteId, qtd, precoStop, movel], () {
+    ultimoStop = (
+      loteId: loteId,
+      qtd: qtd,
+      preco: precoStop,
+      movel: movel,
+      ocoCom: ocoCom,
+      precoAtual: precoAtual,
+      sugestao: sugestao,
+    );
+    return metasExemplo().first;
+  });
+
   @override
   Future<VisaoMetas> metas() => _chamar(
     'metas',
@@ -304,6 +366,7 @@ class ServicosFalsos implements ServicosApp {
     double? lucroDesejado,
     String? ocoCom,
   }) => _chamar('criarMetaAlvo', [loteId, qtd, precoAlvo, lucroDesejado], () {
+    ultimoOcoAlvo = ocoCom;
     ultimaMetaAlvo = (
       loteId: loteId,
       qtd: qtd,

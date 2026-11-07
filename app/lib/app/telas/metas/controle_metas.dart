@@ -34,6 +34,7 @@ class ControleMetas extends ChangeNotifier {
     _versao = _estado.versaoDados;
     _estado.addListener(_aoMudarEstado);
     unawaited(recarregar());
+    unawaited(recarregarSugestoes());
   }
 
   final ServicosApp _servicos;
@@ -42,6 +43,7 @@ class ControleMetas extends ChangeNotifier {
   late int _versao;
   int _geracao = 0;
   int _geracaoCalculo = 0;
+  int _geracaoSug = 0;
   bool _descartado = false;
 
   /// Metas, descrições e compras com quantidade livre; null até a primeira
@@ -52,6 +54,19 @@ class ControleMetas extends ChangeNotifier {
   String? erro;
 
   ModoMetas modo = ModoMetas.sugestoes;
+
+  // --- sugestões
+  /// Cartões e rodapé; null até a primeira leitura. Numa releitura que falha
+  /// a anterior fica à vista.
+  VisaoSugestoes? sugestoes;
+  bool carregandoSug = false;
+  String? erroSug;
+
+  /// "Atualizado às HH:MM." depois de cada leitura.
+  String textoSug = '';
+
+  /// Criando a meta de um cartão: desabilita os botões.
+  bool criandoSug = false;
 
   // --- verificar agora
   bool verificando = false;
@@ -96,6 +111,7 @@ class ControleMetas extends ChangeNotifier {
     if (_estado.versaoDados == _versao) return;
     _versao = _estado.versaoDados;
     unawaited(recarregar());
+    if (modo == ModoMetas.sugestoes) unawaited(recarregarSugestoes());
   }
 
   /// Compra escolhida, com a quantidade livre.
@@ -111,6 +127,117 @@ class ControleMetas extends ChangeNotifier {
     if (m == modo) return;
     modo = m;
     notifyListeners();
+    if (m == ModoMetas.sugestoes) unawaited(recarregarSugestoes());
+  }
+
+  // --- sugestões (py:3370-3412)
+
+  /// Vale o último pedido (`carregar_sugestoes`). A falha mostra o erro só
+  /// se não houver cartões à vista.
+  Future<void> recarregarSugestoes() async {
+    final geracao = ++_geracaoSug;
+    carregandoSug = true;
+    textoSug = 'Carregando sugestões…';
+    notifyListeners();
+    try {
+      final nova = await _servicos.sugestoesMetas();
+      if (geracao != _geracaoSug) return;
+      sugestoes = nova;
+      erroSug = null;
+      textoSug = nova.itens.isEmpty
+          ? ''
+          : 'Atualizado às ${horaMinuto(ambiente.agora())}.';
+    } catch (e) {
+      if (geracao != _geracaoSug) return;
+      erroSug = e is PedidoSuperado && sugestoes != null ? null : textoErro(e);
+      textoSug = '';
+    }
+    carregandoSug = false;
+    notifyListeners();
+  }
+
+  /// "Criar meta de alvo" / "Criar stop fixo" / "Criar stop móvel" de um
+  /// cartão (`criar_sugerido`). [gatilho]: `alvo` ou `stop`.
+  Future<void> criarSugerido(
+    BuildContext c,
+    SugestaoPosicao s,
+    String gatilho, {
+    bool movel = false,
+  }) async {
+    if (criandoSug) return;
+    final sug = s.item.sug!;
+    final lote = s.posicao.lote;
+    criandoSug = true;
+    notifyListeners();
+    try {
+      final Meta? parceira;
+      try {
+        parceira = await _servicos.parceiraOco(lote.id, gatilho);
+      } catch (e) {
+        if (e is! PedidoSuperado && c.mounted) {
+          await avisar(c, 'Meta', textoErro(e));
+        }
+        return;
+      }
+      final qtd = parceira?.qtd ?? s.posicao.livre;
+      if (!c.mounted) return;
+      if (qtd <= 0) {
+        await avisar(
+          c,
+          'Meta',
+          'Não há quantidade livre nesta compra: cancele uma meta ativa '
+              'antes.',
+        );
+        return;
+      }
+      String? oco;
+      if (parceira != null) {
+        final nome =
+            (visao?.descricoes[parceira.id] ?? descricao(parceira)).titulo;
+        final sim = await confirmar(
+          c,
+          'Ligar em OCO',
+          'Será ligado (OCO) à meta $nome.\n\nQuando uma das duas executar, '
+              'a outra é cancelada automaticamente. Quantidade: $qtd un.',
+          sim: 'Criar com OCO',
+          nao: 'Voltar',
+        );
+        if (!sim || !c.mounted) return;
+        oco = parceira.id;
+      }
+      try {
+        if (gatilho == 'alvo') {
+          await _servicos.criarMetaAlvo(lote.id, qtd, sug.alvo, ocoCom: oco);
+        } else {
+          final info = <String, Object?>{
+            'modo': sug.modo,
+            'atr14': arredondar(sug.atr14, 4),
+            'compra': lote.preco,
+          };
+          final atr22 = sug.atr22;
+          if (atr22 != null) info['atr22'] = arredondar(atr22, 4);
+          await _servicos.criarStop(
+            lote.id,
+            qtd,
+            sug.stop,
+            movel: movel,
+            ocoCom: oco,
+            precoAtual: s.item.precoAtual,
+            sugestao: info,
+          );
+        }
+      } catch (e) {
+        if (e is! PedidoSuperado && c.mounted) {
+          await avisar(c, 'Meta', textoErro(e));
+        }
+        return;
+      }
+    } finally {
+      criandoSug = false;
+      notifyListeners();
+    }
+    await recarregar();
+    unawaited(verificarAgora());
   }
 
   /// Vale o último pedido. Se a compra escolhida sumiu ou mudou de
@@ -168,6 +295,7 @@ class ControleMetas extends ChangeNotifier {
     }
     verificando = false;
     notifyListeners();
+    if (modo == ModoMetas.sugestoes) unawaited(recarregarSugestoes());
     await recarregar();
   }
 
@@ -190,6 +318,7 @@ class ControleMetas extends ChangeNotifier {
       if (!c.mounted) return;
       await avisar(c, 'Meta', textoErro(e));
     }
+    if (modo == ModoMetas.sugestoes) unawaited(recarregarSugestoes());
     await recarregar();
   }
 
