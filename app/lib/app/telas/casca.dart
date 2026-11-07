@@ -15,6 +15,7 @@ import '../tema/layout.dart';
 import 'apuracao/tela_apuracao.dart';
 import 'caixa/tela_caixa.dart';
 import 'falha_inicial.dart';
+import 'radar/tela_radar.dart';
 
 extension on Aba {
   String get rotulo => switch (this) {
@@ -428,6 +429,7 @@ Widget _telaPadrao(Aba a) => switch (a) {
     sliversCompactos: listasSliversApuracao,
   ),
   Aba.caixa => const TelaCaixa(),
+  Aba.radar => const TelaRadar(),
   _ => _Provisoria(a),
 };
 

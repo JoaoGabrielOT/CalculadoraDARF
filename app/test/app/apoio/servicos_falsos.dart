@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
+import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 
 import 'dados_exemplo.dart';
@@ -341,6 +342,132 @@ class ServicosFalsos implements ServicosApp {
 
   @override
   Future<void> esquecerAmigo() => _chamar('esquecerAmigo', [], () {});
+
+  // radar e cotações
+  VisaoRadar visaoRadar = VisaoRadar(
+    itens: radarExemplo(),
+    custodia: {'PETR4'},
+    meus: {'PETR4', 'WEGE3', 'MXRF11'},
+  );
+
+  /// Radar devolvido com `amigo != null`.
+  VisaoRadar? visaoRadarAmigo;
+
+  /// Resposta de `cotacao` por ticker; sem entrada, um erro de teste.
+  /// [cotacaoFn] tem precedência (para deixar o `Future` pendente).
+  Map<String, CotacaoRadar> cotacoesFalsas = {};
+  Future<CotacaoRadar> Function(String ticker, String nome)? cotacaoFn;
+
+  /// Gráfico do dia por ticker; sem entrada, um gráfico fixo.
+  /// [graficoFn] tem precedência.
+  Map<String, Grafico> graficosFalsos = {};
+  Future<Grafico> Function(String ticker, String periodo)? graficoFn;
+  List<String>? ultimaOrdemRadar;
+  List<ItemRadar>? ultimaImportacao;
+
+  @override
+  Future<VisaoRadar> radar({String? amigo}) => _chamar('radar', [
+    amigo,
+  ], () => amigo == null ? visaoRadar : visaoRadarAmigo ?? visaoRadar);
+
+  @override
+  Future<ItemRadar> adicionarRadar(String ticker) =>
+      _chamar('adicionarRadar', [ticker], () {
+        final item = ItemRadar(
+          ticker: ticker.trim().toUpperCase(),
+          desde: hojeExemplo,
+          pos: visaoRadar.itens.length,
+        );
+        visaoRadar = VisaoRadar(
+          itens: [...visaoRadar.itens, item],
+          custodia: visaoRadar.custodia,
+          meus: {...visaoRadar.meus, item.ticker},
+        );
+        return item;
+      });
+
+  @override
+  Future<int> importarRadar(List<ItemRadar> itens) =>
+      _chamar('importarRadar', [itens.map((i) => i.ticker).join(',')], () {
+        ultimaImportacao = itens;
+        visaoRadar = VisaoRadar(
+          itens: visaoRadar.itens,
+          custodia: visaoRadar.custodia,
+          meus: {...visaoRadar.meus, for (final i in itens) i.ticker},
+        );
+        final amigo = visaoRadarAmigo;
+        if (amigo != null) {
+          visaoRadarAmigo = VisaoRadar(
+            itens: amigo.itens,
+            custodia: amigo.custodia,
+            meus: visaoRadar.meus,
+            amigo: amigo.amigo,
+          );
+        }
+        return itens.length;
+      });
+
+  @override
+  Future<void> removerRadar(String ticker) =>
+      _chamar('removerRadar', [ticker], () {
+        visaoRadar = VisaoRadar(
+          itens: [
+            for (final i in visaoRadar.itens)
+              if (i.ticker != ticker) i,
+          ],
+          custodia: visaoRadar.custodia,
+          meus: {...visaoRadar.meus}..remove(ticker),
+        );
+      });
+
+  @override
+  Future<void> reordenarRadar(List<String> tickers) =>
+      _chamar('reordenarRadar', [tickers.join(',')], () {
+        ultimaOrdemRadar = tickers;
+        final porTicker = {for (final i in visaoRadar.itens) i.ticker: i};
+        visaoRadar = VisaoRadar(
+          itens: [for (final t in tickers) porTicker[t]!],
+          custodia: visaoRadar.custodia,
+          meus: visaoRadar.meus,
+        );
+      });
+
+  @override
+  Future<void> limparCacheCotacoes() =>
+      _chamar('limparCacheCotacoes', [], () {});
+
+  @override
+  Future<CotacaoRadar> cotacao(String ticker, {String nome = ''}) {
+    chamadas.add('cotacao($ticker)');
+    final erro = erros['cotacao'];
+    if (erro != null) return Future.error(erro);
+    final fn = cotacaoFn;
+    if (fn != null) return fn(ticker, nome);
+    final r = cotacoesFalsas[ticker];
+    return r == null
+        ? Future.error(Exception('sem cotação de $ticker'))
+        : Future.value(r);
+  }
+
+  @override
+  Future<Grafico> grafico(String ticker, String periodo) {
+    chamadas.add('grafico($ticker, $periodo)');
+    final erro = erros['grafico'];
+    if (erro != null) return Future.error(erro);
+    final fn = graficoFn;
+    if (fn != null) return fn(ticker, periodo);
+    return Future.value(
+      graficosFalsos[ticker] ??
+          Grafico(
+            ticker: ticker,
+            periodo: periodo,
+            pontos: const [(1, 10.0), (2, 10.5), (3, 10.2), (4, 10.8)],
+            referencia: 10,
+            desvio: 0,
+            intradiario: true,
+          ),
+    );
+  }
 
   /// Métodos das Tarefas 5 e 6 ainda sem resposta.
   @override
