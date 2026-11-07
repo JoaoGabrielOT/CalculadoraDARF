@@ -192,10 +192,11 @@ jobs:
         shell: pwsh
         working-directory: app
         run: |
-          flutter build windows --release --build-name $env:VERSAO --build-number $env:NUMERO -v 2>&1 | Tee-Object -FilePath $env:RUNNER_TEMP/build.log
+          flutter build windows --release --build-name $env:VERSAO --build-number $env:NUMERO 2>&1 | Tee-Object -FilePath $env:RUNNER_TEMP/build.log
           if ($LASTEXITCODE -ne 0) {
-            # os logs exigem login; as linhas de erro vão como anotação
-            $erros = (Select-String -Path $env:RUNNER_TEMP/build.log -Pattern 'error [A-Z]+\d+|CMake Error|Error:|FAILED|Exception|\.dart:\d+' | Select-Object -First 15 | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(300, $_.Line.Trim().Length)) }) -join '%0A'
+            # os logs exigem login; as últimas linhas de erro vão como anotação
+            $erros = (Select-String -Path $env:RUNNER_TEMP/build.log -Pattern 'error [A-Z]+\d+|CMake Error|Error \(|FAILED:|\.dart:\d+:\d+: Error' | Select-Object -Last 15 | ForEach-Object { $l = $_.Line.Trim(); $l.Substring(0, [Math]::Min(300, $l.Length)) }) -join "`n"
+            $erros = $erros.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Output "::error title=Build Windows::$erros"
             exit $LASTEXITCODE
           }
@@ -205,27 +206,57 @@ jobs:
         working-directory: app
         run: |
           $destino = "build\windows\x64\runner\Release"
+          # o Release precisa estar completo: a Tarefa 6 empacota esta pasta
+          foreach ($item in "calculadoradarf.exe", "flutter_windows.dll", "data\app.so") {
+            if (-not (Test-Path "$destino\$item")) {
+              Write-Output "::error::$destino\$item ausente"
+              exit 1
+            }
+          }
+          # origem preferida: redistribuível oficial da toolset usada no build
+          $redist = $null
+          $base = $env:VCToolsRedistDir
+          if (-not $base) {
+            $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vswhere) {
+              $vs = & $vswhere -latest -products * -property installationPath
+              $versao = Get-ChildItem (Join-Path $vs "VC\Redist\MSVC") -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '^\d' } | Sort-Object Name | Select-Object -Last 1
+              if ($versao) { $base = $versao.FullName }
+            }
+          }
+          if ($base) {
+            $redist = Get-ChildItem (Join-Path $base "x64") -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $redist) {
+            Write-Output "::warning::Redistribuível do Visual C++ não encontrado; usando System32"
+            $redist = Join-Path $env:SystemRoot "System32"
+          }
           foreach ($dll in "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll") {
-            $origem = Join-Path $env:SystemRoot "System32\$dll"
+            $origem = Join-Path $redist $dll
             if (-not (Test-Path $origem)) {
               Write-Output "::error::$origem não encontrada"
               exit 1
             }
             Copy-Item $origem $destino
+            $v = (Get-Item $origem).VersionInfo.FileVersion
+            Write-Output "::notice title=DLL::$dll de $origem (FileVersion $v)"
           }
           $dlls = (Get-ChildItem $destino -Filter *.dll | ForEach-Object Name) -join ", "
           Write-Output "::notice title=Windows::DLLs em Release: $dlls"
-          $exe = Test-Path "$destino\calculadoradarf.exe"
-          Write-Output "::notice title=Windows::calculadoradarf.exe presente: $exe"
+          Write-Output "::notice title=Windows::calculadoradarf.exe, flutter_windows.dll e data\app.so presentes"
 
       - name: Teste de integração no Windows
         shell: pwsh
         working-directory: app
         run: |
           New-Item -ItemType Directory -Force -Path build\capturas | Out-Null
-          flutter test integration_test -d windows --dart-define=CAPTURAS=$env:GITHUB_WORKSPACE\app\build\capturas
+          flutter test integration_test -d windows --dart-define=CAPTURAS=$env:GITHUB_WORKSPACE\app\build\capturas 2>&1 | Tee-Object -FilePath $env:RUNNER_TEMP/integracao.log
           if ($LASTEXITCODE -ne 0) {
-            Write-Output "::error::Teste de integração falhou (código $LASTEXITCODE)"
+            $erros = (Get-Content $env:RUNNER_TEMP/integracao.log | Select-Object -Last 15 | ForEach-Object { $l = $_.Trim(); $l.Substring(0, [Math]::Min(300, $l.Length)) }) -join "`n"
+            $erros = $erros.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Integração::falhou (código $LASTEXITCODE)%0A$erros"
             exit $LASTEXITCODE
           }
           Write-Output "::notice title=Integração::teste de integração passou"
