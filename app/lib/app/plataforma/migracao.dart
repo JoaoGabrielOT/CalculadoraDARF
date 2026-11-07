@@ -23,6 +23,8 @@ class ResultadoMigracao {
 
   /// null = nada migrado nesta partida.
   final String? origem;
+
+  /// Arquivos copiados nesta passada (uma nova tentativa não conta os de antes).
   final int copiados;
 
   /// Caminhos relativos, ordenados.
@@ -30,6 +32,7 @@ class ResultadoMigracao {
   final String? erro;
 }
 
+const _sufixoParcial = '.migrando';
 final _arquivoMes = RegExp(r'^\d{4}-\d{2}\.json$');
 
 String _normalizado(String caminho) {
@@ -198,29 +201,37 @@ ResultadoMigracao migrarDados112({
     if (origem == null) return const ResultadoMigracao();
 
     Directory(destino).createSync(recursive: true);
+    // sobras de uma cópia interrompida (só estas; arquivo real nunca é apagado)
+    for (final e in Directory(destino).listSync(recursive: true)) {
+      if (e is File && e.path.endsWith(_sufixoParcial)) e.deleteSync();
+    }
+    // `copiados` conta só esta passada; `divergentes` olha a origem inteira,
+    // inclusive o que uma passada anterior (interrompida) já copiou.
     var copiados = 0;
     final divergentes = <String>[];
-    final base = _normalizado(origem).length;
+    final prefixo = origem.replaceAll(RegExp(r'[\\/]+$'), '');
     for (final e in Directory(
       origem,
     ).listSync(recursive: true, followLinks: false)) {
       final rel = e.path
-          .replaceAll('\\', '/')
-          .substring(base)
+          .substring(prefixo.length)
+          .replaceAll(r'\', '/')
           .replaceAll(RegExp(r'^/+'), '');
       if (rel.isEmpty || rel == nomeMarcadorMigracao) continue;
       final alvo = '$destino/$rel';
       if (e is Directory) {
         Directory(alvo).createSync(recursive: true);
       } else if (e is File) {
-        if (File(alvo).existsSync()) continue;
-        Directory(File(alvo).parent.path).createSync(recursive: true);
-        e.copySync(alvo);
-        copiados++;
         if ((rel == 'config.json' || _arquivoMes.hasMatch(rel)) &&
             !_leituraPreserva(e, rel)) {
           divergentes.add(rel);
         }
+        // nunca sobrescreve; cópia atômica (parcial só com o sufixo)
+        if (File(alvo).existsSync()) continue;
+        Directory(File(alvo).parent.path).createSync(recursive: true);
+        e.copySync('$alvo$_sufixoParcial');
+        File('$alvo$_sufixoParcial').renameSync(alvo);
+        copiados++;
       }
     }
     final ordenados = ordenadoPor(divergentes, (d) => [d]);
@@ -270,11 +281,14 @@ Future<ResultadoMigracao> migrarNaPartida({
   List<String> raizesAndroid = const [],
 }) async {
   try {
-    final origens = windows
-        ? origensWindows(pastaSuporte)
-        : origensAndroid(raizesAndroid, destino: destino);
+    // a busca de origens (varredura de pastas) também fica fora da interface
     return await Isolate.run(
-      () => migrarDados112(destino: destino, origens: origens),
+      () => migrarDados112(
+        destino: destino,
+        origens: windows
+            ? origensWindows(pastaSuporte)
+            : origensAndroid(raizesAndroid, destino: destino),
+      ),
     );
   } catch (e) {
     return ResultadoMigracao(erro: e.toString());

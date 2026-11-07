@@ -131,6 +131,50 @@ void main() {
     });
   });
 
+  group('nova tentativa', () {
+    String mesDivergente() {
+      final mes = jsonDecode(_mes) as Map<String, Object?>;
+      ((mes['lotes']! as List).first as Map)['x'] = 1;
+      return jsonEncode(mes);
+    }
+
+    test('falha no meio: sem marcador; a próxima passada completa', () {
+      montarOrigem();
+      escrever('$origem/2026-10.json', mesDivergente());
+      escrever('$destino/logos', 'arquivo no lugar da pasta');
+      final r1 = migrarDados112(destino: destino, origens: [origem]);
+      expect(r1.erro, isNotNull);
+      expect(File('$destino/$nomeMarcadorMigracao').existsSync(), isFalse);
+      File('$destino/logos').deleteSync();
+      final r2 = migrarDados112(destino: destino, origens: [origem]);
+      expect(r2.erro, isNull);
+      expect(r2.divergentes, ['2026-10.json']);
+      expect(File('$destino/logos/PETR4.png').readAsBytesSync(), [1, 2, 3]);
+      expect(File('$destino/$nomeMarcadorMigracao').existsSync(), isTrue);
+    });
+
+    test('sobra .migrando truncada é apagada e o arquivo é recopiado', () {
+      montarOrigem();
+      escrever('$destino/config.json.migrando', '{trunc');
+      escrever('$destino/logos/PETR4.png.migrando', 'x');
+      final r = migrarDados112(destino: destino, origens: [origem]);
+      expect(r.erro, isNull);
+      expect(r.copiados, 5);
+      expect(File('$destino/config.json').readAsStringSync(), _config);
+      expect(File('$destino/config.json.migrando').existsSync(), isFalse);
+      expect(File('$destino/logos/PETR4.png.migrando').existsSync(), isFalse);
+    });
+
+    test('origem com letra que muda de tamanho em minúsculas', () {
+      final o = '${tmp.path}/İdados';
+      escrever('$o/config.json', _config);
+      escrever('$o/logos/a.png', 'a');
+      final r = migrarDados112(destino: destino, origens: [o]);
+      expect(r.copiados, 2);
+      expect(File('$destino/logos/a.png').existsSync(), isTrue);
+    });
+  });
+
   group('origens', () {
     test('origensWindows lê caminho com acentos e BOM', () {
       final pasta = '${tmp.path}\\Área de Trabalho\\João\\dados';
