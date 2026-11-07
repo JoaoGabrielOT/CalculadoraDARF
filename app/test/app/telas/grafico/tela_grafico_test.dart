@@ -4,6 +4,7 @@ import 'package:calculadoradarf/app/componentes/grafico_linha.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/regras/textos.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
+import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/telas/grafico/tela_grafico.dart';
 import 'package:calculadoradarf/app/telas/radar/tela_radar.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
@@ -213,6 +214,115 @@ void main() {
     await t.tap(find.text('Máx'));
     await t.pumpAndSettle();
     expect(find.text('11/2026'), findsWidgets);
+  });
+
+  Grafico graficoCom(
+    String tk,
+    String p,
+    List<double> valores, {
+    double ref = 10,
+  }) => Grafico(
+    ticker: tk,
+    periodo: p,
+    pontos: [for (final (i, v) in valores.indexed) (_t0 + i * 60, v)],
+    referencia: ref,
+    desvio: -10800,
+    intradiario: false,
+  );
+
+  testWidgets('marcas de tempo ficam sob os pontos mesmo com vão grande', (
+    t,
+  ) async {
+    final s = ServicosFalsos()
+      ..graficoFn = (tk, p) => Future.value(
+        Grafico(
+          ticker: tk,
+          periodo: p,
+          pontos: [
+            for (final (i, d) in [0, 60, 120, 180, 864000, 864060].indexed)
+              (_t0 + d, 10.0 + i),
+          ],
+          referencia: 10,
+          desvio: -10800,
+          intradiario: false,
+        ),
+      );
+    await _abrir(t, servicos: s);
+    await t.tap(find.text('6M'));
+    await t.pumpAndSettle();
+    final r = t.getRect(_linha());
+    final util = r.width - 16;
+    // n = 6, 4 marcas: índices 0, 2, 3 e 5
+    for (final (k, i) in [0, 2, 3, 5].indexed) {
+      final x = t.getCenter(find.byKey(Key('marca-tempo-$k'))).dx;
+      expect(x, closeTo(r.left + 8 + util * i / 5, 1.5), reason: 'marca $k');
+      // tocar sob a marca mostra o ponto dela
+      await t.tapAt(Offset(x, r.center.dy));
+      await t.pump();
+      expect(find.textContaining(brl(10.0 + i)), findsWidgets);
+    }
+  });
+
+  testWidgets('eixo de preços tem 5 rótulos de grade em brl', (t) async {
+    await _abrir(t);
+    // pontos 10,2..10,8 e referência 10 no 1D: de 10,00 a 10,80
+    final esperados = [
+      'R\$ 10,00',
+      'R\$ 10,20',
+      'R\$ 10,40',
+      'R\$ 10,60',
+      'R\$ 10,80',
+    ];
+    for (final (k, v) in esperados.indexed) {
+      expect(t.widget<Text>(find.byKey(Key('eixo-preco-$k'))).data, v);
+    }
+    expect(find.byKey(const Key('eixo-preco-5')), findsNothing);
+  });
+
+  testWidgets('cor da linha: >= a referência é alta, também fora do 1D', (
+    t,
+  ) async {
+    final s = ServicosFalsos()
+      ..graficoFn = (tk, p) => Future.value(graficoCom(tk, p, [10, 11, 10]));
+    await _abrir(t, servicos: s);
+    await t.tap(find.text('1M'));
+    await t.pumpAndSettle();
+    final cores = CoresApp.de(t.element(_linha()));
+    PintorLinha pintor() =>
+        t
+                .widget<CustomPaint>(
+                  find.descendant(
+                    of: _linha(),
+                    matching: find.byWidgetPredicate(
+                      (w) => w is CustomPaint && w.painter is PintorLinha,
+                    ),
+                  ),
+                )
+                .painter!
+            as PintorLinha;
+    expect(pintor().cor, cores.alta); // empate: alta
+    s.graficoFn = (tk, p) => Future.value(graficoCom(tk, p, [10, 11, 9]));
+    await t.tap(find.text('6M'));
+    await t.pumpAndSettle();
+    expect(pintor().cor, cores.queda);
+  });
+
+  testWidgets('janela baixa rola em vez de estourar', (t) async {
+    final cena = await _abrir(t, tamanho: const Size(900, 480));
+    expect(t.takeException(), isNull);
+    expect(find.byType(SingleChildScrollView), findsWidgets);
+    await t.ensureVisible(find.text('Ver notícias'));
+    await t.tap(find.text('Ver notícias'));
+    await t.pumpAndSettle();
+    expect(cena.chamadas, ['noticias']);
+  });
+
+  testWidgets('gráfico sem pontos não quebra', (t) async {
+    final s = ServicosFalsos()
+      ..graficoFn = (tk, p) => Future.value(graficoCom(tk, p, []));
+    await _abrir(t, servicos: s);
+    expect(find.byKey(const Key('grafico-vazio')), findsOneWidget);
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('estatísticas com os valores de DadosAtivo', (t) async {

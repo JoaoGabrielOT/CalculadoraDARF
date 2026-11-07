@@ -61,7 +61,10 @@ Future<void> abrirGrafico(
       context: c,
       builder: (ctx) => Dialog(
         key: const Key('grafico-dialogo'),
-        child: SizedBox(width: 960, height: 640, child: corpo(ctx, true)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints.tightFor(width: 960, height: 640),
+          child: corpo(ctx, true),
+        ),
       ),
     );
   }
@@ -145,6 +148,9 @@ bool _tem(double? v) => v != null && v != 0;
 String _faixa(double? a, double? b) =>
     _tem(a) && _tem(b) ? '${brl(a!)} – ${brl(b!)}' : '—';
 
+/// Abaixo desta altura útil o diálogo rola em vez de esticar o gráfico.
+const _alturaMinima = 520.0;
+
 class _Conteudo extends StatelessWidget {
   const _Conteudo({
     required this.ticker,
@@ -173,20 +179,14 @@ class _Conteudo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controle = context.watch<ControleGrafico>();
-    final miolo = <Widget>[
+    final topo = <Widget>[
       _Cabecalho(ticker: ticker, nome: nome, dados: dados),
       const SizedBox(height: 12),
       _Periodos(controle: controle),
       const SizedBox(height: 8),
-      if (grande)
-        Expanded(
-          child: _Area(controle: controle, grande: grande),
-        )
-      else
-        SizedBox(
-          height: 300,
-          child: _Area(controle: controle, grande: grande),
-        ),
+    ];
+    final area = _Area(controle: controle, grande: grande);
+    final base = <Widget>[
       const SizedBox(height: 8),
       _Estatisticas(dados: dados, grande: grande),
       const SizedBox(height: 12),
@@ -202,17 +202,20 @@ class _Conteudo extends StatelessWidget {
     ];
     return Padding(
       padding: const EdgeInsets.all(20),
-      child: grande
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: miolo,
-            )
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: miolo,
-              ),
-            ),
+      child: LayoutBuilder(
+        builder: (context, caixa) {
+          // janela baixa: rola em vez de estourar
+          final fixo = grande && caixa.maxHeight >= _alturaMinima;
+          final miolo = fixo
+              ? [...topo, Expanded(child: area), ...base]
+              : [...topo, SizedBox(height: 300, child: area), ...base];
+          final coluna = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: miolo,
+          );
+          return fixo ? coluna : SingleChildScrollView(child: coluna);
+        },
+      ),
     );
   }
 }
@@ -299,7 +302,7 @@ class _Periodos extends StatelessWidget {
     final g = controle.grafico;
     String? variacao;
     double? var_;
-    if (g != null && g.referencia != 0) {
+    if (g != null && g.pontos.isNotEmpty && g.referencia != 0) {
       var_ = (g.pontos.last.$2 / g.referencia - 1) * 100;
       final nome = switch (controle.periodo) {
         '1D' => 'hoje',
@@ -360,9 +363,18 @@ class _Area extends StatelessWidget {
         ),
       );
     }
+    final g = controle.grafico!;
+    if (g.pontos.isEmpty) {
+      return Center(
+        child: Text(
+          'Sem dados de ${controle.periodo} para ${controle.ticker}.',
+          key: const Key('grafico-vazio'),
+        ),
+      );
+    }
     return _Grafico(
       key: ValueKey('${controle.ticker}-${controle.periodo}'),
-      grafico: controle.grafico!,
+      grafico: g,
       grande: grande,
     );
   }
@@ -386,9 +398,7 @@ class _GraficoState extends State<_Grafico> {
   Widget build(BuildContext context) {
     final g = widget.grafico;
     final c = CoresApp.de(context);
-    final n = g.pontos.length;
-    final marcas = n < 4 ? n : 4;
-    final tocado = _ponto;
+    final tocado = _ponto == null ? null : g.pontos[_ponto!.$1];
     final String texto;
     Color? corTexto;
     if (tocado == null) {
@@ -424,39 +434,167 @@ class _GraficoState extends State<_Grafico> {
         ),
         const SizedBox(height: 4),
         Expanded(
-          child: GraficoLinha(
-            pontos: g.pontos,
-            referencia: g.periodo == '1D' ? g.referencia : null,
-            interativo: true,
-            aoTocar: (p) {
-              if (mounted) setState(() => _ponto = p);
+          child: _Plano(grafico: g, aoTocar: _tocou),
+        ),
+      ],
+    );
+  }
+
+  void _tocou((int, double)? p) {
+    if (mounted) setState(() => _ponto = p);
+  }
+}
+
+const _larguraEixo = 70.0;
+const _margemLinha = 8.0; // a mesma do GraficoLinha
+
+/// Linha por índice (py:3164-3165: a marca do eixo cai sempre sob o ponto),
+/// grade e eixo de preços à direita (py:3176-3180) e marcas de tempo abaixo.
+class _Plano extends StatelessWidget {
+  const _Plano({required this.grafico, required this.aoTocar});
+
+  final Grafico grafico;
+  final ValueChanged<(int, double)?> aoTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final g = grafico;
+    final c = CoresApp.de(context);
+    final estilo = TextStyle(color: c.textoSuave, fontSize: 11);
+    final n = g.pontos.length;
+    final marcas = n < 4 ? n : 4;
+    final ref = g.periodo == '1D' ? g.referencia : null;
+    final valores = [for (final p in g.pontos) p.$2, ?ref];
+    final minY = valores.reduce((a, b) => a < b ? a : b);
+    final maxY = valores.reduce((a, b) => a > b ? a : b);
+    final pontos = [for (final (i, p) in g.pontos.indexed) (i, p.$2)];
+    // py:3157-3158 (`subiu`): >= em todos os períodos
+    final cor = g.pontos.last.$2 >= g.referencia ? c.alta : c.queda;
+    return Column(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, caixa) {
+              final h = caixa.maxHeight;
+              double y(double v) => maxY == minY
+                  ? h / 2
+                  : h -
+                        _margemLinha -
+                        (v - minY) / (maxY - minY) * (h - 2 * _margemLinha);
+              final niveis = [
+                for (var k = 0; k < 5; k++) minY + (maxY - minY) * k / 4,
+              ];
+              return Row(
+                children: [
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _Grade([
+                              for (final v in niveis) y(v),
+                            ], c.cartaoBorda),
+                          ),
+                        ),
+                        GraficoLinha(
+                          pontos: pontos,
+                          referencia: ref,
+                          cor: cor,
+                          interativo: true,
+                          aoTocar: aoTocar,
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: _larguraEixo,
+                    child: Stack(
+                      children: [
+                        for (final v in niveis)
+                          Positioned(
+                            left: 6,
+                            right: 0,
+                            top: y(v) - 7,
+                            child: Text(
+                              brl(v),
+                              key: Key('eixo-preco-${niveis.indexOf(v)}'),
+                              style: estilo,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
             },
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              for (var k = 0; k < marcas; k++)
-                Text(
-                  rotuloTempo(
-                    g
-                        .pontos[(k * (n - 1) / (marcas > 1 ? marcas - 1 : 1))
-                            .round()]
-                        .$1,
-                    g.desvio,
-                    g.periodo,
-                    curto: true,
-                  ),
-                  style: estilo,
-                ),
-            ],
+        SizedBox(
+          height: 22,
+          child: Padding(
+            padding: const EdgeInsets.only(right: _larguraEixo),
+            child: LayoutBuilder(
+              builder: (context, caixa) {
+                final util = caixa.maxWidth - 2 * _margemLinha;
+                return Stack(
+                  children: [
+                    for (var k = 0; k < marcas; k++)
+                      Builder(
+                        builder: (context) {
+                          final i =
+                              (k * (n - 1) / (marcas > 1 ? marcas - 1 : 1))
+                                  .round();
+                          final x = n > 1
+                              ? _margemLinha + util * i / (n - 1)
+                              : caixa.maxWidth / 2;
+                          return Positioned(
+                            left: x,
+                            top: 4,
+                            child: FractionalTranslation(
+                              translation: const Offset(-0.5, 0),
+                              child: Text(
+                                rotuloTempo(
+                                  g.pontos[i].$1,
+                                  g.desvio,
+                                  g.periodo,
+                                  curto: true,
+                                ),
+                                key: Key('marca-tempo-$k'),
+                                style: estilo,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ],
     );
   }
+}
+
+class _Grade extends CustomPainter {
+  _Grade(this.ys, this.cor);
+
+  final List<double> ys;
+  final Color cor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = cor
+      ..strokeWidth = 1;
+    for (final y in ys) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Grade antigo) => antigo.ys != ys || antigo.cor != cor;
 }
 
 class _Estatisticas extends StatelessWidget {
