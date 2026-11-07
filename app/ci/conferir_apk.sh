@@ -30,7 +30,13 @@ if [ "$codigo" = "$ESPERADO" ]; then ok "versionCode $codigo"; else erro "versio
 
 # 2. ABIs
 abis="$(echo "$badging_novo" | sed -nE "s/^native-code: (.*)$/\1/p" | head -n 1)"
-if [ "$abis" = "'arm64-v8a' 'armeabi-v7a'" ]; then ok "ABIs $abis"; else erro "ABIs" "$abis"; fi
+if [ "$abis" = "'arm64-v8a' 'armeabi-v7a'" ]; then ok "ABIs $abis"; else
+  erro "ABIs" "$abis"
+  # quais bibliotecas nativas trouxeram ABIs a mais
+  extras="$(unzip -l "$NOVO" | awk '{print $4}' | grep -E '^lib/(x86|x86_64|mips)' | head -n 8 | tr '
+' ' ')"
+  echo "::notice title=APK::bibliotecas de ABIs extras: $extras"
+fi
 
 # 3. o res/raw/keep.xml sobreviveu ao shrinkResources
 if "$AAPT2" dump resources "$NOVO" | grep -q "drawable/ic_notificacao"; then
