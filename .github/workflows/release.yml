@@ -69,23 +69,89 @@ jobs:
         working-directory: app
         run: flutter test --exclude-tags golden
 
-  # Tarefas 4 e 5 acrescentam os jobs android e windows, cada um com este passo de preparação:
-  #
-  #   - name: Preparar versão e credencial
-  #     shell: pwsh
-  #     env:
-  #       GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-  #     run: |
-  #       if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
-  #         Set-Content -Path app/lib/versao.dart -Encoding utf8 -Value @(
-  #           '/// Versão do aplicativo (comparada com a do GitHub pelo atualizador).',
-  #           "const String versaoApp = '${{ needs.versao.outputs.versao }}';")
-  #       }
-  #       (grava app/assets/google/credentials.json de GOOGLE_CREDENTIALS e confere 'installed')
+  android:
+    needs: versao
+    runs-on: ubuntu-latest
+    env:
+      VERSAO: ${{ needs.versao.outputs.versao }}
+      NUMERO: ${{ needs.versao.outputs.numero }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir os segredos e gravar a keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Segredo ANDROID_KEYSTORE_BASE64 não configurado"; exit 1
+          fi
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Segredo ANDROID_KEYSTORE_PASSWORD não configurado"; exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+
+      - name: Preparar versão e credencial
+        shell: pwsh
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          if ("${{ github.event_name }}" -eq "push" -and "${{ github.ref_type }}" -eq "tag") {
+            Set-Content -Path app/lib/versao.dart -Encoding utf8 -Value @(
+              '/// Versão do aplicativo (comparada com a do GitHub pelo atualizador).',
+              "const String versaoApp = '${{ needs.versao.outputs.versao }}';")
+          }
+          if (-not $env:GOOGLE_CREDENTIALS -or $env:GOOGLE_CREDENTIALS -notmatch '"installed"') {
+            Write-Output "::error::Segredo GOOGLE_CREDENTIALS ausente ou sem a chave 'installed'"
+            exit 1
+          }
+          New-Item -ItemType Directory -Force -Path app/assets/google | Out-Null
+          Set-Content -Path app/assets/google/credentials.json -Encoding utf8 -Value $env:GOOGLE_CREDENTIALS
+
+      - name: Dependências
+        working-directory: app
+        run: flutter pub get
+
+      - name: Compilar o APK assinado
+        working-directory: app
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upload.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -e
+          flutter build apk --release --target-platform android-arm,android-arm64 --build-name "$VERSAO" --build-number "$NUMERO"
+          cp build/app/outputs/flutter-apk/app-release.apk ../CalculadoraDARF.apk
+
+      - name: Baixar o APK publicado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --repo "$GITHUB_REPOSITORY" --pattern CalculadoraDARF.apk --dir anterior
+
+      - name: Conferir o APK contra o publicado
+        run: bash app/ci/conferir_apk.sh CalculadoraDARF.apk "$NUMERO" anterior/CalculadoraDARF.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: CalculadoraDARF.apk
+
+  # A Tarefa 5 acrescenta o job windows, com o mesmo passo "Preparar versão e credencial".
 
   publicar:
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: [versao, testes]
+    needs: [versao, testes, android]
     permissions:
       contents: write
     runs-on: ubuntu-latest

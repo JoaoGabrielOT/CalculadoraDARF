@@ -4,6 +4,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val caminhoChave = System.getenv("ANDROID_KEYSTORE_PATH")
+val senhaChave = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val temChave = !caminhoChave.isNullOrEmpty() && !senhaChave.isNullOrEmpty()
+
 android {
     namespace = "io.github.joaogabrielot.calculadoradarf"
     compileSdk = flutter.compileSdkVersion
@@ -31,11 +35,22 @@ android {
         versionName = flutter.versionName
     }
 
+    // O Flet usava a mesma senha para a keystore e para a chave.
+    signingConfigs {
+        create("release") {
+            if (temChave) {
+                storeFile = file(caminhoChave!!)
+                storePassword = senhaChave
+                keyAlias = "calculadoradarf"
+                keyPassword = senhaChave
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Sem os segredos o build local assina com a chave de debug; o CI confere os segredos antes.
+            signingConfig = signingConfigs.getByName(if (temChave) "release" else "debug")
         }
     }
 }
