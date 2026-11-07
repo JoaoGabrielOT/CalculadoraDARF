@@ -18,6 +18,7 @@ class ResultadoMigracao {
     this.origem,
     this.copiados = 0,
     this.divergentes = const [],
+    this.pulados = const [],
     this.erro,
   });
 
@@ -29,6 +30,10 @@ class ResultadoMigracao {
 
   /// Caminhos relativos, ordenados.
   final List<String> divergentes;
+
+  /// Caminhos relativos de arquivos que já existiam no destino com conteúdo
+  /// diferente (nunca sobrescritos), ordenados.
+  final List<String> pulados;
   final String? erro;
 }
 
@@ -104,7 +109,10 @@ List<String> origensAndroid(
   final achadas = <String>[];
   void varrer(Directory pasta, int nivel) {
     if (_dentroDe(pasta.path, destino)) return;
-    if (_ehCandidata(pasta)) achadas.add(pasta.path);
+    // ancestral do destino (ex.: a raiz com dados/) incluiria o próprio destino
+    if (!_dentroDe(destino, pasta.path) && _ehCandidata(pasta)) {
+      achadas.add(pasta.path);
+    }
     if (nivel >= profundidade) return;
     try {
       for (final e in pasta.listSync(followLinks: false)) {
@@ -182,6 +190,17 @@ bool _leituraPreserva(File arquivo, String nome) {
   }
 }
 
+// Uma passada interrompida já copiou arquivos idênticos: isso não é aviso.
+bool _mesmoConteudo(File a, File b) {
+  if (a.lengthSync() != b.lengthSync()) return false;
+  final x = a.readAsBytesSync();
+  final y = b.readAsBytesSync();
+  for (var i = 0; i < x.length; i++) {
+    if (x[i] != y[i]) return false;
+  }
+  return true;
+}
+
 ResultadoMigracao migrarDados112({
   required String destino,
   required List<String> origens,
@@ -209,12 +228,16 @@ ResultadoMigracao migrarDados112({
     // inclusive o que uma passada anterior (interrompida) já copiou.
     var copiados = 0;
     final divergentes = <String>[];
+    final pulados = <String>[];
     final prefixo = origem.replaceAll(RegExp(r'[\\/]+$'), '');
     // ordem estável (listSync depende do sistema de arquivos)
-    final entradas = ordenadoPor(
-      Directory(origem).listSync(recursive: true, followLinks: false),
-      (e) => [e.path],
-    );
+    // o destino pode estar dentro da origem: nunca entra nele
+    final entradas = ordenadoPor([
+      for (final e in Directory(
+        origem,
+      ).listSync(recursive: true, followLinks: false))
+        if (!_dentroDe(e.path, destino)) e,
+    ], (e) => [e.path]);
     for (final e in entradas) {
       final rel = e.path
           .substring(prefixo.length)
@@ -230,7 +253,10 @@ ResultadoMigracao migrarDados112({
           divergentes.add(rel);
         }
         // nunca sobrescreve; cópia atômica (parcial só com o sufixo)
-        if (File(alvo).existsSync()) continue;
+        if (File(alvo).existsSync()) {
+          if (!_mesmoConteudo(e, File(alvo))) pulados.add(rel);
+          continue;
+        }
         Directory(File(alvo).parent.path).createSync(recursive: true);
         e.copySync('$alvo$_sufixoParcial');
         File('$alvo$_sufixoParcial').renameSync(alvo);
@@ -238,18 +264,21 @@ ResultadoMigracao migrarDados112({
       }
     }
     final ordenados = ordenadoPor(divergentes, (d) => [d]);
+    final ordenadosPulados = ordenadoPor(pulados, (d) => [d]);
     File('$destino/$nomeMarcadorMigracao').writeAsStringSync(
       jsonEncode({
         'origem': origem,
         'em': DateTime.now().toIso8601String(),
         'copiados': copiados,
         'divergentes': ordenados,
+        'pulados': ordenadosPulados,
       }),
     );
     return ResultadoMigracao(
       origem: origem,
       copiados: copiados,
       divergentes: ordenados,
+      pulados: ordenadosPulados,
     );
   } on FileSystemException catch (e) {
     return ResultadoMigracao(erro: e.toString());
@@ -265,12 +294,12 @@ ResultadoMigracao migrarDados112({
           'O app tenta de novo na próxima abertura.',
     );
   }
-  if (r.divergentes.isNotEmpty) {
+  if (r.divergentes.isNotEmpty || r.pulados.isNotEmpty) {
     return (
       'Dados da versão anterior',
-      'Copiados ${r.copiados} arquivos de ${r.origem}. Confira estes '
-          'arquivos, que não foram lidos por inteiro: '
-          '${r.divergentes.join(', ')}.',
+      'Copiados ${r.copiados} arquivos de ${r.origem}.'
+          '${r.divergentes.isEmpty ? '' : ' Confira estes arquivos, que não foram lidos por inteiro: ${r.divergentes.join(', ')}.'}'
+          '${r.pulados.isEmpty ? '' : ' Estes arquivos já existiam no app novo e não foram copiados: ${r.pulados.join(', ')}.'}',
     );
   }
   return null;

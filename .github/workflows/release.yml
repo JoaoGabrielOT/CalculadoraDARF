@@ -31,6 +31,10 @@ jobs:
             if [ "${V%%.*}" -lt 2 ]; then
               echo "::error::Tags 1.x são do app Python e saem da main."; exit 1
             fi
+            VF=$(sed -nE "s/^const String versaoApp = '([0-9]+\.[0-9]+\.[0-9]+)';.*/\1/p" app/lib/versao.dart)
+            if [ "$VF" != "$V" ]; then
+              echo "::warning::A tag ($V) difere de app/lib/versao.dart ($VF); o app mostrará $VF."
+            fi
           else
             # nunca 0.0.0: um build 0.0.0 ofereceria a 1.12 como atualização
             V=$(sed -nE "s/^const String versaoApp = '([0-9]+\.[0-9]+\.[0-9]+)';.*/\1/p" app/lib/versao.dart)
@@ -336,5 +340,7 @@ jobs:
             saida/CalculadoraDARF.apk
           prerelease: true     # o atualizador Python e o Flutter usam /releases/latest, que ignora pré-release
           make_latest: "false" # após a aprovação: gh release edit <tag> --prerelease=false --latest, e trocar estas duas linhas
+          body: |
+            Pré-release de teste da versão Flutter. Ainda não é a versão estável: a 1.12.x continua sendo a última.
           generate_release_notes: true
           fail_on_unmatched_files: true

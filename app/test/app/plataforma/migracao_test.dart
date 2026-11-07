@@ -93,6 +93,33 @@ void main() {
       expect(File('$destino/config.json').readAsStringSync(), 'novo');
     });
 
+    test('arquivo diferente já no destino entra em pulados e no marcador', () {
+      montarOrigem();
+      escrever('$destino/config.json', 'novo');
+      escrever('$destino/2026-10.json', _mes); // igual: não é aviso
+      final r = migrarDados112(destino: destino, origens: [origem]);
+      expect(r.pulados, ['config.json']);
+      expect(File('$destino/config.json').readAsStringSync(), 'novo');
+      final marcador = jsonDecode(
+        File('$destino/$nomeMarcadorMigracao').readAsStringSync(),
+      ) as Map;
+      expect(marcador['pulados'], ['config.json']);
+    });
+
+    test('destino dentro da origem não é copiado para dentro de si', () {
+      final raiz = '${tmp.path}/raiz';
+      escrever('$raiz/config.json', _config);
+      escrever('$raiz/flet/x.txt', 'x');
+      final dest = '$raiz/dados';
+      escrever('$dest/existente.txt', 'e');
+      final r = migrarDados112(destino: dest, origens: [raiz]);
+      expect(r.erro, isNull);
+      expect(r.copiados, 2);
+      expect(Directory('$dest/dados').existsSync(), isFalse);
+      expect(File('$dest/flet/x.txt').existsSync(), isTrue);
+      expect(File('$dest/existente.txt').readAsStringSync(), 'e');
+    });
+
     test('arquivo que perde dado na leitura entra em divergentes', () {
       final mes = jsonDecode(_mes) as Map<String, Object?>;
       ((mes['lotes']! as List).first as Map)['x'] = 1;
@@ -203,6 +230,14 @@ void main() {
       expect(_android(raiz), ['$raiz/flet/app_storage']);
     });
 
+    test('origensAndroid nunca escolhe um ancestral do destino', () {
+      final raiz = '${_barra(tmp.path)}/raiz';
+      escrever('$raiz/config.json', _config); // a raiz contém dados/
+      escrever('$raiz/dados/config.json', _config);
+      escrever('$raiz/flet/config.json', _config);
+      expect(_android(raiz), ['$raiz/flet']);
+    });
+
     test('origensAndroid põe a pasta com token antes das outras', () {
       final raiz = '${_barra(tmp.path)}/raiz';
       escrever('$raiz/a/config.json', _config);
@@ -254,6 +289,20 @@ void main() {
           'Dados da versão anterior',
           'Copiados 3 arquivos de o. Confira estes arquivos, que não foram '
               'lidos por inteiro: a.json, b.json.',
+        ),
+      );
+      expect(
+        avisoMigracao(
+          const ResultadoMigracao(
+            origem: 'o',
+            copiados: 3,
+            pulados: ['config.json'],
+          ),
+        ),
+        (
+          'Dados da versão anterior',
+          'Copiados 3 arquivos de o. Estes arquivos já existiam no app novo '
+              'e não foram copiados: config.json.',
         ),
       );
     },
