@@ -141,11 +141,13 @@ void main() {
     test('falha no meio: sem marcador; a próxima passada completa', () {
       montarOrigem();
       escrever('$origem/2026-10.json', mesDivergente());
-      escrever('$destino/logos', 'arquivo no lugar da pasta');
+      escrever('$origem/zzz/x.png', 'x');
+      // falha só depois do arquivo do mês (a cópia segue a ordem do caminho)
+      escrever('$destino/zzz', 'arquivo no lugar da pasta');
       final r1 = migrarDados112(destino: destino, origens: [origem]);
       expect(r1.erro, isNotNull);
       expect(File('$destino/$nomeMarcadorMigracao').existsSync(), isFalse);
-      File('$destino/logos').deleteSync();
+      File('$destino/zzz').deleteSync();
       final r2 = migrarDados112(destino: destino, origens: [origem]);
       expect(r2.erro, isNull);
       expect(r2.divergentes, ['2026-10.json']);

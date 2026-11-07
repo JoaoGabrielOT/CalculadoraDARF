@@ -210,9 +210,12 @@ ResultadoMigracao migrarDados112({
     var copiados = 0;
     final divergentes = <String>[];
     final prefixo = origem.replaceAll(RegExp(r'[\\/]+$'), '');
-    for (final e in Directory(
-      origem,
-    ).listSync(recursive: true, followLinks: false)) {
+    // ordem estável (listSync depende do sistema de arquivos)
+    final entradas = ordenadoPor(
+      Directory(origem).listSync(recursive: true, followLinks: false),
+      (e) => [e.path],
+    );
+    for (final e in entradas) {
       final rel = e.path
           .substring(prefixo.length)
           .replaceAll(r'\', '/')
