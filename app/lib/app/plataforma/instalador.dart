@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-/// Argumentos do instalador do Windows; revistos no plano 4 com o instalador real.
+/// Argumentos do Inno Setup (app/instalador/CalculadoraDARF.iss); o [Run] reabre o app.
 const argumentosInstaladorSilencioso = [
   '/VERYSILENT',
   '/SUPPRESSMSGBOXES',

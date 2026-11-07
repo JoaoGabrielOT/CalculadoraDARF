@@ -196,6 +196,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             # os logs exigem login; as últimas linhas de erro vão como anotação
             $erros = (Select-String -Path $env:RUNNER_TEMP/build.log -Pattern 'error [A-Z]+\d+|CMake Error|Error \(|FAILED:|\.dart:\d+:\d+: Error' | Select-Object -Last 15 | ForEach-Object { $l = $_.Line.Trim(); $l.Substring(0, [Math]::Min(300, $l.Length)) }) -join "`n"
+            if (-not $erros) {
+              # padrão estreito sem resultado: a anotação nunca fica vazia
+              $erros = (Get-Content $env:RUNNER_TEMP/build.log | Select-Object -Last 15 | ForEach-Object { $l = $_.Trim(); $l.Substring(0, [Math]::Min(300, $l.Length)) }) -join "`n"
+            }
             $erros = $erros.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Output "::error title=Build Windows::$erros"
             exit $LASTEXITCODE
@@ -220,9 +224,11 @@ jobs:
             $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
             if (Test-Path $vswhere) {
               $vs = & $vswhere -latest -products * -property installationPath
-              $versao = Get-ChildItem (Join-Path $vs "VC\Redist\MSVC") -Directory -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -match '^\d' } | Sort-Object Name | Select-Object -Last 1
-              if ($versao) { $base = $versao.FullName }
+              if ($vs) {
+                $versao = Get-ChildItem (Join-Path $vs "VC\Redist\MSVC") -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -match '^\d+(\.\d+)+$' } | Sort-Object { [version]$_.Name } | Select-Object -Last 1
+                if ($versao) { $base = $versao.FullName }
+              }
             }
           }
           if ($base) {
@@ -261,6 +267,36 @@ jobs:
           }
           Write-Output "::notice title=Integração::teste de integração passou"
 
+      - name: Compilar o instalador
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            if (-not (Test-Path $iscc)) {
+              Write-Output "::error::ISCC.exe não encontrado em $iscc"
+              exit 1
+            }
+          }
+          & $iscc "/DVersao=$env:VERSAO" app\instalador\CalculadoraDARF.iss 2>&1 | Tee-Object -FilePath $env:RUNNER_TEMP/iscc.log
+          if ($LASTEXITCODE -ne 0) {
+            $erros = (Get-Content $env:RUNNER_TEMP/iscc.log | Select-Object -Last 15 | ForEach-Object { $l = $_.Trim(); $l.Substring(0, [Math]::Min(300, $l.Length)) }) -join "`n"
+            $erros = $erros.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=ISCC::falhou (código $LASTEXITCODE)%0A$erros"
+            exit $LASTEXITCODE
+          }
+          $tam = [math]::Round((Get-Item app\build\instalador\CalculadoraDARF.exe).Length / 1MB, 1)
+          Write-Output "::notice title=Instalador::CalculadoraDARF.exe gerado ($tam MB, versão $env:VERSAO)"
+
+      - name: Testar o instalador
+        shell: pwsh
+        run: pwsh app\ci\testar_instalador.ps1 -Instalador app\build\instalador\CalculadoraDARF.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: app/build/instalador/CalculadoraDARF.exe
+
       - name: Contar as capturas
         if: always()
         shell: pwsh
@@ -276,7 +312,7 @@ jobs:
 
   publicar:
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: [versao, testes, android]
+    needs: [versao, testes, android, windows]
     permissions:
       contents: write
     runs-on: ubuntu-latest
