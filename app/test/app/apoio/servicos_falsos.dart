@@ -259,17 +259,73 @@ class ServicosFalsos implements ServicosApp {
     ], () => preparo ?? PreparoFechamento());
   }
 
+  /// Resposta de `metas`; sem ela, uma visão vazia com [metasAtivasFalsas].
+  VisaoMetas? visaoMetas;
+
+  /// Quando preenchido, `verificarMetas` responde por ele (para deixar o
+  /// `Future` pendente); sem ele, devolve [resultadoVerificacao].
+  Future<ResultadoVerificacao> Function()? verificarMetasFn;
+  ResultadoVerificacao resultadoVerificacao = const SemMetasAtivas();
+
+  /// Respostas de `calcularPrecoAlvo` e `projetarPreco` (por preço).
+  PrecoAlvo? precoAlvo;
+  Projecao Function(double preco)? projecaoFn;
+
+  /// Últimos argumentos de `criarMetaAlvo`.
+  ({String loteId, int qtd, double preco, double? lucro})? ultimaMetaAlvo;
+
   @override
   Future<VisaoMetas> metas() => _chamar(
     'metas',
     [],
-    () => VisaoMetas(
-      metas: [],
-      descricoes: {},
-      lotes: [],
-      ativas: metasAtivasFalsas,
-    ),
+    () =>
+        visaoMetas ??
+        VisaoMetas(
+          metas: [],
+          descricoes: {},
+          lotes: [],
+          ativas: metasAtivasFalsas,
+        ),
   );
+
+  @override
+  Future<PrecoAlvo> calcularPrecoAlvo(String loteId, int qtd, double lucro) =>
+      _chamar('calcularPrecoAlvo', [loteId, qtd, lucro], () => precoAlvo!);
+
+  @override
+  Future<Projecao> projetarPreco(String loteId, int qtd, double preco) =>
+      _chamar('projetarPreco', [loteId, qtd, preco], () => projecaoFn!(preco));
+
+  @override
+  Future<Meta> criarMetaAlvo(
+    String loteId,
+    int qtd,
+    double precoAlvo, {
+    double? lucroDesejado,
+    String? ocoCom,
+  }) => _chamar('criarMetaAlvo', [loteId, qtd, precoAlvo, lucroDesejado], () {
+    ultimaMetaAlvo = (
+      loteId: loteId,
+      qtd: qtd,
+      preco: precoAlvo,
+      lucro: lucroDesejado,
+    );
+    return metasExemplo().first;
+  });
+
+  @override
+  Future<void> cancelarMeta(String metaId) =>
+      _chamar('cancelarMeta', [metaId], () {});
+
+  @override
+  Future<ResultadoVerificacao> verificarMetas() {
+    final fn = verificarMetasFn;
+    if (fn != null) {
+      chamadas.add('verificarMetas()');
+      return fn();
+    }
+    return _chamar('verificarMetas', [], () => resultadoVerificacao);
+  }
 
   @override
   Future<Fechamento> fecharMes(String mes) => _chamar(

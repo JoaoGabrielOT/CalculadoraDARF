@@ -246,10 +246,26 @@ class MercadoLocal {
     String loteId,
     int qtd,
     double lucro,
-  ) async => nc.calcularPrecoAlvo(_acharLote(loteId), qtd, lucro);
+  ) async {
+    final lote = _acharLote(loteId);
+    // compra de hoje: a venda é day trade (py:3614; android/main.py:2505)
+    return nc.calcularPrecoAlvo(
+      lote,
+      qtd,
+      lucro,
+      dayTrade: lote.dataCompra == ambiente.hoje(),
+    );
+  }
 
-  Future<Projecao> projetarPreco(String loteId, int qtd, double preco) async =>
-      nc.projetar(_acharLote(loteId), qtd, preco);
+  Future<Projecao> projetarPreco(String loteId, int qtd, double preco) async {
+    final lote = _acharLote(loteId);
+    return nc.projetar(
+      lote,
+      qtd,
+      preco,
+      dayTrade: lote.dataCompra == ambiente.hoje(),
+    );
+  }
 
   Future<Meta?> parceiraOco(String loteId, String gatilho) async =>
       nc.parceiraOco(repo, lerConfigParaGravar(repo), loteId, gatilho);

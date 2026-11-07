@@ -271,6 +271,64 @@ void main() {
       expect(e.avisos, isEmpty); // a falha da verificação não vira aviso
     });
 
+    test('voltar ao primeiro plano avisa as metas executadas', () async {
+      final meta =
+          Meta(
+              id: 'M1',
+              ticker: 'PETR4',
+              loteId: 'L1',
+              qtd: 60,
+              precoAlvo: 40,
+              criadaEm: '2026-10-21T11:00:00-03:00',
+              status: 'executada',
+            )
+            ..execucao = {
+              'preco_usado': 40.0,
+              'data': '2026-10-28',
+              'hora': '10:15',
+              'motivo': 'Máxima do dia chegou ao alvo.',
+            };
+      final s = ServicosFalsos()
+        ..resultadoVerificacao = VerificacaoConcluida(
+          RelatorioMetas()..executadas.add(meta),
+        );
+      final (e, _, _) = await _criar(servicos: s);
+      e.aoMudarCiclo(AppLifecycleState.resumed);
+      await _soltar();
+      expect(e.avisos.map((a) => a.titulo), ['Meta atingida']);
+    });
+
+    test(
+      'EventoMetas com executada, inválida e aviso vira um aviso só',
+      () async {
+        final (e, s, _) = await _criar();
+        s.eventosFalsos.add(
+          EventoMetas(
+            RelatorioMetas()
+              ..invalidas.add(
+                Meta(
+                  id: 'I',
+                  ticker: 'VALE3',
+                  loteId: 'L2',
+                  qtd: 1,
+                  criadaEm: '2026-10-21T11:00:00-03:00',
+                  status: 'inválida',
+                  ultimoErro: 'Compra não existe mais.',
+                ),
+              )
+              ..avisos.add('Ajuste a venda duplicada.'),
+          ),
+        );
+        await _soltar();
+        expect(e.avisos, hasLength(1));
+        expect(e.avisos.single.titulo, 'Metas');
+        expect(
+          e.avisos.single.texto,
+          contains('VALE3: Compra não existe mais.'),
+        );
+      },
+    );
+
     test('falha ao iniciar os serviços vira falha de inicialização', () async {
       final s = ServicosFalsos()..erros['iniciar'] = StateError('x');
       final (e, _, p) = await _criar(servicos: s);

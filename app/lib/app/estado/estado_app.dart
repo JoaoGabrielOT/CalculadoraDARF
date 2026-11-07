@@ -231,6 +231,13 @@ class EstadoApp extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Avisa o que uma verificação de metas executou, invalidou ou deixou para
+  /// ajuste manual (py:2625-2637), num diálogo só.
+  void avisarRelatorioMetas(RelatorioMetas relatorio) {
+    final aviso = avisoRelatorioMetas(relatorio);
+    if (aviso != null) avisar(aviso.$1, aviso.$2);
+  }
+
   /// Próximo aviso da fila (a casca o mostra), ou null.
   EventoAviso? proximoAviso() => avisos.isEmpty ? null : avisos.removeAt(0);
 
@@ -429,7 +436,8 @@ class EstadoApp extends ChangeNotifier {
 
   Future<void> _verificarMetas() async {
     try {
-      await _servicos.verificarMetas();
+      final r = await _servicos.verificarMetas();
+      if (r is VerificacaoConcluida) avisarRelatorioMetas(r.relatorio);
     } catch (_) {
       // verificação de fundo: o próximo passo do timer tenta de novo
     }
@@ -461,6 +469,7 @@ class EstadoApp extends ChangeNotifier {
         notifyListeners();
         unawaited(_notificarNoticias(e.notificar));
       case EventoMetas():
+        avisarRelatorioMetas(e.relatorio);
         unawaited(_atualizarMetas());
       case EventoProgresso():
         break;

@@ -66,6 +66,26 @@ void main() {
     expect(_naLateral('Apuração / DARF'), findsOneWidget);
   });
 
+  testWidgets("o botão 'Meta de lucro' do cabeçalho abre as metas", (t) async {
+    await montarApp(t);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Meta de lucro'));
+    await t.pumpAndSettle();
+    expect(find.text('Meta de lucro / Preço-alvo'), findsOneWidget);
+    expect(find.text('METAS'), findsOneWidget);
+  });
+
+  testWidgets('o cartão de metas do celular abre as metas em tela cheia', (
+    t,
+  ) async {
+    await montarApp(t, tamanho: _pequeno);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Meta de lucro / Preço-alvo'));
+    await t.pumpAndSettle();
+    expect(find.byType(TabBar), findsOneWidget);
+    expect(find.text('Calculadora'), findsOneWidget);
+  });
+
   testWidgets('cabeçalho mostra a conta cortada em 26 e o amigo', (t) async {
     final s = ServicosFalsos();
     await montarApp(t, servicos: s);

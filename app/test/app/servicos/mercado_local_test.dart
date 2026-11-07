@@ -457,6 +457,13 @@ void main() {
       );
     });
 
+    test('compra de hoje é day trade no preço-alvo e na projeção', () async {
+      gravarMes([compra('L1', data: '2026-10-28')]);
+      final alvo = await servicos.calcularPrecoAlvo('L1', 100, 100);
+      expect(alvo.dayTrade, isTrue);
+      expect((await servicos.projetarPreco('L1', 100, 12)).dt, isTrue);
+    });
+
     test(
       'criarStop e criarMetaAlvo com OCO; parceiraOco e cancelarMeta',
       () async {

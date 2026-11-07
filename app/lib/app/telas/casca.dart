@@ -15,6 +15,7 @@ import '../tema/layout.dart';
 import 'apuracao/tela_apuracao.dart';
 import 'caixa/tela_caixa.dart';
 import 'falha_inicial.dart';
+import 'metas/tela_metas.dart';
 import 'noticias/tela_noticias.dart';
 import 'radar/tela_radar.dart';
 
@@ -341,14 +342,14 @@ class _Cabecalho extends StatelessWidget {
                     fontSize: 12,
                   ),
                 ),
-                // Metas e amigos ganham o diálogo nas tarefas das telas deles.
                 OutlinedButton(
-                  onPressed: null,
+                  onPressed: () => unawaited(abrirMetas(context)),
                   child: Text(
                     'Meta de lucro'
                     '${ativas > 0 ? ' · $ativas ativa${ativas == 1 ? '' : 's'}' : ''}',
                   ),
                 ),
+                // Amigos ganha o diálogo na tarefa dele.
                 const OutlinedButton(onPressed: null, child: Text('Amigos')),
                 OutlinedButton(
                   onPressed: () => estado.irPara(Aba.conta),
@@ -425,9 +426,12 @@ class _PaginaState extends State<_Pagina> with AutomaticKeepAliveClientMixin {
 /// A tela de cada aba; as que ainda não existem mostram um espaço reservado
 /// (trocado tarefa a tarefa).
 Widget _telaPadrao(Aba a) => switch (a) {
-  Aba.apuracao => const TelaApuracao(
-    conteudo: listasApuracao,
-    sliversCompactos: listasSliversApuracao,
+  Aba.apuracao => Builder(
+    builder: (c) => TelaApuracao(
+      aoAbrirMetas: () => unawaited(abrirMetas(c)),
+      conteudo: listasApuracao,
+      sliversCompactos: listasSliversApuracao,
+    ),
   ),
   Aba.caixa => const TelaCaixa(),
   Aba.radar => const TelaRadar(),

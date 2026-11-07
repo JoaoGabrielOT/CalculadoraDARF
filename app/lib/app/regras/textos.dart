@@ -129,3 +129,35 @@ String textoLimiteIsencao(Apuracao r) =>
 String textoIsencao(Apuracao r) => r.isento
     ? 'Isento de IR em swing trade de ações'
     : 'Acima do limite · lucro tributado em 15%';
+
+/// Avisos de um relatório de metas num diálogo só (título, texto); null se
+/// não há nada a avisar. Executadas, inválidas e avisos manuais, nessa ordem
+/// (calculadora_darf.py:2625-2637). Com um só título o diálogo leva o título
+/// do Windows; com vários, "Metas" e cada trecho sob o seu título.
+(String, String)? avisoRelatorioMetas(RelatorioMetas r) {
+  final itens = <(String, String)>[];
+  for (final m in r.executadas) {
+    final ex = m.execucao ?? const <String, Object?>{};
+    final stop = gatilho(m) == 'stop';
+    final preco = (ex['preco_usado'] as num?)?.toDouble() ?? 0;
+    itens.add((
+      stop ? 'Stop atingido' : 'Meta atingida',
+      '${m.ticker}: venda de ${m.qtd} a ${brl(preco)} registrada em '
+          '${fmtData('${ex['data'] ?? ''}')} ${ex['hora'] ?? ''}.'
+          '\n\n${ex['motivo'] ?? ''}${stop ? '\n$avisoGap' : ''}'
+          '\n\n$avisoRegistro.',
+    ));
+  }
+  for (final m in r.invalidas) {
+    itens.add(('Meta inválida', '${m.ticker}: ${m.ultimoErro ?? ''}'));
+  }
+  for (final texto in r.avisos) {
+    itens.add(('Ajuste manual necessário', texto));
+  }
+  if (itens.isEmpty) return null;
+  final titulos = {for (final (t, _) in itens) t};
+  if (titulos.length == 1) {
+    return (titulos.single, [for (final (_, x) in itens) x].join('\n\n'));
+  }
+  return ('Metas', [for (final (t, x) in itens) '$t\n$x'].join('\n\n'));
+}
