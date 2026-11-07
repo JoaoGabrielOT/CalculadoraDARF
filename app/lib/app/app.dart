@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'componentes/logo_ativo.dart';
 import 'estado/estado_app.dart';
 import 'plataforma/licencas.dart';
+import 'plataforma/migracao.dart';
 import 'plataforma/pastas.dart';
 import 'plataforma/plataforma.dart';
 import 'regras/textos.dart';
@@ -40,6 +41,8 @@ Future<void> iniciarApp({
   Future<void>? encerrando;
   Future<void>? emCurso;
 
+  // resultado da migração da 1.12 da tentativa em curso (só no caminho real)
+  ResultadoMigracao? migracao;
   late final Future<void> Function() abrir;
 
   Future<void> tentar() async {
@@ -49,10 +52,16 @@ Future<void> iniciarApp({
       // a tentativa anterior sai antes de criar outra, sem prender o botão
       // para sempre se o encerramento travar
       await encerrando?.timeout(esperaEncerramento, onTimeout: () {});
-      serv = servicos ?? await (criarServicos ?? _criarServicos)(plat);
+      migracao = null;
+      serv =
+          servicos ??
+          await (criarServicos ??
+              (p) => _criarServicos(p, (r) => migracao = r))(plat);
       // O estado assina os eventos já no construtor: o proxy só guarda os 256
       // últimos até a primeira assinatura.
       estado = EstadoApp(serv, plat);
+      final aviso = migracao == null ? null : avisoMigracao(migracao!);
+      if (aviso != null) estado.avisar(aviso.$1, aviso.$2);
       // O estado inicial chega antes do primeiro quadro: ele já sai com o
       // tema gravado, sem passar pelo padrão.
       estado.aplicarInicial(await serv.iniciar());
@@ -74,8 +83,14 @@ Future<void> iniciarApp({
   await abrir();
 }
 
-Future<ServicosApp> _criarServicos(Plataforma plataforma) async {
+Future<ServicosApp> _criarServicos(
+  Plataforma plataforma,
+  void Function(ResultadoMigracao) aoMigrar,
+) async {
   final pastas = await pastasDoApp();
+  aoMigrar(
+    await migrarDadosDoApp(dados: pastas.dados, windows: plataforma.windows),
+  );
   ClienteOAuth? cliente;
   try {
     cliente = await carregarClienteOAuth();
