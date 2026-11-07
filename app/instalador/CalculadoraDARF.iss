@@ -55,24 +55,31 @@ begin
   Result := ExpandConstant('{userappdata}\JoaoGabrielOT\Calculadora DARF');
 end;
 
-// Atalho antigo (a 1.12 apontando para o instalador ao lado de dados\): se a
-// migração já foi feita e esta versão já está instalada, só abre o app.
+// Nunca rebaixa: se a versão instalada é MAIOR que a deste instalador (instalador
+// velho baixado de novo, migração que falhou na primeira vez), só abre o app
+// instalado e sai sem instalar, silencioso ou não, com ou sem {src}\dados.
+// Versão IGUAL, só no modo interativo (atalho antigo da 1.12 apontando para o
+// instalador ao lado de dados\): se a migração já foi feita, também só abre o app.
+// Atualização silenciosa pelo app (versão menor ou igual) segue instalando.
 function InitializeSetup: Boolean;
 var
   Instalada, Pasta, Atual: String;
   VInstalada, VAtual: Int64;
-  Codigo: Integer;
+  Comparacao, Codigo: Integer;
+  AtalhoAntigo: Boolean;
 begin
   Result := True;
-  if WizardSilent then Exit;
-  if not DirExists(ExpandConstant('{src}\dados')) then Exit;
-  if not FileExists(PastaSuporte + '\dados\.migrado_1_12.json') then Exit;
   if not RegQueryStringValue(HKCU, ChaveDesinstalar, 'DisplayVersion', Instalada) then Exit;
   if not RegQueryStringValue(HKCU, ChaveDesinstalar, 'InstallLocation', Pasta) then Exit;
   Atual := '{#Versao}';
   if not StrToVersion(Instalada, VInstalada) then Exit;
   if not StrToVersion(Atual, VAtual) then Exit;
-  if ComparePackedVersion(VInstalada, VAtual) < 0 then Exit;
+  Comparacao := ComparePackedVersion(VInstalada, VAtual);
+  if Comparacao < 0 then Exit;
+  AtalhoAntigo := (not WizardSilent)
+    and DirExists(ExpandConstant('{src}\dados'))
+    and FileExists(PastaSuporte + '\dados\.migrado_1_12.json');
+  if (Comparacao = 0) and (not AtalhoAntigo) then Exit;
   Pasta := AddBackslash(Pasta) + 'calculadoradarf.exe';
   if not FileExists(Pasta) then Exit;
   ShellExec('open', Pasta, '', '', SW_SHOWNORMAL, ewNoWait, Codigo);

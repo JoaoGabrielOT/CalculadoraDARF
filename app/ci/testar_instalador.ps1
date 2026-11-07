@@ -75,6 +75,44 @@ foreach ($f in $hashesOrigem.Keys) {
 }
 if (@(Get-ChildItem $origem -Recurse -File).Count -ne $hashesOrigem.Count) { Falhar 'origem ganhou ou perdeu arquivos' }
 Aviso 'pasta dados\ antiga intacta'
+# 4b. atualização silenciosa com o app aberto: CloseApplications fecha, o [Run] reabre
+$antes = @(Get-Process calculadoradarf -ErrorAction SilentlyContinue)
+if ($antes.Count -eq 0) { Falhar 'app não está rodando antes da atualização' }
+$idsAntes = @($antes | ForEach-Object Id)
+$hashConfig = (Get-FileHash (Join-Path $suporte 'dados\config.json')).Hash
+$p = Start-Process -FilePath (Join-Path $origemPai 'CalculadoraDARF.exe') `
+  -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
+if (-not $p.WaitForExit(180000)) { Falhar 'atualização não terminou em 180 s' }
+if ($p.ExitCode -ne 0) { Falhar "atualização saiu com código $($p.ExitCode)" }
+$limite = (Get-Date).AddSeconds(60)
+do {
+  Start-Sleep -Milliseconds 500
+  $novos = @(Get-Process calculadoradarf -ErrorAction SilentlyContinue | Where-Object { $idsAntes -notcontains $_.Id })
+} while ($novos.Count -eq 0 -and (Get-Date) -lt $limite)
+if ($novos.Count -eq 0) { Falhar 'o app não foi reaberto pelo [Run] depois da atualização' }
+if (@(Get-Process calculadoradarf -ErrorAction SilentlyContinue | Where-Object { $idsAntes -contains $_.Id }).Count -ne 0) { Falhar 'o app antigo não foi fechado pela atualização' }
+if (-not (Test-Path $marcador) -or (Get-FileHash (Join-Path $suporte 'dados\config.json')).Hash -ne $hashConfig) { Falhar 'dados alterados pela atualização' }
+Aviso 'atualização silenciosa: código 0, app fechado e reaberto, dados intactos'
+Get-Process calculadoradarf -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
+
+# 4c. instalador mais antigo que o instalado não rebaixa
+$chave = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{ABE8CE4E-E03F-4D9C-8B54-DA1CA348A2DD}_is1'
+$versaoReal = (Get-ItemProperty $chave).DisplayVersion
+$hashExe = (Get-FileHash $exeInstalado).Hash
+Set-ItemProperty $chave -Name DisplayVersion -Value '99.0.0'
+try {
+  $p = Start-Process -FilePath (Join-Path $origemPai 'CalculadoraDARF.exe') `
+    -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
+  if (-not $p.WaitForExit(180000)) { Falhar 'instalador (rebaixamento) não terminou em 180 s' }
+  Aviso "instalador com versão menor que a instalada saiu com código $($p.ExitCode)"
+  if (-not (Test-Path $exeInstalado) -or (Get-FileHash $exeInstalado).Hash -ne $hashExe) { Falhar 'o exe instalado mudou no rebaixamento' }
+  if ((Get-ItemProperty $chave).DisplayVersion -ne '99.0.0') { Falhar 'o instalador regravou a versão no rebaixamento' }
+} finally {
+  Set-ItemProperty $chave -Name DisplayVersion -Value $versaoReal
+}
+Aviso 'rebaixamento recusado: exe instalado inalterado'
+Start-Sleep -Seconds 2
 Get-Process calculadoradarf -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 2
 

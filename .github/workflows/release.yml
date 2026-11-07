@@ -320,6 +320,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: saida
+          pattern: "{android,windows}"
           merge-multiple: true
 
       - name: Publicar a release (pré-release até o dono aprovar)
