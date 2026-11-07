@@ -33,6 +33,8 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // só as ABIs do APK publicado: bibliotecas nativas de plugins trariam x86_64 mesmo com --target-platform
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }
 
     // O Flet usava a mesma senha para a keystore e para a chave.
