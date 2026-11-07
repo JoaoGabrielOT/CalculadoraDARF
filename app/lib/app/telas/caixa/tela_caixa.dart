@@ -401,9 +401,14 @@ class _Alerta extends StatelessWidget {
         return const SizedBox.shrink();
       }
     }
+    // Perigo com borda na cor de queda: o fundo do selo é transparente no
+    // Terminal, e o Python mostra este aviso como faixa vermelha.
     return Material(
       color: perigo ? c.seloQuedaFundo : c.seloAltaFundo,
-      borderRadius: BorderRadius.circular(10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: perigo ? BorderSide(color: c.queda) : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Semantics(
@@ -422,7 +427,7 @@ class _Alerta extends StatelessWidget {
   }
 }
 
-/// Próximas liquidações: até [maxProximas] cartões em quatro colunas.
+/// Próximas liquidações: até [maxProximas] cartões em até quatro colunas.
 class _Proximas extends StatelessWidget {
   const _Proximas({required this.visao});
 
@@ -469,7 +474,13 @@ class _Proximas extends StatelessWidget {
             LayoutBuilder(
               builder: (context, caixa) {
                 const espaco = 12.0;
-                final largura = (caixa.maxWidth - 3 * espaco) / 4;
+                // Quatro colunas como no Python; em janela estreita, menos,
+                // para cada cartão manter uns 200 px.
+                final colunas = ((caixa.maxWidth + espaco) / (200 + espaco))
+                    .floor()
+                    .clamp(1, 4);
+                final largura =
+                    (caixa.maxWidth - (colunas - 1) * espaco) / colunas;
                 return Wrap(
                   spacing: espaco,
                   runSpacing: espaco,
@@ -711,7 +722,7 @@ class _Lancamentos extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: alturaTabela(linhas.length),
+            height: alturaTabela(context, linhas.length),
             child: Tabela<LancamentoCaixa>(
               key: const Key('tabela-lancamentos'),
               colunas: colunas,

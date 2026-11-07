@@ -181,7 +181,7 @@ class _Expandido extends StatelessWidget {
           ),
           ?barra,
           SizedBox(
-            height: alturaTabela(itens.length),
+            height: alturaTabela(context, itens.length),
             child: Tabela<Operacao>(
               key: const Key('tabela-vendas'),
               reiniciarOrdem: (

@@ -25,6 +25,15 @@ Future<void> carregarFontesDeTeste() async {
   );
   final icones = FontLoader('MaterialIcons')..addFont(_bytes(otf));
   await icones.load();
+
+  // Reserva dos símbolos (● ▲ ▼ ⚠ ✓) do tema; o testador não procura fontes
+  // do sistema sozinho. Só existe no Windows, onde os goldens rodam.
+  final simbolos = File(
+    '${Platform.environment['WINDIR'] ?? r'C:\Windows'}/Fonts/seguisym.ttf',
+  );
+  if (simbolos.existsSync()) {
+    await (FontLoader('Segoe UI Symbol')..addFont(_bytes(simbolos))).load();
+  }
 }
 
 Future<ByteData> _bytes(File arquivo) async {

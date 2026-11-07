@@ -36,6 +36,34 @@ class ColunaTabela<T> {
 /// manterem a proporção, e no mínimo 1.
 int _flex(double largura) => math.max(1, (largura * 100).round());
 
+/// Alturas reais do cabeçalho (com o divisor) e de uma linha da [Tabela] no
+/// [context] (fonte do tema, densidade e escala de texto do usuário), para
+/// quem limita a altura dela.
+({double cabecalho, double linha}) alturasTabela(BuildContext context) {
+  final estilo = DefaultTextStyle.of(context).style;
+  final escala = MediaQuery.textScalerOf(context);
+  double texto(FontWeight peso) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: 'Ág',
+        style: estilo.copyWith(fontWeight: peso),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: escala,
+      maxLines: 1,
+    )..layout();
+    final altura = tp.height;
+    tp.dispose();
+    return altura;
+  }
+
+  final vertical = CoresApp.de(context).densa ? 6.0 : 10.0;
+  return (
+    cabecalho: texto(FontWeight.w500) + 20 + 1,
+    linha: texto(FontWeight.w400) + 2 * vertical,
+  );
+}
+
 /// Tabela ordenável. Com altura limitada pelo pai, o corpo rola e é lazy
 /// (`ListView.builder`). Sem altura limitada, o corpo vira uma `Column` com
 /// todas as linhas, que NÃO é lazy: telas com muitas linhas devem limitar a
@@ -286,7 +314,9 @@ class _Linha<T> extends StatelessWidget {
     final c = CoresApp.de(context);
     final fundo = selecionada
         ? c.destaque.withValues(alpha: .16)
-        : (zebra ? c.linha.withValues(alpha: .5) : Colors.transparent);
+        : (zebra
+              ? c.linha.withValues(alpha: c.linha.a * .5)
+              : Colors.transparent);
     final vertical = c.densa ? 6.0 : 10.0;
     return Semantics(
       key: Key('linha-$chaveLinha'),

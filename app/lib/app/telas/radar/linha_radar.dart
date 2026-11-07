@@ -19,10 +19,10 @@ const larguraAlcaRadar = 30.0;
 /// Colunas da tabela do PC: (título, peso, alinhamento); o peso 0 é largura
 /// fixa ([larguraRisco], [larguraAcoes]).
 const colunasRadar = <(String, int, TextAlign)>[
-  ('ATIVO', 30, TextAlign.left),
+  ('ATIVO', 28, TextAlign.left),
   ('COTAÇÃO', 11, TextAlign.right),
   ('DIA', 18, TextAlign.right),
-  ('MÉDIA 6 MESES', 12, TextAlign.right),
+  ('MÉDIA 6 MESES', 14, TextAlign.right),
   ('ATR (14)', 10, TextAlign.right),
   ('ATR%', 9, TextAlign.right),
   ('RISCO', 0, TextAlign.center),
@@ -210,7 +210,7 @@ class LinhaRadar extends StatelessWidget {
     final risco = x.risco;
     return Material(
       key: Key('linha-radar-${item.ticker}'),
-      color: zebra ? c.linha.withValues(alpha: .5) : c.cartao,
+      color: zebra ? c.linha.withValues(alpha: c.linha.a * .5) : c.cartao,
       borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
       child: InkWell(

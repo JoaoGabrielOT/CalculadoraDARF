@@ -359,12 +359,21 @@ class _Lista extends StatelessWidget {
       );
     }
     final livre = !controle.ocupado;
+    // Embutido (Conta do celular): o cartão já tem margem e os botões ficam
+    // mais estreitos, para o e-mail caber numa linha em 360 px.
+    final estiloBotao = embutido
+        ? TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: const Size(48, 40),
+          )
+        : null;
     return ListView(
       shrinkWrap: true,
       physics: embutido ? const NeverScrollableScrollPhysics() : null,
       children: [
         for (final a in amigos)
           ListTile(
+            contentPadding: embutido ? EdgeInsets.zero : null,
             title: Text(
               a.email,
               style: const TextStyle(fontWeight: FontWeight.bold),
@@ -375,6 +384,7 @@ class _Lista extends StatelessWidget {
               children: [
                 TextButton(
                   key: ValueKey('amigo-ver-${a.email}'),
+                  style: estiloBotao,
                   onPressed: livre
                       ? () => embutido
                             ? unawaited(
@@ -390,7 +400,8 @@ class _Lista extends StatelessWidget {
                 ),
                 TextButton(
                   key: ValueKey('amigo-remover-${a.email}'),
-                  style: TextButton.styleFrom(foregroundColor: cores.queda),
+                  style: TextButton.styleFrom(foregroundColor: cores.queda)
+                      .merge(estiloBotao),
                   onPressed: livre
                       ? () => unawaited(controle.remover(context, a.email))
                       : null,

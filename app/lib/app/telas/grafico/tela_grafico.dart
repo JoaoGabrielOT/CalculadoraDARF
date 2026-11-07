@@ -446,7 +446,7 @@ class _GraficoState extends State<_Grafico> {
 }
 
 const _larguraEixo = 70.0;
-const _margemLinha = 8.0; // a mesma do GraficoLinha
+const _margemLinha = 8.0; // a mesma do GraficoLinha (lado de 80 px ou mais)
 
 /// Linha por índice (py:3164-3165: a marca do eixo cai sempre sob o ponto),
 /// grade e eixo de preços à direita (py:3176-3180) e marcas de tempo abaixo.
@@ -536,7 +536,11 @@ class _Plano extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, caixa) {
                 final util = caixa.maxWidth - 2 * _margemLinha;
+                // Sem corte: a primeira e a última marca, centradas no ponto,
+                // passam um pouco da borda (margem do diálogo e eixo de
+                // preços).
                 return Stack(
+                  clipBehavior: Clip.none,
                   children: [
                     for (var k = 0; k < marcas; k++)
                       Builder(

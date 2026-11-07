@@ -15,10 +15,15 @@ import '../../tema/cores_app.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
 
-/// Altura da tabela: até 8 linhas à vista; com mais, o corpo rola e só monta
-/// as linhas visíveis (`Tabela` com altura limitada é lazy).
-double alturaTabela(int linhas) =>
-    (math.min(linhas, 8) * 44.0 + 44).clamp(120.0, 400.0);
+/// Altura da tabela: até 8 linhas à vista, na altura real delas (sem faixa
+/// vazia nem última linha cortada); com mais, o corpo rola e só monta as
+/// linhas visíveis (`Tabela` com altura limitada é lazy). Vazia: espaço para
+/// o aviso.
+double alturaTabela(BuildContext context, int linhas) {
+  if (linhas == 0) return 120;
+  final a = alturasTabela(context);
+  return a.cabecalho + math.min(linhas, 8) * a.linha;
+}
 
 /// Título da lista, contagem ("N" ou "visíveis/total" com filtro) e ações.
 class CabecalhoLista extends StatelessWidget {
@@ -251,7 +256,7 @@ class _Expandido extends StatelessWidget {
       ),
       ColunaTabela(
         titulo: 'RESTANTE',
-        largura: .8,
+        largura: .95,
         alinhamento: TextAlign.right,
         texto: (l) => '${restante(l)}',
         chave: (l) => restante(l),
@@ -306,7 +311,7 @@ class _Expandido extends StatelessWidget {
             style: TextStyle(color: c.textoSuave, fontSize: 11),
           ),
           SizedBox(
-            height: alturaTabela(itens.length),
+            height: alturaTabela(context, itens.length),
             child: Tabela<Lote>(
               key: const Key('tabela-lotes'),
               reiniciarOrdem: (

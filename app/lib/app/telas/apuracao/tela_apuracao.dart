@@ -444,7 +444,7 @@ class _CartaoLink extends StatelessWidget {
 /// duas tabelas numa lista rolável (com menos de [larguraMinimaListas] px, as
 /// colunas não se espremem: a área rola na horizontal); compacto: cartões (a
 /// rolagem é da tela).
-const larguraMinimaListas = 900.0;
+const larguraMinimaListas = 1200.0;
 
 Widget listasApuracao(BuildContext c) {
   const lotes = ListaLotes();

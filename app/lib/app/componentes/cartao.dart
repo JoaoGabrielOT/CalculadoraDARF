@@ -162,6 +162,8 @@ class ChipFiltro extends StatelessWidget {
     final cor = selecionado ? c.chipAtivoTexto : c.chipTexto;
     // 48 dp no celular (Material/Android); no PC o ponteiro é preciso.
     final alvo = expandido(context) ? 40.0 : 48.0;
+    // No celular, margem menor (ver [BotaoSegmentado]).
+    final margem = expandido(context) ? 14.0 : 10.0;
     return Semantics(
       button: true,
       selected: selecionado,
@@ -185,7 +187,7 @@ class ChipFiltro extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: alvo, minWidth: alvo),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              padding: EdgeInsets.symmetric(horizontal: margem),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -230,7 +232,9 @@ class BotaoSegmentado<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 6,
+      // 4 no celular: com a margem menor do [ChipFiltro], os filtros do radar
+      // cabem numa linha em 360 px.
+      spacing: expandido(context) ? 6 : 4,
       runSpacing: 6,
       children: [
         for (final (v, rotulo) in opcoes)

@@ -1,11 +1,15 @@
 // Gráfico de linha por `CustomPainter` próprio (sem pacote de gráficos).
 
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../tema/cores_app.dart';
 
-const _margem = 8.0;
+/// Margem interna; em gráfico pequeno (mini-gráfico do radar, 48×22) cai
+/// para 10% do lado, senão a linha fica espremida em poucos pixels.
+double _margem(double lado) => math.min(8.0, lado * .1);
 
 /// Linha de [pontos] (x inteiro, por exemplo o instante; y o preço). O pai
 /// precisa dar largura e altura limitadas. A cor vem da comparação do último
@@ -147,15 +151,17 @@ class _Geometria {
   late double minY, maxY;
 
   double x(int v) {
-    final util = tamanho.width - 2 * _margem;
+    final m = _margem(tamanho.width);
+    final util = tamanho.width - 2 * m;
     if (maxX == minX) return tamanho.width / 2;
-    return _margem + (v - minX) / (maxX - minX) * util;
+    return m + (v - minX) / (maxX - minX) * util;
   }
 
   double y(double v) {
-    final util = tamanho.height - 2 * _margem;
+    final m = _margem(tamanho.height);
+    final util = tamanho.height - 2 * m;
     if (maxY == minY) return tamanho.height / 2;
-    return tamanho.height - _margem - (v - minY) / (maxY - minY) * util;
+    return tamanho.height - m - (v - minY) / (maxY - minY) * util;
   }
 }
 
@@ -186,7 +192,8 @@ class PintorLinha extends CustomPainter {
       final tracejado = Paint()
         ..color = guia.withValues(alpha: .6)
         ..strokeWidth = 1;
-      for (var x = _margem; x < size.width - _margem; x += 8) {
+      final m = _margem(size.width);
+      for (var x = m; x < size.width - m; x += 8) {
         canvas.drawLine(Offset(x, y), Offset(x + 4, y), tracejado);
       }
     }

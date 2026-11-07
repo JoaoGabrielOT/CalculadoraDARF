@@ -18,6 +18,11 @@ Color corVariacao(BuildContext context, double? v) {
   return cores.textoSuave;
 }
 
+/// Roboto não tem os símbolos que os textos herdam do Python (● ▲ ▼ ⚠ ✓ ○):
+/// no Windows eles saem da Segoe UI Symbol (monocromática, na cor do texto);
+/// onde ela não existe, o motor usa a reserva do sistema.
+const _simbolos = ['Segoe UI Symbol'];
+
 const _terminal = CoresApp(
   fundo: Color(0xFF0D1117),
   cartao: Color(0xFF161B22),
@@ -204,6 +209,7 @@ ThemeData _montar(
   final base = ThemeData(
     useMaterial3: true,
     fontFamily: 'Roboto',
+    fontFamilyFallback: _simbolos,
     colorScheme: esquema,
     brightness: brilho,
   );
@@ -226,6 +232,7 @@ ThemeData _montar(
       bodyColor: c.texto,
       displayColor: c.texto,
       fontFamily: 'Roboto',
+      fontFamilyFallback: _simbolos,
     ),
     extensions: [c],
     inputDecorationTheme: InputDecorationTheme(
@@ -244,12 +251,14 @@ ThemeData _montar(
       titleTextStyle: TextStyle(
         color: c.texto,
         fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
         fontSize: 20,
         fontWeight: FontWeight.w500,
       ),
       contentTextStyle: TextStyle(
         color: c.texto,
         fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
         fontSize: 14,
       ),
     ),
@@ -276,8 +285,16 @@ ThemeData _montar(
       indicatorColor: c.navAtivo.withValues(alpha: .16),
       selectedIconTheme: IconThemeData(color: c.navAtivo),
       unselectedIconTheme: IconThemeData(color: c.textoSuave),
-      selectedLabelTextStyle: TextStyle(color: c.navAtivo),
-      unselectedLabelTextStyle: TextStyle(color: c.textoSuave),
+      selectedLabelTextStyle: TextStyle(
+        color: c.navAtivo,
+        fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
+      ),
+      unselectedLabelTextStyle: TextStyle(
+        color: c.textoSuave,
+        fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
+      ),
     ),
     cardTheme: CardThemeData(
       color: s.surface,
@@ -292,16 +309,29 @@ ThemeData _montar(
       headingTextStyle: TextStyle(
         color: c.textoSuave,
         fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
         fontWeight: FontWeight.w500,
       ),
-      dataTextStyle: TextStyle(color: c.texto, fontFamily: 'Roboto'),
+      dataTextStyle: TextStyle(
+        color: c.texto,
+        fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
+      ),
       dividerThickness: 1,
     ),
     chipTheme: ChipThemeData(
       backgroundColor: Color.alphaBlend(c.chipFundo, c.fundo),
       selectedColor: c.chipAtivoFundo,
-      labelStyle: TextStyle(color: c.chipTexto),
-      secondaryLabelStyle: TextStyle(color: c.chipAtivoTexto),
+      labelStyle: TextStyle(
+        color: c.chipTexto,
+        fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
+      ),
+      secondaryLabelStyle: TextStyle(
+        color: c.chipAtivoTexto,
+        fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
+      ),
       side: BorderSide(color: c.bordaCampo),
       shape: formaSemBorda,
     ),
@@ -309,7 +339,11 @@ ThemeData _montar(
       color: s.high,
       surfaceTintColor: Colors.transparent,
       shape: forma,
-      textStyle: TextStyle(color: c.texto, fontFamily: 'Roboto'),
+      textStyle: TextStyle(
+        color: c.texto,
+        fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
+      ),
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: s.high,
@@ -320,7 +354,11 @@ ThemeData _montar(
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: s.highest,
-      contentTextStyle: TextStyle(color: c.texto, fontFamily: 'Roboto'),
+      contentTextStyle: TextStyle(
+        color: c.texto,
+        fontFamily: 'Roboto',
+        fontFamilyFallback: _simbolos,
+      ),
       actionTextColor: c.navAtivo,
       shape: formaSemBorda,
       behavior: SnackBarBehavior.floating,

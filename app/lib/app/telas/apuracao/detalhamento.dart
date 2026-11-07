@@ -206,7 +206,7 @@ class _Rodape extends StatelessWidget {
     final c = CoresApp.de(context);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: c.linha.withValues(alpha: .5),
+        color: c.linha.withValues(alpha: c.linha.a * .5),
         borderRadius: BorderRadius.circular(10),
       ),
       child: SizedBox(
