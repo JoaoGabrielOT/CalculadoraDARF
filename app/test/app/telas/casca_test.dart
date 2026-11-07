@@ -6,6 +6,8 @@ import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/app/telas/caixa/tela_caixa.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
+import 'package:calculadoradarf/app/telas/conta/tela_conta.dart';
+import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/app/telas/noticias/tela_noticias.dart';
 import 'package:calculadoradarf/app/telas/radar/tela_radar.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
@@ -129,6 +131,53 @@ void main() {
     expect(find.text('Apuração (em construção)'), findsNothing);
     expect(find.text('Lucro bruto'), findsOneWidget);
     expect(find.text('Ativos comprados'), findsOneWidget);
+  });
+
+  testWidgets('a aba Conta mostra a tela de Conta, não o espaço', (t) async {
+    await montarApp(t, tamanho: _pequeno);
+    await t.tap(_naBarra('Conta'));
+    await t.pumpAndSettle();
+    expect(_estado(t).aba, Aba.conta);
+    expect(find.byType(TelaConta), findsOneWidget);
+    expect(find.text('Conta (em construção)'), findsNothing);
+  });
+
+  group('atualização do app', () {
+    const info = InfoAtualizacao(
+      versao: '9.9.9',
+      notas: 'Novo.',
+      url: 'https://exemplo.com/a.exe',
+      tamanho: 10,
+      sha256: '',
+    );
+
+    testWidgets('verifica 3 s depois de abrir e oferece uma vez', (t) async {
+      final s = ServicosFalsos()..infoAtualizacao = info;
+      await montarApp(t, servicos: s);
+      await t.pump(const Duration(seconds: 2));
+      expect(s.chamadas, isNot(contains('verificarAtualizacao()')));
+      await t.pump(const Duration(seconds: 1));
+      await t.pumpAndSettle();
+      expect(
+        s.chamadas.where((c) => c == 'verificarAtualizacao()'),
+        hasLength(1),
+      );
+      expect(find.text('Nova versão disponível'), findsOneWidget);
+      await t.tap(find.text('Depois'));
+      await t.pumpAndSettle();
+      expect(find.text('Nova versão disponível'), findsNothing);
+      expect(_estado(t).atualizacao, isNull);
+    });
+
+    testWidgets('sem versão nova ou com erro não mostra nada', (t) async {
+      final s = ServicosFalsos()..erros['verificarAtualizacao'] = Offline();
+      await montarApp(t, servicos: s);
+      await t.pump(const Duration(seconds: 4));
+      await t.pumpAndSettle();
+      expect(s.chamadas, contains('verificarAtualizacao()'));
+      expect(find.text('Nova versão disponível'), findsNothing);
+      expect(find.textContaining('Não foi possível verificar'), findsNothing);
+    });
   });
 
   testWidgets('tocar nas abas troca a tela', (t) async {

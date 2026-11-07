@@ -28,7 +28,7 @@ const textoExplicacao =
     'para leitura. Para ver os dados dele, ele também precisa adicionar você.';
 
 /// Abre os amigos. Sem conta ou sem planilha só avisa (py:2922-2928); "Ver"
-/// fecha a janela e troca a visão (py:2929-2932).
+/// fecha a janela e troca a visão (py:2929-2932), sem mudar de aba no PC.
 Future<void> abrirAmigos(BuildContext c) async {
   final estado = c.read<EstadoApp>();
   final conta = estado.conta;
@@ -40,8 +40,9 @@ Future<void> abrirAmigos(BuildContext c) async {
     await avisar(c, 'Amigos', textoSemPlanilha);
     return;
   }
+  final grande = expandido(c);
   final String? ver;
-  if (expandido(c)) {
+  if (grande) {
     ver = await showDialog<String>(
       context: c,
       builder: (_) => const Dialog(child: TelaAmigos(dialogo: true)),
@@ -55,11 +56,21 @@ Future<void> abrirAmigos(BuildContext c) async {
     );
   }
   if (ver == null) return;
-  // o celular mostra os dados do amigo na Apuração (android/main.py:2181)
-  if (estado.aba == Aba.noticias || estado.aba == Aba.conta) {
+  await verAmigo(estado, ver, compacto: !grande);
+}
+
+/// Mostra os dados do amigo. O celular os mostra na Apuração, vindo de
+/// Notícias ou Conta (android/main.py:2181); o PC só troca a visão
+/// (py:2929-2931).
+Future<void> verAmigo(
+  EstadoApp estado,
+  String email, {
+  required bool compacto,
+}) async {
+  if (compacto && (estado.aba == Aba.noticias || estado.aba == Aba.conta)) {
     estado.irPara(Aba.apuracao);
   }
-  await estado.trocarVisao(ver);
+  await estado.trocarVisao(email);
 }
 
 enum _Tom { neutro, ok, erro }
@@ -176,15 +187,21 @@ class ControleAmigos extends ChangeNotifier {
 }
 
 class TelaAmigos extends StatelessWidget {
-  const TelaAmigos({super.key, required this.dialogo});
+  const TelaAmigos({super.key, required this.dialogo, this.embutido = false});
 
   final bool dialogo;
+
+  /// Só o bloco, sem barra nem rolagem própria, dentro da aba Conta do
+  /// celular; "Ver" troca a visão em vez de fechar a janela.
+  final bool embutido;
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ControleAmigos>(
       create: (c) => ControleAmigos(c.read<ServicosApp>(), c.read<EstadoApp>()),
-      child: dialogo
+      child: embutido
+          ? const _Corpo(dialogo: false, embutido: true)
+          : dialogo
           ? const SizedBox(
               key: ValueKey('amigos-dialogo'),
               width: larguraDialogoAmigos,
@@ -205,9 +222,10 @@ class TelaAmigos extends StatelessWidget {
 }
 
 class _Corpo extends StatefulWidget {
-  const _Corpo({required this.dialogo});
+  const _Corpo({required this.dialogo, this.embutido = false});
 
   final bool dialogo;
+  final bool embutido;
 
   @override
   State<_Corpo> createState() => _CorpoState();
@@ -223,7 +241,7 @@ class _CorpoState extends State<_Corpo> {
   }
 
   Future<void> _adicionar(ControleAmigos controle) async {
-    if (await controle.adicionar(_email.text)) _email.clear();
+    if (await controle.adicionar(_email.text) && mounted) _email.clear();
   }
 
   @override
@@ -235,9 +253,11 @@ class _CorpoState extends State<_Corpo> {
       _Tom.ok => cores.alta,
       _Tom.erro => cores.queda,
     };
-    final lista = _Lista(controle: controle);
+    final lista = _Lista(controle: controle, embutido: widget.embutido);
     return Column(
-      mainAxisSize: widget.dialogo ? MainAxisSize.min : MainAxisSize.max,
+      mainAxisSize: widget.dialogo || widget.embutido
+          ? MainAxisSize.min
+          : MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (widget.dialogo)
@@ -283,6 +303,8 @@ class _CorpoState extends State<_Corpo> {
             constraints: const BoxConstraints(maxHeight: 280),
             child: lista,
           )
+        else if (widget.embutido)
+          lista
         else
           Expanded(child: lista),
         if (widget.dialogo) ...[
@@ -301,9 +323,10 @@ class _CorpoState extends State<_Corpo> {
 }
 
 class _Lista extends StatelessWidget {
-  const _Lista({required this.controle});
+  const _Lista({required this.controle, required this.embutido});
 
   final ControleAmigos controle;
+  final bool embutido;
 
   @override
   Widget build(BuildContext context) {
@@ -338,6 +361,7 @@ class _Lista extends StatelessWidget {
     final livre = !controle.ocupado;
     return ListView(
       shrinkWrap: true,
+      physics: embutido ? const NeverScrollableScrollPhysics() : null,
       children: [
         for (final a in amigos)
           ListTile(
@@ -352,7 +376,15 @@ class _Lista extends StatelessWidget {
                 TextButton(
                   key: ValueKey('amigo-ver-${a.email}'),
                   onPressed: livre
-                      ? () => Navigator.of(context).pop(a.email)
+                      ? () => embutido
+                            ? unawaited(
+                                verAmigo(
+                                  context.read<EstadoApp>(),
+                                  a.email,
+                                  compacto: true,
+                                ),
+                              )
+                            : Navigator.of(context).pop(a.email)
                       : null,
                   child: const Text('Ver'),
                 ),

@@ -114,7 +114,9 @@ class AppCalculadora extends StatelessWidget {
         Provider<ServicosApp>.value(value: servicos),
         Provider<Plataforma>.value(value: plataforma),
         if (dado != null)
-          ChangeNotifierProvider<EstadoApp>.value(value: dado)
+          // o app passa a ser dono do estado: ao sair da árvore ele é
+          // descartado (e o timer da verificação de atualização some)
+          ChangeNotifierProvider<EstadoApp>(create: (_) => dado)
         else
           ChangeNotifierProvider<EstadoApp>(
             lazy: false,
@@ -148,6 +150,8 @@ class _AppMaterial extends StatelessWidget {
           theme: temaDe(
             resolverTema(escolhido, MediaQuery.platformBrightnessOf(context)),
           ),
+          // a troca de tema em Configurações vale no mesmo quadro
+          themeAnimationDuration: Duration.zero,
           // O escopo fica acima do Navigator: as logos valem também nos
           // diálogos e nas telas empilhadas.
           builder: (context, child) => RepaintBoundary(

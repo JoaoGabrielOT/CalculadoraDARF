@@ -47,6 +47,9 @@ class EstadoApp extends ChangeNotifier {
 
   /// Sobe a cada `EventoDadosMudaram`: as telas recarregam quando muda.
   int versaoDados = 0;
+
+  /// Nova versão achada pela verificação automática; a casca a oferece uma
+  /// vez e [tomarAtualizacao] a entrega.
   InfoAtualizacao? atualizacao;
 
   /// Metas ativas, para o "· N ativas" do cabeçalho.
@@ -74,6 +77,7 @@ class EstadoApp extends ChangeNotifier {
   /// E-mail do amigo cuja carga está em voo.
   String? _pedido;
   bool _descartado = false;
+  Timer? _timerAtualizacao;
   bool _avisouNotificacao = false;
   int _geracaoVisao = 0;
 
@@ -85,6 +89,7 @@ class EstadoApp extends ChangeNotifier {
   @override
   void dispose() {
     _descartado = true;
+    _timerAtualizacao?.cancel();
     unawaited(_assinatura.cancel());
     super.dispose();
   }
@@ -122,7 +127,11 @@ class EstadoApp extends ChangeNotifier {
       _atualizarMetas(),
       _iniciarNotificacoes(),
     ]);
-    unawaited(_verificarAtualizacao());
+    // 3 s depois de abrir, para não competir com a carga inicial (py:1273)
+    _timerAtualizacao = Timer(
+      const Duration(seconds: 3),
+      () => unawaited(_verificarAtualizacao()),
+    );
   }
 
   /// Aplica o resultado de `servicos.iniciar()`. `iniciarApp` chama antes do
@@ -501,6 +510,13 @@ class EstadoApp extends ChangeNotifier {
     } catch (_) {
       // só o "· N ativas" do cabeçalho
     }
+  }
+
+  /// A nova versão a oferecer, uma só vez.
+  InfoAtualizacao? tomarAtualizacao() {
+    final info = atualizacao;
+    atualizacao = null;
+    return info;
   }
 
   Future<void> _verificarAtualizacao() async {

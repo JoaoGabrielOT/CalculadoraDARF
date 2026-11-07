@@ -14,7 +14,9 @@ import '../tema/cores_app.dart';
 import '../tema/layout.dart';
 import 'amigos/tela_amigos.dart';
 import 'apuracao/tela_apuracao.dart';
+import 'atualizacao/dialogo_atualizacao.dart';
 import 'caixa/tela_caixa.dart';
+import 'conta/tela_conta.dart';
 import 'falha_inicial.dart';
 import 'metas/tela_metas.dart';
 import 'noticias/tela_noticias.dart';
@@ -42,8 +44,8 @@ extension on Aba {
 }
 
 class Casca extends StatefulWidget {
-  /// [telaDaAba] troca o conteúdo das abas (os testes e as tarefas seguintes);
-  /// sem ele cada aba mostra um espaço reservado.
+  /// [telaDaAba] troca o conteúdo das abas (os testes);
+  /// sem ele cada aba mostra a tela dela.
   const Casca({super.key, this.telaDaAba});
 
   final Widget Function(Aba aba)? telaDaAba;
@@ -90,7 +92,9 @@ class _CascaState extends State<Casca> {
     final fora =
         _controlador.hasClients &&
         _controlador.page?.round() != estado.aba.index;
-    if (fora || estado.avisos.isNotEmpty) _agendarQuadro();
+    if (fora || estado.avisos.isNotEmpty || estado.atualizacao != null) {
+      _agendarQuadro();
+    }
 
     final paginas = PageView(
       key: _chavePaginas,
@@ -198,6 +202,8 @@ class _CascaState extends State<Casca> {
       _controlador.jumpToPage(destino);
     }
     if (_estado.avisos.isNotEmpty) unawaited(_mostrarAvisos());
+    final nova = _estado.tomarAtualizacao();
+    if (nova != null) unawaited(oferecerAtualizacao(context, nova));
   }
 
   Future<void> _mostrarAvisos() async {
@@ -299,6 +305,9 @@ class _Cabecalho extends StatelessWidget {
     final amigo = estado.amigo;
     final email = estado.conta.email;
     final ativas = estado.metasAtivas;
+    // o Windows desabilita o botão enquanto espera o login (py:2760)
+    final login =
+        estado.conta.ocupado || estado.conta.status == StatusSync.login;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
       child: Row(
@@ -338,7 +347,7 @@ class _Cabecalho extends StatelessWidget {
                 Text(
                   textoStatusSync(estado.conta),
                   style: TextStyle(
-                    color: _corSync(cores, estado.conta.status),
+                    color: corSync(cores, estado.conta.status),
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -355,7 +364,9 @@ class _Cabecalho extends StatelessWidget {
                   child: const Text('Amigos'),
                 ),
                 OutlinedButton(
-                  onPressed: () => estado.irPara(Aba.conta),
+                  onPressed: login
+                      ? null
+                      : () => unawaited(clicarConta(context)),
                   child: Text(
                     email == null
                         ? 'Conectar Google'
@@ -372,13 +383,6 @@ class _Cabecalho extends StatelessWidget {
     );
   }
 }
-
-Color _corSync(CoresApp cores, StatusSync s) => switch (s) {
-  StatusSync.off || StatusSync.sync => cores.textoSuave,
-  StatusSync.login || StatusSync.pendente || StatusSync.offline => cores.aviso,
-  StatusSync.ok => cores.alta,
-  StatusSync.erro => cores.queda,
-};
 
 /// Faixa fixa no topo (config ilegível, serviços encerrados).
 class _FaixaAviso extends StatelessWidget {
@@ -426,8 +430,7 @@ class _PaginaState extends State<_Pagina> with AutomaticKeepAliveClientMixin {
   }
 }
 
-/// A tela de cada aba; as que ainda não existem mostram um espaço reservado
-/// (trocado tarefa a tarefa).
+/// A tela de cada aba.
 Widget _telaPadrao(Aba a) => switch (a) {
   Aba.apuracao => Builder(
     builder: (c) => TelaApuracao(
@@ -439,20 +442,5 @@ Widget _telaPadrao(Aba a) => switch (a) {
   Aba.caixa => const TelaCaixa(),
   Aba.radar => const TelaRadar(),
   Aba.noticias => const TelaNoticias(),
-  _ => _Provisoria(a),
+  Aba.conta => const TelaConta(),
 };
-
-/// Espaço da aba até a tela dela existir.
-class _Provisoria extends StatelessWidget {
-  const _Provisoria(this.aba);
-
-  final Aba aba;
-
-  @override
-  Widget build(BuildContext context) => Stack(
-    children: [
-      const Positioned.fill(child: Placeholder()),
-      Center(child: Text('${aba.rotulo} (em construção)')),
-    ],
-  );
-}

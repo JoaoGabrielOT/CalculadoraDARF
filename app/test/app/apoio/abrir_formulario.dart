@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'montar.dart';
+import 'plataforma_falsa.dart';
 import 'servicos_falsos.dart';
 
 class ResultadoForm<T> {
@@ -16,11 +17,13 @@ Future<ResultadoForm<T>> abrirNoTeste<T>(
   ServicosFalsos servicos,
   Future<T?> Function(BuildContext) abrir, {
   Size tamanho = const Size(1366, 768),
+  PlataformaFalsa? plataforma,
 }) async {
   final r = ResultadoForm<T>();
   await montarApp(
     t,
     servicos: servicos,
+    plataforma: plataforma,
     tamanho: tamanho,
     tela: Builder(
       builder: (c) => Scaffold(

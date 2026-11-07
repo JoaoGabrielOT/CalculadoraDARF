@@ -433,11 +433,15 @@ class ServicosFalsos implements ServicosApp {
   @override
   Future<List<Amigo>> amigos() => _chamar('amigos', [], () => listaAmigos);
 
+  /// Quando preenchido, `adicionarAmigo` só responde depois dele.
+  Future<void>? esperaAdicionarAmigo;
+
   @override
   Future<void> adicionarAmigo(String email) => _chamar(
     'adicionarAmigo',
     [email],
-    () {
+    () async {
+      await esperaAdicionarAmigo;
       listaAmigos = [...listaAmigos, Amigo(email: email, desde: '2026-10-28')];
     },
   );
@@ -639,6 +643,29 @@ class ServicosFalsos implements ServicosApp {
           ),
     );
   }
+
+  // atualizador
+  InfoAtualizacao? infoAtualizacao;
+
+  /// Caminho devolvido por `baixarAtualizacao`; [baixarFn] tem precedência
+  /// (para deixar o `Future` pendente ou emitir progresso).
+  String caminhoBaixado = '/tmp/CalculadoraDARF-9.9.9.exe';
+  Future<String> Function(InfoAtualizacao info)? baixarFn;
+
+  @override
+  Future<InfoAtualizacao?> verificarAtualizacao() =>
+      _chamar('verificarAtualizacao', [], () => infoAtualizacao);
+
+  @override
+  Future<String> baixarAtualizacao(InfoAtualizacao info) {
+    chamadas.add('baixarAtualizacao(${info.versao})');
+    final erro = erros['baixarAtualizacao'];
+    if (erro != null) return Future.error(erro);
+    return baixarFn?.call(info) ?? Future.value(caminhoBaixado);
+  }
+
+  @override
+  Future<void> cancelarDownload() => _chamar('cancelarDownload', [], () {});
 
   /// Métodos das Tarefas 5 e 6 ainda sem resposta.
   @override

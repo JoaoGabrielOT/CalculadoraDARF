@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/amigos/tela_amigos.dart';
@@ -132,6 +134,59 @@ void main() {
       });
     });
   }
+
+  group('"Ver" e a aba', () {
+    Future<EstadoApp> verCom(WidgetTester t, Size tamanho, Aba aba) async {
+      final s = _servicos(amigos: [_bia]);
+      await abrirNoTeste<void>(t, s, abrirAmigos, tamanho: tamanho);
+      final estado = t
+          .element(find.text('abrir', skipOffstage: false))
+          .read<EstadoApp>();
+      estado.irPara(aba);
+      await t.tap(find.byKey(const Key('amigo-ver-bia@gmail.com')));
+      await t.pumpAndSettle();
+      expect(estado.amigo, 'bia@gmail.com');
+      return estado;
+    }
+
+    testWidgets('no celular, de Notícias ou Conta, vai para a Apuração', (
+      t,
+    ) async {
+      for (final aba in [Aba.noticias, Aba.conta]) {
+        final estado = await verCom(t, _celular, aba);
+        expect(estado.aba, Aba.apuracao);
+      }
+    });
+
+    testWidgets('no celular, de Caixa, fica onde está', (t) async {
+      final estado = await verCom(t, _celular, Aba.caixa);
+      expect(estado.aba, Aba.caixa);
+    });
+
+    testWidgets('no PC não troca de aba', (t) async {
+      for (final aba in [Aba.noticias, Aba.conta]) {
+        final estado = await verCom(t, _pc, aba);
+        expect(estado.aba, aba);
+      }
+    });
+  });
+
+  testWidgets('fechar a janela durante o compartilhamento não quebra', (
+    t,
+  ) async {
+    final espera = Completer<void>();
+    final s = _servicos()..esperaAdicionarAmigo = espera.future;
+    await _abrir(t, s);
+    await t.enterText(campo('amigos-email'), 'bia@gmail.com');
+    await t.tap(find.byKey(const Key('amigos-adicionar')));
+    await t.pump();
+    await t.tap(find.text('Fechar'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('amigos-email')), findsNothing);
+    espera.complete();
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+  });
 
   testWidgets('sem conta mostra o aviso do Python', (t) async {
     final s = ServicosFalsos();
