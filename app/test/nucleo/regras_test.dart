@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -39,26 +39,23 @@ void main() {
     expect(violacoes, isEmpty);
   });
 
-  test(
-    'fora de compat/ não usa toStringAsFixed, .sort(, math.max, math.min, '
-    '.round(, .roundToDouble(',
-    () {
-      const proibidos = [
-        'toStringAsFixed',
-        '.sort(',
-        'math.max',
-        'math.min',
-        '.round(',
-        '.roundToDouble(',
-      ];
-      final violacoes = <String>[];
-      arquivos.forEach((caminho, texto) {
-        if (caminho.contains('/compat/')) return;
-        for (final p in proibidos) {
-          if (texto.contains(p)) violacoes.add('$caminho usa $p');
-        }
-      });
-      expect(violacoes, isEmpty);
-    },
-  );
+  test('fora de compat/ não usa toStringAsFixed, .sort(, math.max, math.min, '
+      '.round(, .roundToDouble(', () {
+    const proibidos = [
+      'toStringAsFixed',
+      '.sort(',
+      'math.max',
+      'math.min',
+      '.round(',
+      '.roundToDouble(',
+    ];
+    final violacoes = <String>[];
+    arquivos.forEach((caminho, texto) {
+      if (caminho.contains('/compat/')) return;
+      for (final p in proibidos) {
+        if (texto.contains(p)) violacoes.add('$caminho usa $p');
+      }
+    });
+    expect(violacoes, isEmpty);
+  });
 }

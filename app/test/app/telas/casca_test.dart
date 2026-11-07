@@ -4,6 +4,7 @@ import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
+import 'package:calculadoradarf/app/telas/caixa/tela_caixa.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:flutter/material.dart';
@@ -122,7 +123,8 @@ void main() {
     await t.tap(_naLateral('Caixa'));
     await t.pumpAndSettle();
     expect(_estado(t).aba, Aba.caixa);
-    expect(find.text('Caixa (em construção)'), findsOneWidget);
+    expect(find.byType(TelaCaixa), findsOneWidget);
+    expect(find.text('Caixa (em construção)'), findsNothing);
   });
 
   testWidgets('o botão de saldo leva ao Caixa', (t) async {
@@ -144,7 +146,8 @@ void main() {
     await t.drag(find.byType(PageView), const Offset(-300, 0));
     await t.pumpAndSettle();
     expect(_estado(t).aba, Aba.caixa);
-    expect(find.text('Caixa (em construção)'), findsOneWidget);
+    expect(find.byType(TelaCaixa), findsOneWidget);
+    expect(find.text('Caixa (em construção)'), findsNothing);
   });
 
   testWidgets('no PC deslizar não troca de aba', (t) async {

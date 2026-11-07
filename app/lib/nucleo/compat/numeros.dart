@@ -19,7 +19,7 @@ import 'dart:typed_data';
 /// binário exato de `x`.
 BigInt _escalado(double x, int casas) {
   final (mantissa, expoente) = _decompor(x);
-  final numerador =mantissa * BigInt.from(10).pow(casas);
+  final numerador = mantissa * BigInt.from(10).pow(casas);
   if (expoente >= 0) return numerador << expoente;
   final denominador = BigInt.one << -expoente;
   final q = numerador ~/ denominador;

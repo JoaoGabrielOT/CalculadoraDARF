@@ -79,9 +79,7 @@ void conferir(
   }
   if (atual is List && esperado is List) {
     if (atual.length != esperado.length) {
-      fail(
-        '$caminho: tamanho ${atual.length}, esperado ${esperado.length}',
-      );
+      fail('$caminho: tamanho ${atual.length}, esperado ${esperado.length}');
     }
     if (semOrdem.contains(caminho)) {
       final restantes = [...esperado];

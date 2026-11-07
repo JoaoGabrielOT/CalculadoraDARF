@@ -9,10 +9,11 @@ final _zerosFinais = RegExp(r'0+$');
 
 /// `1234.5` -> `R$ 1.234,50`; negativos (abaixo de -0,004) levam `-R$ `.
 String brl(double v) {
-  final s = fixoPython(v.abs(), 2, milhar: true)
-      .replaceAll(',', 'X')
-      .replaceAll('.', ',')
-      .replaceAll('X', '.');
+  final s = fixoPython(
+    v.abs(),
+    2,
+    milhar: true,
+  ).replaceAll(',', 'X').replaceAll('.', ',').replaceAll('X', '.');
   return (v < -0.004 ? '-R\$ ' : 'R\$ ') + s;
 }
 

@@ -13,7 +13,10 @@ void main() {
       final e = caso.entrada! as Map<String, Object?>;
       final atual = somaPythonNum((e['valores']! as List<Object?>).cast<num>());
       conferir(atual, caso.saida);
-      expect(atual is int, caso.saida is int); // int só quando o Python devolve int
+      expect(
+        atual is int,
+        caso.saida is int,
+      ); // int só quando o Python devolve int
     });
   }
 }

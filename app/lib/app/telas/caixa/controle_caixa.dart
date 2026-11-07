@@ -106,8 +106,10 @@ class ControleCaixa extends ChangeNotifier {
       erro = null;
     } catch (e) {
       if (geracao != _geracao) return;
-      visao = null;
-      erro = e is PedidoSuperado ? null : textoErro(e);
+      // no mesmo dono o caixa anterior fica à vista, com o erro por cima;
+      // sem nada à vista o erro aparece (nem o pedido superado deixa a tela
+      // em "Carregando")
+      erro = e is PedidoSuperado && visao != null ? null : textoErro(e);
     }
     carregando = false;
     notifyListeners();

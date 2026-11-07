@@ -449,6 +449,44 @@ void main() {
     expect(find.text('Sem caixa.'), findsOneWidget);
   });
 
+  testWidgets(
+    'recarga que falha no mesmo dono mantém o caixa e mostra o erro',
+    (t) async {
+      final s = ServicosFalsos()..visaoCaixa = _visao();
+      await _montar(t, servicos: s);
+      s.erros['caixa'] = ErroValidacao('Sem rede.');
+      s.eventosFalsos.add(const EventoDadosMudaram());
+      await t.pumpAndSettle();
+      expect(find.text('Sem rede.'), findsOneWidget);
+      expect(find.text('DISPONÍVEL AGORA'), findsOneWidget);
+      expect(find.text('Próximas liquidações'), findsOneWidget);
+
+      // o erro some quando a recarga seguinte dá certo
+      s.erros.remove('caixa');
+      s.eventosFalsos.add(const EventoDadosMudaram());
+      await t.pumpAndSettle();
+      expect(find.text('Sem rede.'), findsNothing);
+    },
+  );
+
+  testWidgets('pedido superado mantém o caixa e não deixa em Carregando', (
+    t,
+  ) async {
+    final s = ServicosFalsos()..visaoCaixa = _visao();
+    await _montar(t, servicos: s);
+    s.erros['caixa'] = PedidoSuperado('superado');
+    s.eventosFalsos.add(const EventoDadosMudaram());
+    await t.pumpAndSettle();
+    expect(find.text('DISPONÍVEL AGORA'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byKey(const ValueKey('progresso-tela')), findsNothing);
+
+    // sem nada à vista, a tela também não fica em Carregando
+    final s2 = ServicosFalsos()..erros['caixa'] = PedidoSuperado('superado');
+    await _montar(t, servicos: s2);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('compacto: agenda financeira com grupos', (t) async {
     final s = ServicosFalsos()..visaoCaixa = _visao();
     await _montar(t, servicos: s, tamanho: _celular);

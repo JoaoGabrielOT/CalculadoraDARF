@@ -59,10 +59,7 @@ void main() {
           );
         case 'fmt_pct':
           conferir(
-            fmtPct(
-              (e['v'] as num?)?.toDouble(),
-              sinal: e['sinal']! as bool,
-            ),
+            fmtPct((e['v'] as num?)?.toDouble(), sinal: e['sinal']! as bool),
             caso.saida,
           );
         case 'fmt_volume':
@@ -70,10 +67,7 @@ void main() {
         case 'fmt_dec':
           final v = (e['v']! as num).toDouble();
           final casas = e['casas'] as int?;
-          conferir(
-            casas == null ? fmtDec(v) : fmtDec(v, casas),
-            caso.saida,
-          );
+          conferir(casas == null ? fmtDec(v) : fmtDec(v, casas), caso.saida);
         default:
           fail('função desconhecida: ${caso.funcao}');
       }
