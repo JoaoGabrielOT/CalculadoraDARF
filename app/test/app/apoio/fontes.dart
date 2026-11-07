@@ -28,12 +28,22 @@ Future<void> carregarFontesDeTeste() async {
 
   // Reserva dos símbolos (● ▲ ▼ ⚠ ✓) do tema; o testador não procura fontes
   // do sistema sozinho. Só existe no Windows, onde os goldens rodam.
-  final simbolos = File(
-    '${Platform.environment['WINDIR'] ?? r'C:\Windows'}/Fonts/seguisym.ttf',
-  );
+  final simbolos = _arquivoSimbolos();
   if (simbolos.existsSync()) {
     await (FontLoader('Segoe UI Symbol')..addFont(_bytes(simbolos))).load();
   }
+}
+
+File _arquivoSimbolos({String? windir}) => File(
+  '${windir ?? Platform.environment['WINDIR'] ?? r'C:\Windows'}/Fonts/seguisym.ttf',
+);
+
+/// Motivo para pular os goldens quando falta a fonte dos símbolos (Linux,
+/// CI): sem ela os 30 sairiam diferentes pixel a pixel. Null = rodar.
+String? motivoParaPularGoldens({String? windir}) {
+  final arquivo = _arquivoSimbolos(windir: windir);
+  if (arquivo.existsSync()) return null;
+  return 'Goldens só no Windows: falta ${arquivo.path} (Segoe UI Symbol).';
 }
 
 Future<ByteData> _bytes(File arquivo) async {

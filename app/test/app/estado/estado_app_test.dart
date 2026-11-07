@@ -346,6 +346,20 @@ void main() {
       expect(p.notificacoesIniciadas, 1);
     });
 
+    testWidgets('descartar durante iniciar() não deixa o timer pendente', (
+      t,
+    ) async {
+      final e = EstadoApp(
+        ServicosFalsos(),
+        PlataformaFalsa(),
+        verificarAtualizacaoAutomatica: true,
+      );
+      final iniciando = e.iniciar();
+      e.dispose();
+      await iniciando;
+      // o testWidgets falha com "A Timer is still pending" se sobrar o timer
+    });
+
     test('carregando até o estado inicial chegar', () async {
       final s = ServicosFalsos();
       final e = EstadoApp(s, PlataformaFalsa());

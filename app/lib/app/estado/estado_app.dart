@@ -17,7 +17,14 @@ import '../tema/tema_visual.dart';
 enum Aba { apuracao, caixa, radar, noticias, conta }
 
 class EstadoApp extends ChangeNotifier {
-  EstadoApp(this._servicos, this._plataforma) {
+  /// [verificarAtualizacaoAutomatica]: só o executável final procura versão
+  /// nova sozinho (atualizador.py:26-28); a verificação manual da Conta vale
+  /// sempre.
+  EstadoApp(
+    this._servicos,
+    this._plataforma, {
+    this.verificarAtualizacaoAutomatica = kReleaseMode,
+  }) {
     // Assina logo: o proxy só guarda os 256 últimos eventos até a primeira
     // assinatura.
     _assinatura = _servicos.eventos.listen(
@@ -29,6 +36,7 @@ class EstadoApp extends ChangeNotifier {
 
   final ServicosApp _servicos;
   final Plataforma _plataforma;
+  final bool verificarAtualizacaoAutomatica;
   late final StreamSubscription<EventoServico> _assinatura;
 
   Preferencias preferencias = const Preferencias();
@@ -127,11 +135,14 @@ class EstadoApp extends ChangeNotifier {
       _atualizarMetas(),
       _iniciarNotificacoes(),
     ]);
-    // 3 s depois de abrir, para não competir com a carga inicial (py:1273)
-    _timerAtualizacao = Timer(
-      const Duration(seconds: 3),
-      () => unawaited(_verificarAtualizacao()),
-    );
+    // 3 s depois de abrir, para não competir com a carga inicial (py:1273);
+    // descartado no meio do iniciar(), não sobra timer
+    if (verificarAtualizacaoAutomatica && !_descartado) {
+      _timerAtualizacao = Timer(
+        const Duration(seconds: 3),
+        () => unawaited(_verificarAtualizacao()),
+      );
+    }
   }
 
   /// Aplica o resultado de `servicos.iniciar()`. `iniciarApp` chama antes do

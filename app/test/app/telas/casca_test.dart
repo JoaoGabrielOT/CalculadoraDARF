@@ -153,7 +153,7 @@ void main() {
 
     testWidgets('verifica 3 s depois de abrir e oferece uma vez', (t) async {
       final s = ServicosFalsos()..infoAtualizacao = info;
-      await montarApp(t, servicos: s);
+      await montarApp(t, servicos: s, verificarAtualizacao: true);
       await t.pump(const Duration(seconds: 2));
       expect(s.chamadas, isNot(contains('verificarAtualizacao()')));
       await t.pump(const Duration(seconds: 1));
@@ -169,9 +169,19 @@ void main() {
       expect(_estado(t).atualizacao, isNull);
     });
 
+    testWidgets('fora do executável final não verifica sozinho', (t) async {
+      // atualizador.py:26-28 (pode_atualizar): só o exe empacotado verifica
+      final s = ServicosFalsos()..infoAtualizacao = info;
+      await montarApp(t, servicos: s);
+      await t.pump(const Duration(seconds: 4));
+      await t.pumpAndSettle();
+      expect(s.chamadas, isNot(contains('verificarAtualizacao()')));
+      expect(find.text('Nova versão disponível'), findsNothing);
+    });
+
     testWidgets('sem versão nova ou com erro não mostra nada', (t) async {
       final s = ServicosFalsos()..erros['verificarAtualizacao'] = Offline();
-      await montarApp(t, servicos: s);
+      await montarApp(t, servicos: s, verificarAtualizacao: true);
       await t.pump(const Duration(seconds: 4));
       await t.pumpAndSettle();
       expect(s.chamadas, contains('verificarAtualizacao()'));

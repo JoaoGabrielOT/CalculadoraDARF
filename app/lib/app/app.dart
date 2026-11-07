@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -100,11 +101,15 @@ class AppCalculadora extends StatelessWidget {
     required this.servicos,
     required this.plataforma,
     this.estado,
+    this.verificarAtualizacaoAutomatica = kReleaseMode,
   });
 
   final ServicosApp servicos;
   final Plataforma plataforma;
   final EstadoApp? estado;
+
+  /// Repassado ao estado que o app cria (sem [estado]).
+  final bool verificarAtualizacaoAutomatica;
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +125,11 @@ class AppCalculadora extends StatelessWidget {
         else
           ChangeNotifierProvider<EstadoApp>(
             lazy: false,
-            create: (_) => EstadoApp(servicos, plataforma)..iniciar(),
+            create: (_) => EstadoApp(
+              servicos,
+              plataforma,
+              verificarAtualizacaoAutomatica: verificarAtualizacaoAutomatica,
+            )..iniciar(),
           ),
       ],
       child: const _AppMaterial(),

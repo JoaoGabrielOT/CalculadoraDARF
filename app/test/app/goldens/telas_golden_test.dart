@@ -19,6 +19,7 @@ import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 
 import '../apoio/dados_exemplo.dart';
+import '../apoio/fontes.dart';
 import '../apoio/montar.dart';
 import '../apoio/servicos_falsos.dart';
 
@@ -281,37 +282,40 @@ void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: hojeExemplo, agora: _agora));
   tearDown(() => ambiente = Ambiente.sistema());
 
-  for (final aba in Aba.values) {
-    for (final tema in _temas.entries) {
-      for (final tamanho in _tamanhos.entries) {
-        final nome = '${aba.name}_${tema.key}_${tamanho.key}';
-        testWidgets(nome, (t) async {
-          // Sombras de verdade (o padrão do teste troca por um contorno
-          // preto); volta antes do fim do corpo, que confere a variável.
-          debugDisableShadows = false;
-          try {
-            await montarApp(
-              t,
-              servicos: _servicos(),
-              tema: tema.value,
-              tamanho: tamanho.value,
-            );
-            await t.pumpAndSettle();
-            Provider.of<EstadoApp>(
-              t.element(find.byType(Casca)),
-              listen: false,
-            ).irPara(aba);
-            await t.pumpAndSettle();
-            await _decodificarImagens(t);
-            await expectLater(
-              find.byKey(chaveCaptura),
-              matchesGoldenFile('arquivos/$nome.png'),
-            );
-          } finally {
-            debugDisableShadows = true;
-          }
-        });
+  // Sem a fonte dos símbolos o grupo é pulado com o motivo (Linux, CI).
+  group('telas', skip: motivoParaPularGoldens() ?? false, () {
+    for (final aba in Aba.values) {
+      for (final tema in _temas.entries) {
+        for (final tamanho in _tamanhos.entries) {
+          final nome = '${aba.name}_${tema.key}_${tamanho.key}';
+          testWidgets(nome, (t) async {
+            // Sombras de verdade (o padrão do teste troca por um contorno
+            // preto); volta antes do fim do corpo, que confere a variável.
+            debugDisableShadows = false;
+            try {
+              await montarApp(
+                t,
+                servicos: _servicos(),
+                tema: tema.value,
+                tamanho: tamanho.value,
+              );
+              await t.pumpAndSettle();
+              Provider.of<EstadoApp>(
+                t.element(find.byType(Casca)),
+                listen: false,
+              ).irPara(aba);
+              await t.pumpAndSettle();
+              await _decodificarImagens(t);
+              await expectLater(
+                find.byKey(chaveCaptura),
+                matchesGoldenFile('arquivos/$nome.png'),
+              );
+            } finally {
+              debugDisableShadows = true;
+            }
+          });
+        }
       }
     }
-  }
+  });
 }

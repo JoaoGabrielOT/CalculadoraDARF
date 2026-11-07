@@ -24,6 +24,7 @@ Future<void> montarApp(
   Size tamanho = const Size(1366, 768),
   TemaVisual tema = TemaVisual.claro,
   Widget? tela,
+  bool verificarAtualizacao = false,
 }) async {
   t.view.physicalSize = tamanho;
   t.view.devicePixelRatio = 1.0;
@@ -36,7 +37,13 @@ Future<void> montarApp(
   );
   final p = plataforma ?? PlataformaFalsa();
   if (tela == null) {
-    await t.pumpWidget(AppCalculadora(servicos: s, plataforma: p));
+    await t.pumpWidget(
+      AppCalculadora(
+        servicos: s,
+        plataforma: p,
+        verificarAtualizacaoAutomatica: verificarAtualizacao,
+      ),
+    );
   } else {
     await t.pumpWidget(
       MultiProvider(
@@ -45,7 +52,11 @@ Future<void> montarApp(
           Provider<Plataforma>.value(value: p),
           ChangeNotifierProvider<EstadoApp>(
             lazy: false,
-            create: (_) => EstadoApp(s, p)..iniciar(),
+            create: (_) => EstadoApp(
+              s,
+              p,
+              verificarAtualizacaoAutomatica: verificarAtualizacao,
+            )..iniciar(),
           ),
         ],
         child: MaterialApp(
