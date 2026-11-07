@@ -3,120 +3,87 @@ name: Release
 on:
   push:
     tags: ["v*", "[0-9]*"]
+    branches: [migracao-flutter]  # só verifica (versão e testes); publicar é só por tag
   workflow_dispatch:  # gera os arquivos para teste, sem publicar release
 
 permissions:
   contents: write
 
 jobs:
-  windows:
+  versao:
+    runs-on: ubuntu-latest
+    outputs:
+      versao: ${{ steps.v.outputs.versao }}
+      numero: ${{ steps.v.outputs.numero }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Definir a versão
+        id: v
+        run: |
+          set -e
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            T="${GITHUB_REF_NAME}"
+            if ! echo "$T" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::Tag fora do formato x.y.z"; exit 1
+            fi
+            V="${T#v}"
+            if [ "${V%%.*}" -lt 2 ]; then
+              echo "::error::Tags 1.x são do app Python e saem da main."; exit 1
+            fi
+          else
+            # nunca 0.0.0: um build 0.0.0 ofereceria a 1.12 como atualização
+            V=$(sed -nE "s/^const String versaoApp = '([0-9]+\.[0-9]+\.[0-9]+)';.*/\1/p" app/lib/versao.dart)
+            if [ -z "$V" ]; then
+              echo "::error::Versão não encontrada em app/lib/versao.dart"; exit 1
+            fi
+          fi
+          IFS=. read -r M m p <<< "$V"
+          echo "versao=$V" >> "$GITHUB_OUTPUT"
+          echo "numero=$((M * 10000 + m * 100 + p))" >> "$GITHUB_OUTPUT"
+          echo "versao=$V numero=$((M * 10000 + m * 100 + p))"
+
+  testes:
+    needs: versao
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: subosito/flutter-action@v2
         with:
-          python-version: "3.12"
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
 
-      - name: Definir a versão a partir da tag
-        shell: pwsh
-        run: |
-          $v = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "0.0.0" }
-          Set-Content -Path versao.py -Value "VERSAO = `"$v`"" -Encoding utf8
+      - name: Dependências
+        working-directory: app
+        run: flutter pub get
 
-      - name: Criar credentials.json a partir do segredo
-        shell: pwsh
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-        run: |
-          if (-not $env:GOOGLE_CREDENTIALS) {
-            Write-Output "::error::Segredo GOOGLE_CREDENTIALS ausente. Cadastre em Settings > Secrets and variables > Actions."
-            exit 1
-          }
-          Set-Content -Path credentials.json -Value $env:GOOGLE_CREDENTIALS -Encoding utf8 -NoNewline
-          python -c "import json; d=json.load(open('credentials.json', encoding='utf-8-sig')); assert 'installed' in d, 'credentials.json sem a chave installed'"
+      - name: Análise
+        working-directory: app
+        run: flutter analyze
 
-      - name: Instalar dependências
-        run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
+      - name: Testes
+        working-directory: app
+        run: flutter test --exclude-tags golden
 
-      - name: Gerar o executável
-        shell: pwsh
-        run: |
-          pyinstaller --onefile --noconsole --clean --collect-data customtkinter `
-            --collect-all yfinance --collect-all curl_cffi --add-data "credentials.json;." `
-            --icon assets\icone.ico --add-data "assets\icone.ico;assets" --add-data "assets\icone_janela.png;assets" `
-            --name CalculadoraDARF calculadora_darf.py
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows
-          path: dist/CalculadoraDARF.exe
-
-  android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Preparar o app (versão, módulos compartilhados, credencial e chave)
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_SENHA: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: |
-          set -e
-          if [ -z "$GOOGLE_CREDENTIALS" ]; then
-            echo "::error::Segredo GOOGLE_CREDENTIALS ausente."; exit 1
-          fi
-          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_SENHA" ]; then
-            echo "::error::Segredos ANDROID_KEYSTORE_BASE64 e ANDROID_KEYSTORE_PASSWORD ausentes."; exit 1
-          fi
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then V="${GITHUB_REF_NAME#v}"; else V="0.0.0"; fi
-          printf 'VERSAO = "%s"\n' "$V" > versao.py
-          cp nucleo.py google_sync.py mercado.py metas.py sugestoes.py noticias.py atualizador.py versao.py android/
-          printf '%s' "$GOOGLE_CREDENTIALS" > android/credentials.json
-          python -c "import json; assert 'installed' in json.load(open('android/credentials.json'))"
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
-          echo "VERSAO=$V" >> "$GITHUB_ENV"
-          echo "NUMERO=$(echo "$V" | awk -F. '{print $1*10000 + $2*100 + $3}')" >> "$GITHUB_ENV"
-
-      - name: Instalar o Flet
-        run: python -m pip install --upgrade pip "flet[cli]==1.0.5"
-
-      - name: Gerar o APK
-        working-directory: android
-        env:
-          FLET_ANDROID_SIGNING_KEY_STORE: ${{ runner.temp }}/upload.jks
-          FLET_ANDROID_SIGNING_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          FLET_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          FLET_ANDROID_SIGNING_KEY_ALIAS: calculadoradarf
-        run: |
-          # o download do Python do serious_python às vezes chega corrompido (erro intermitente em
-          # downloadDistArchive_*); nesse caso apaga a pasta de build e tenta de novo
-          for tentativa in 1 2 3; do
-            if flet build apk --yes --python-version 3.12 --arch arm64-v8a armeabi-v7a \
-                 --build-version "$VERSAO" --build-number "$NUMERO"; then
-              break
-            fi
-            if [ "$tentativa" = 3 ]; then exit 1; fi
-            echo "::warning::Falha ao gerar o APK (tentativa $tentativa); tentando de novo"
-            rm -rf build
-          done
-          APK=$(find build/apk -name "*.apk" | head -n 1)
-          test -n "$APK"
-          cp "$APK" ../CalculadoraDARF.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android
-          path: CalculadoraDARF.apk
+  # Tarefas 4 e 5 acrescentam os jobs android e windows, cada um com este passo de preparação:
+  #
+  #   - name: Preparar versão e credencial
+  #     shell: pwsh
+  #     env:
+  #       GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+  #     run: |
+  #       if ("${{ github.ref_type }}" -eq "tag") {
+  #         Set-Content -Path app/lib/versao.dart -Encoding utf8 -Value @(
+  #           '/// Versão do aplicativo (comparada com a do GitHub pelo atualizador).',
+  #           "const String versaoApp = '${{ needs.versao.outputs.versao }}';")
+  #       }
+  #       (grava app/assets/google/credentials.json de GOOGLE_CREDENTIALS e confere 'installed')
 
   publicar:
     if: github.ref_type == 'tag'
-    needs: [windows, android]
+    needs: [versao, testes]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -124,10 +91,14 @@ jobs:
           path: saida
           merge-multiple: true
 
-      - name: Publicar a release
+      - name: Publicar a release (pré-release até o dono aprovar)
         uses: softprops/action-gh-release@v2
         with:
+          name: Calculadora DARF ${{ needs.versao.outputs.versao }}
           files: |
             saida/CalculadoraDARF.exe
             saida/CalculadoraDARF.apk
+          prerelease: true     # o atualizador Python e o Flutter usam /releases/latest, que ignora pré-release
+          make_latest: "false" # após a aprovação: gh release edit <tag> --prerelease=false --latest, e trocar estas duas linhas
           generate_release_notes: true
+          fail_on_unmatched_files: true
