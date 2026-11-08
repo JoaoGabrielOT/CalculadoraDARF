@@ -44,7 +44,8 @@ void main() {
       expect(valorAtual(60, 36.2), 2172);
       expect(valorAtual(3, 10.005), 30.02);
       expect(valorAtual(10, null), isNull);
-      expect(valorAtual(10, 0), isNull);
+      expect(valorAtual(10, 0), 0);
+      expect(valorAtual(0, 36.2), isNull);
     });
 
     test('percentual sobre o custo; custo zero ou sem dado: nulo', () {

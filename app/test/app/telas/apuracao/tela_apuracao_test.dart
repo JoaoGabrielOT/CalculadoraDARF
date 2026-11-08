@@ -424,9 +424,12 @@ void main() {
     });
 
     group('pela venda, com o mês aberto já terminado', () {
-      Future<ServicosFalsos> abrirVenda(WidgetTester t) async {
+      Future<ServicosFalsos> abrirVenda(
+        WidgetTester t, {
+        ServicosFalsos? servicos,
+      }) async {
         ambiente = Ambiente.fixo(hoje: '2026-11-08');
-        final s = ServicosFalsos();
+        final s = servicos ?? ServicosFalsos();
         s.visoes['2026-11'] = visaoExemplo(
           Mes(
             mes: '2026-11',
@@ -484,6 +487,36 @@ void main() {
         expect(find.text('Registrar venda'), findsWidgets);
         expect(find.text('Mês 11/2026'), findsOneWidget);
         expect(maximoDaData(t), '2026-11-08');
+      });
+
+      testWidgets('se o mês inicial falhar depois de fechar, o formulário '
+          'segue para o mês seguinte', (t) async {
+        final s = await abrirVenda(t);
+        s.erros['mesInicial'] = ErroValidacao('Sem disco.');
+        await t.tap(_noDialogo('Fechar mês'));
+        await t.pumpAndSettle();
+        expect(s.chamadas, contains('fecharMes(2026-10)'));
+        await t.tap(find.text('OK'));
+        await t.pumpAndSettle();
+        expect(s.chamadas, contains('carregarMes(2026-11, null)'));
+        expect(find.text('Mês 11/2026'), findsOneWidget);
+      });
+
+      testWidgets('vendas das metas antes de fechar: cancelar a confirmação '
+          'recarrega a visão do formulário', (t) async {
+        final s = ServicosFalsos()
+          ..metasAtivasFalsas = 1
+          ..preparo = (PreparoFechamento()
+            ..executadas.add(meta('M1', 'PETR4', preco: 40)));
+        await abrirVenda(t, servicos: s);
+        expect(find.text('Metas verificadas antes de fechar'), findsOneWidget);
+        await t.tap(find.text('OK'));
+        await t.pumpAndSettle();
+        final antes = _chamadasA(s, 'carregarMes(2026-10');
+        await t.tap(_noDialogo('Cancelar'));
+        await t.pumpAndSettle();
+        expect(_chamadasA(s, 'fecharMes'), 0);
+        expect(_chamadasA(s, 'carregarMes(2026-10'), antes + 1);
       });
 
       testWidgets('cancelar a confirmação não fecha nem muda o formulário', (

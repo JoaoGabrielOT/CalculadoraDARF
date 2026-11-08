@@ -127,6 +127,9 @@ void main() {
     expect(find.text('cotação histórica não disponível'), findsOneWidget);
     expect(find.textContaining('Cotação atual'), findsNothing);
     expect(find.textContaining('VALOR DE MERCADO'), findsNothing);
+    // sem cotação histórica, as colunas de cotação e resultado em aberto saem
+    expect(find.text('COTAÇÃO'), findsNothing);
+    expect(find.text('RESULTADO EM ABERTO'), findsNothing);
     expect(find.byKey(const Key('ativo-PETR4')), findsOneWidget);
     expect(find.byKey(const Key('ativo-ITUB4')), findsNothing);
   });
@@ -140,8 +143,8 @@ void main() {
     Finder em(Finder f) => find.descendant(of: linha, matching: f);
     expect(em(find.text('100')), findsOneWidget);
     expect(em(find.text('R\$ 31,50')), findsOneWidget);
-    // sem cotação: cotação e resultado em "—" neutro
-    expect(em(find.text('—')), findsNWidgets(2));
+    // posição histórica: sem as colunas de cotação e resultado em aberto
+    expect(em(find.text('—')), findsNothing);
     expect(find.text('R\$ 3.150,00'), findsNothing);
     expect(find.byKey(const Key('cartoes-PETR4')), findsNothing);
     await t.tap(linha);

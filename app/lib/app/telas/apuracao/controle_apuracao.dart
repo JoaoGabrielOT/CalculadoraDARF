@@ -678,14 +678,28 @@ class ControleApuracao extends ChangeNotifier {
     BuildContext c,
     VisaoMes atual,
   ) async {
-    if (!await _fecharMesDe(c, atual)) return null;
-    final aberto = mesAberto;
-    if (aberto == null || aberto == atual.mes) return null;
+    _metasVenderam = false;
+    final fechou = await _fecharMesDe(c, atual);
+    final String mes;
+    if (fechou) {
+      // se o mês inicial falhou depois de fechar, segue para o mês seguinte
+      final aberto = mesAberto;
+      mes = aberto == null || aberto == atual.mes
+          ? proximoMes(atual.mes)
+          : aberto;
+    } else if (_metasVenderam) {
+      // as metas venderam antes da confirmação: a visão do formulário envelheceu
+      mes = atual.mes;
+    } else {
+      return null;
+    }
     try {
-      return await _servicos.carregarMes(aberto);
+      return await _servicos.carregarMes(mes);
     } catch (e) {
       if (c.mounted) {
         await avisar(c, 'Não foi possível carregar', textoErro(e));
+        // o formulário ficaria num mês já fechado
+        if (fechou && c.mounted) Navigator.of(c).pop();
       }
       return null;
     }
@@ -715,6 +729,10 @@ class ControleApuracao extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Verdadeiro quando a verificação das metas registrou vendas no último
+  /// [_fechar].
+  bool _metasVenderam = false;
 
   bool _mudou(String mes) => _descartado || _estado.mes != mes;
 
@@ -756,6 +774,7 @@ class ControleApuracao extends ChangeNotifier {
         await avisar(c, 'Não foi possível fechar o mês', bloqueio);
         return false;
       }
+      if (preparo.executadas.isNotEmpty) _metasVenderam = true;
       if (preparo.executadas.isNotEmpty || preparo.invalidas.isNotEmpty) {
         await recarregar();
         if (!c.mounted || _mudou(tela)) return false;

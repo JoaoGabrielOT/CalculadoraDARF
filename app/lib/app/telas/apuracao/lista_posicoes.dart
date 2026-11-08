@@ -123,13 +123,13 @@ class ListaPosicoes extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const _Titulos(),
+                  _Titulos(corrente: p!.corrente),
                   for (final a in itens)
                     _LinhaAtivo(
                       key: Key('ativo-${a.ticker}'),
                       ativo: a,
                       indicadores: _indicadorDe(controle, a.ticker),
-                      corrente: p!.corrente,
+                      corrente: p.corrente,
                       cotacao: p.corrente ? controle.cotacoes : null,
                       compacto: false,
                     ),
@@ -173,7 +173,10 @@ class _Cotacao extends StatelessWidget {
 const _flex = [1.0, .6, 1.0, 1.0, 1.9];
 
 class _Titulos extends StatelessWidget {
-  const _Titulos();
+  const _Titulos({required this.corrente});
+
+  /// Posição histórica não tem cotação nem resultado em aberto.
+  final bool corrente;
 
   @override
   Widget build(BuildContext context) {
@@ -197,8 +200,10 @@ class _Titulos extends StatelessWidget {
           t('TICKER', _flex[0], direita: false),
           t('QTD', _flex[1]),
           t('PREÇO MÉDIO', _flex[2]),
-          t('COTAÇÃO', _flex[3]),
-          t('RESULTADO EM ABERTO', _flex[4]),
+          if (corrente) ...[
+            t('COTAÇÃO', _flex[3]),
+            t('RESULTADO EM ABERTO', _flex[4]),
+          ],
         ],
       ),
     );
@@ -247,8 +252,11 @@ class _LinhaAtivoState extends State<_LinhaAtivo> {
     final semValor = esperando ? '…' : '—';
     final medio = a.precoMedio;
     final custo = ind?.custoRemanescente ?? a.custoFiscal ?? a.custoGerencial;
-    final valor = valorAtual(a.qtd, preco);
-    final emAberto = valor == null ? null : arredondar(valor - custo, 2);
+    // com indicadores, valem os do núcleo (`comCotacoes`); sem eles, a conta local
+    final valor = ind != null ? ind.valorMercado : valorAtual(a.qtd, preco);
+    final emAberto = ind != null
+        ? ind.naoRealizado
+        : (valor == null ? null : arredondar(valor - custo, 2));
     final textoAberto = emAberto == null
         ? semValor
         : textoResultado(emAberto, pctSobre(emAberto, custo));
@@ -368,8 +376,10 @@ class _LinhaAtivoState extends State<_LinhaAtivo> {
                 ),
                 col('${a.qtd}', _flex[1]),
                 col(medio == null ? '—' : brl(medio), _flex[2]),
-                col(textoCotacao, _flex[3]),
-                col(textoAberto, _flex[4], cor: corAberto),
+                if (widget.corrente) ...[
+                  col(textoCotacao, _flex[3]),
+                  col(textoAberto, _flex[4], cor: corAberto),
+                ],
               ],
             ),
           ),

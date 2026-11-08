@@ -38,9 +38,10 @@ String textoResultado(double? valor, double? pct) {
   return pct == null ? base : '$base (${pctCurto(pct)})';
 }
 
-/// Quantidade × cotação, em centavos; nulo sem cotação.
+/// Quantidade × cotação, em centavos; nulo sem cotação ou sem quantidade
+/// (mesma regra de `comCotacoes` do núcleo).
 double? valorAtual(int qtd, double? cotacao) =>
-    cotacao == null || cotacao == 0 ? null : arredondar(qtd * cotacao, 2);
+    qtd == 0 || cotacao == null ? null : arredondar(qtd * cotacao, 2);
 
 /// [valor] ÷ [base] × 100; nulo sem dado ou com base zero.
 double? pctSobre(double? valor, double? base) =>
