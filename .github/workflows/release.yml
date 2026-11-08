@@ -124,6 +124,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path app/assets/google | Out-Null
           Set-Content -Path app/assets/google/credentials.json -Encoding utf8 -Value $env:GOOGLE_CREDENTIALS
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle/wrapper/dists
+          key: gradle-dists-${{ runner.os }}-${{ hashFiles('app/android/gradle/wrapper/gradle-wrapper.properties') }}
+
       - name: Dependências
         working-directory: app
         run: flutter pub get
@@ -135,7 +140,17 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           set -e
-          flutter build apk --release --target-platform android-arm,android-arm64 --build-name "$VERSAO" --build-number "$NUMERO"
+          # o download da distribuição do Gradle falha às vezes por rede; tenta de novo
+          for tentativa in 1 2 3; do
+            if flutter build apk --release --target-platform android-arm,android-arm64 --build-name "$VERSAO" --build-number "$NUMERO"; then
+              break
+            fi
+            if [ "$tentativa" = 3 ]; then
+              echo "::error::Build do APK falhou nas 3 tentativas"; exit 1
+            fi
+            echo "::warning::Build do APK falhou (tentativa $tentativa); aguardando para tentar de novo"
+            sleep 20
+          done
           cp build/app/outputs/flutter-apk/app-release.apk ../CalculadoraDARF.apk
 
       - name: Baixar o APK publicado
