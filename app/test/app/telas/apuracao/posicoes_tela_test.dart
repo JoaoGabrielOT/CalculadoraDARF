@@ -1,6 +1,7 @@
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
+import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,6 +91,17 @@ Finder _botao(String texto) => find.ancestor(
   matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
 );
 
+/// Abre o ativo e o "Mais detalhes" dele.
+Future<void> _abrirDetalhes(WidgetTester t, String ticker) async {
+  await t.tap(find.byKey(Key('ativo-$ticker')));
+  await t.pumpAndSettle();
+  final detalhes = find.byKey(Key('detalhes-$ticker'));
+  await t.ensureVisible(detalhes);
+  await t.pumpAndSettle();
+  await t.tap(detalhes);
+  await t.pumpAndSettle();
+}
+
 bool _habilitado(WidgetTester t, String texto) =>
     t.widget<ButtonStyleButton>(_botao(texto)).onPressed != null;
 
@@ -119,24 +131,40 @@ void main() {
     expect(find.byKey(const Key('ativo-ITUB4')), findsNothing);
   });
 
-  testWidgets('posição mostra quantidade, custo, preço médio e as compras '
-      'expansíveis com a data da compra', (t) async {
+  testWidgets('posição: linha com quantidade, preço médio, cotação e '
+      'resultado; expandida, os cartões e as compras em "Mais detalhes"', (
+    t,
+  ) async {
     await _montar(t, mes: '2026-09');
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('ativo-PETR4')),
-        matching: find.text('100'),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('R\$ 3.150,00'), findsOneWidget);
-    expect(find.text('R\$ 31,50'), findsOneWidget);
-    expect(find.text('custo por compra'), findsOneWidget);
+    final linha = find.byKey(const Key('ativo-PETR4'));
+    Finder em(Finder f) => find.descendant(of: linha, matching: f);
+    expect(em(find.text('100')), findsOneWidget);
+    expect(em(find.text('R\$ 31,50')), findsOneWidget);
+    // sem cotação: cotação e resultado em "—" neutro
+    expect(em(find.text('—')), findsNWidgets(2));
+    expect(find.text('R\$ 3.150,00'), findsNothing);
+    expect(find.byKey(const Key('cartoes-PETR4')), findsNothing);
+    await t.tap(linha);
+    await t.pumpAndSettle();
+    final cartoes = find.byKey(const Key('cartoes-PETR4'));
+    Finder noCartao(String texto) =>
+        find.descendant(of: cartoes, matching: find.text(texto));
+    for (final r in ['Investido', 'Valor atual', 'Em aberto', 'Equilíbrio']) {
+      expect(noCartao(r), findsOneWidget, reason: r);
+    }
+    expect(noCartao('R\$ 3.150,00'), findsOneWidget);
+    expect(noCartao('R\$ 31,51'), findsOneWidget);
+    expect(noCartao('—'), findsNWidgets(2));
+    expect(find.text('Realizado no mês'), findsOneWidget);
+    expect(find.text('Acumulado desde 09/2026'), findsOneWidget);
+    // compras e a lista longa ficam em "Mais detalhes"
     expect(find.byKey(const Key('compras-PETR4')), findsNothing);
-    await t.tap(find.byKey(const Key('ativo-PETR4')));
+    expect(find.byKey(const Key('indicadores-PETR4')), findsNothing);
+    await t.tap(find.byKey(const Key('detalhes-PETR4')));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('compras-PETR4')), findsOneWidget);
     expect(find.text('10/09/2026 · 100 de 100 × R\$ 31,50'), findsOneWidget);
+    expect(find.text('Tipo: Ação · custo por compra'), findsOneWidget);
   });
 
   testWidgets('mês corrente: selo com fonte, data e hora da cotação atual', (
@@ -147,8 +175,25 @@ void main() {
     expect(find.byKey(const Key('lista-posicoes')), findsOneWidget);
     expect(find.text('Cotação atual · Yahoo · 07/11 14:05'), findsOneWidget);
     expect(find.text('cotação histórica não disponível'), findsNothing);
-    expect(find.text('VALOR DE MERCADO'), findsOneWidget);
-    expect(find.text('R\$ 2.172,00'), findsOneWidget); // PETR4: 60 × 36,20
+    expect(find.text('COTAÇÃO'), findsOneWidget);
+    expect(find.text('RESULTADO EM ABERTO'), findsOneWidget);
+    // PETR4: 60 × 36,20 − 60 × 32,50, sobre o custo de R$ 1.950,00
+    final ganho = find.text('▲ +R\$ 222,00 (+11,4%)');
+    expect(ganho, findsOneWidget);
+    final perda = find.text('▼ -R\$ 340,00 (-2,8%)'); // VALE3
+    expect(perda, findsOneWidget);
+    final cores = CoresApp.de(t.element(ganho));
+    expect(t.widget<Text>(ganho).style?.color, cores.alta);
+    expect(t.widget<Text>(perda).style?.color, cores.queda);
+    await t.tap(find.byKey(const Key('ativo-PETR4')));
+    await t.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('cartoes-PETR4')),
+        matching: find.text('R\$ 2.172,00'),
+      ),
+      findsOneWidget,
+    ); // valor atual
     expect(s.chamadas, contains('cotacoesAtuais(AAPL34,PETR4,VALE3)'));
   });
 
@@ -159,10 +204,21 @@ void main() {
     await _tocar(t, 'Posição em 28/10/2026');
     expect(find.text('Cotação atual · Yahoo · 07/11 14:05'), findsOneWidget);
     expect(find.byKey(const Key('ativo-PETR4')), findsOneWidget);
+    expect(find.text('▲ +R\$ 222,00 (+11,4%)'), findsOneWidget);
     expect(
-      find.textContaining('Valor de mercado: R\$ 2.172,00'),
+      find.text('60 un. · PM R\$ 32,50 · cotação R\$ 36,20'),
       findsOneWidget,
     );
+    await t.tap(find.byKey(const Key('ativo-PETR4')));
+    await t.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('cartoes-PETR4')),
+        matching: find.text('R\$ 2.172,00'),
+      ),
+      findsOneWidget,
+    );
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('falha em cotacoesAtuais: a posição aparece sem valor de '
@@ -267,17 +323,20 @@ void main() {
       'rótulos de mês, acumulado e método', (t) async {
     await _montar(t, mes: '2026-09');
     expect(find.byKey(const Key('indicadores-PETR4')), findsNothing);
-    await t.tap(find.byKey(const Key('ativo-PETR4')));
-    await t.pumpAndSettle();
+    await _abrirDetalhes(t, 'PETR4');
     final painel = find.byKey(const Key('indicadores-PETR4'));
     expect(painel, findsOneWidget);
+    // o método e a origem do custo vão na dica do (i) dos cartões
+    expect(
+      find.byTooltip(
+        'Resultado: método por compra. Custo remanescente: por compra.',
+      ),
+      findsOneWidget,
+    );
     for (final r in [
       'Quantidade em aberto',
-      'Custo remanescente (por compra)',
       'Preço médio das compras (saldo)',
-      'Ponto de equilíbrio (R\$)',
-      'Resultado realizado no mês (método por compra, R\$)',
-      'Resultado realizado acumulado desde 09/2026 (método por compra, R\$)',
+      'Preço médio das vendas no mês',
       'Rentabilidade realizada no mês (método por compra, %)',
     ]) {
       expect(
@@ -305,19 +364,27 @@ void main() {
       'com cotação de todos os ativos', (t) async {
     await _montar(t);
     await _tocar(t, 'Posição em 28/10/2026');
-    await t.tap(find.byKey(const Key('ativo-PETR4')));
-    await t.pumpAndSettle();
+    await _abrirDetalhes(t, 'PETR4');
     final painel = find.byKey(const Key('indicadores-PETR4'));
+    final cartoes = find.byKey(const Key('cartoes-PETR4'));
+    // não realizado e valor de mercado ficam nos cartões, fora da lista
+    expect(
+      find.descendant(
+        of: cartoes,
+        matching: find.text('▲ +R\$ 222,00 (+11,4%)'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: cartoes, matching: find.text('R\$ 2.172,00')),
+      findsOneWidget,
+    );
     expect(
       find.descendant(
         of: painel,
         matching: find.text('Resultado não realizado (gerencial, R\$)'),
       ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: painel, matching: find.text('R\$ 2.172,00')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.descendant(
@@ -336,9 +403,8 @@ void main() {
     final s = _falsos()..cotacoesAtuaisResp.remove('VALE3');
     await _montar(t, servicos: s);
     await _tocar(t, 'Posição em 28/10/2026');
-    await t.tap(find.byKey(const Key('ativo-PETR4')));
-    await t.pumpAndSettle();
-    final painel = find.byKey(const Key('indicadores-PETR4'));
+    await _abrirDetalhes(t, 'PETR4');
+    final cartoes = find.byKey(const Key('cartoes-PETR4'));
     final linha = find.ancestor(
       of: find.text('Exposição na carteira (%)'),
       matching: find.byType(Row),
@@ -348,7 +414,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: painel, matching: find.text('R\$ 2.172,00')),
+      find.descendant(of: cartoes, matching: find.text('R\$ 2.172,00')),
       findsOneWidget,
     );
   });
@@ -376,8 +442,7 @@ void main() {
   testWidgets('celular: indicadores expandidos sem overflow', (t) async {
     await _montar(t, tamanho: _celular, windows: false);
     await _tocar(t, 'Posição em 28/10/2026');
-    await t.tap(find.byKey(const Key('ativo-PETR4')));
-    await t.pumpAndSettle();
+    await _abrirDetalhes(t, 'PETR4');
     expect(find.byKey(const Key('indicadores-PETR4')), findsOneWidget);
     expect(t.takeException(), isNull);
   });

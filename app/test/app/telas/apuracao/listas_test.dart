@@ -621,18 +621,18 @@ void main() {
     expect(_textoCelula(t, 'L1', 5), '…');
     expect(_textoCelula(t, 'L2', 5), '…');
     expect(_textoCelula(t, 'L4', 5), '—');
-    expect(_textoCelula(t, 'L1', 7), '—');
+    expect(_textoCelula(t, 'L1', 6), '—');
 
     resposta.complete({'PETR4': 40.0, 'VALE3': 50.0, 'AAPL34': null});
     await t.pumpAndSettle();
     expect(_textoCelula(t, 'L1', 5), 'R\$ 40,00');
     expect(_textoCelula(t, 'L3', 5), '—');
     expect(_textoCelula(t, 'L4', 5), '—');
-    expect(_textoCelula(t, 'L1', 7), startsWith('▲ +R\$ 450,00'));
-    expect(_textoCelula(t, 'L2', 7), startsWith('▼ '));
+    expect(_textoCelula(t, 'L1', 6), startsWith('▲ +R\$ 450,00'));
+    expect(_textoCelula(t, 'L2', 6), startsWith('▼ '));
     final cores = CoresApp.de(t.element(find.byType(TelaApuracao)));
-    expect(t.widget<Text>(_celula('L1', 7)).style!.color, cores.alta);
-    expect(t.widget<Text>(_celula('L2', 7)).style!.color, cores.queda);
+    expect(t.widget<Text>(_celula('L1', 6)).style!.color, cores.alta);
+    expect(t.widget<Text>(_celula('L2', 6)).style!.color, cores.queda);
   });
 
   testWidgets('cotações só se repetem a cada 60 s com a aba visível e meus '

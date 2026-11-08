@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/metas/tela_metas.dart';
+import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -335,6 +336,8 @@ void main() {
     await _abrir(t, s);
     expect(_chamadasSugestoes(s), 1);
     await _expandir(t, 'PETR4');
+    expect(find.byKey(const ValueKey('qtd-PETR4')), findsNothing);
+    await _tocar(t, find.byKey(const ValueKey('simular-PETR4')));
     expect(find.textContaining('Qtd. digitada'), findsNothing);
 
     await t.enterText(find.byKey(const ValueKey('qtd-PETR4')), '40');
@@ -396,13 +399,33 @@ void main() {
 
   testWidgets('meta financeira separada do cenário', (t) async {
     final a = _ativo('PETR4');
+    final c = _cenario(a);
     final s = ServicosFalsos()..visaoSugestoes = _visao([a]);
     await _abrir(t, s);
     await _expandir(t, 'PETR4');
-    expect(find.text('Ponto de equilíbrio'), findsOneWidget);
-    expect(find.text('Meta financeira (simulação)'), findsOneWidget);
-    expect(find.text('Cenário de mercado'), findsOneWidget);
+    // aba Mercado (padrão com oportunidade): os quatro números
+    for (final r in [
+      'Vender em',
+      'Ganho estimado no alvo',
+      'No stop',
+      'Prazo',
+    ]) {
+      expect(find.text(r), findsOneWidget, reason: r);
+    }
+    expect(find.byKey(const ValueKey('lucro-PETR4')), findsNothing);
+    // "Como calculei": as peças do cenário, por ação e sem taxas
+    expect(find.textContaining('por ação, sem taxas'), findsNothing);
+    await _tocar(t, find.byKey(const ValueKey('como-PETR4')));
     expect(find.textContaining('por ação, sem taxas'), findsWidgets);
+    expect(find.text('Stop:'), findsOneWidget);
+    // aba Equilíbrio
+    await _tocar(t, find.text('Equilíbrio'));
+    expect(find.text('Preço que zera o custo'), findsOneWidget);
+    expect(find.text('Vender em'), findsNothing);
+    // aba Meta financeira
+    await _tocar(t, find.text('Meta financeira'));
+    expect(find.byKey(const ValueKey('lucro-PETR4')), findsOneWidget);
+    expect(find.textContaining(brl(c.alvo!)), findsWidgets);
 
     // meta alcançável: sem aviso
     await _digitar(t, 'lucro-PETR4', '50');
@@ -410,8 +433,8 @@ void main() {
       find.text('Meta acima do cenário de mercado para o horizonte'),
       findsNothing,
     );
+    expect(find.text('Preço-alvo'), findsOneWidget);
     // meta muito acima do alvo: o aviso aparece e o cenário não muda
-    final c = _cenario(a);
     await _digitar(t, 'lucro-PETR4', '5000');
     expect(
       find.text('Meta acima do cenário de mercado para o horizonte'),
@@ -595,6 +618,42 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Criar stop móvel'), findsNothing);
     });
+  });
+
+  testWidgets('recolhido: barra stop · atual · alvo, selos coloridos com '
+      'seta e linha cinza sem oportunidade', (t) async {
+    final bom = _ativo('PETR4');
+    final c = _cenario(bom);
+    final s = ServicosFalsos()
+      ..visaoSugestoes = _visao([bom, _ativo('VALE3', topo: 10.2)]);
+    await _abrir(t, s);
+    expect(find.text('PETR4'), findsOneWidget);
+    expect(find.text('100 un. · cotação R\$ 10,00'), findsOneWidget);
+    expect(find.text('Stop ${brl(c.stop!)}'), findsOneWidget);
+    expect(find.text('Alvo ${brl(c.alvo!)}'), findsOneWidget);
+    expect(find.byKey(const ValueKey('marcador-atual')), findsOneWidget);
+    final alvo = find.text('▲ Alvo +25,0%');
+    final stop = find.text('▼ Stop -9,1%');
+    expect(alvo, findsOneWidget);
+    expect(stop, findsOneWidget);
+    expect(find.text('R/R ${fmtDec(c.rr!, 2)}'), findsOneWidget);
+    final cores = CoresApp.de(t.element(alvo));
+    expect(t.widget<Text>(alvo).style?.color, cores.alta);
+    expect(t.widget<Text>(stop).style?.color, cores.queda);
+    // sem oportunidade: só a linha cinza; o motivo fica no cartão aberto
+    expect(find.text('Sem oportunidade identificada'), findsOneWidget);
+    expect(
+      find.text(_cenario(_ativo('VALE3', topo: 10.2)).motivo!),
+      findsNothing,
+    );
+    await _expandir(t, 'VALE3');
+    expect(
+      find.text(_cenario(_ativo('VALE3', topo: 10.2)).motivo!),
+      findsOneWidget,
+    );
+    // sem oportunidade não há aba Mercado
+    expect(find.text('Mercado'), findsNothing);
+    expect(find.byKey(const ValueKey('lucro-VALE3')), findsOneWidget);
   });
 
   testWidgets('horizonte e fonte sempre visíveis no alvo', (t) async {

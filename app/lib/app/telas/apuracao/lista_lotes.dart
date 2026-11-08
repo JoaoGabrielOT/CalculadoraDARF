@@ -331,14 +331,7 @@ class _Expandido extends StatelessWidget {
         },
         cor: mudo,
       ),
-      ColunaTabela(
-        titulo: 'TOTAL',
-        largura: 1.15,
-        alinhamento: TextAlign.right,
-        texto: (l) => brl(l.qtd * l.preco),
-        chave: (l) => l.qtd * l.preco,
-        cor: mudo,
-      ),
+      // logo depois do preço atual: o resultado fica à vista sem rolar
       ColunaTabela(
         titulo: 'GANHO/PERDA',
         largura: 1.75,
@@ -354,6 +347,14 @@ class _Expandido extends StatelessWidget {
           CoresApp.de(ctx),
           resultadoAberto(l, _precoAberto(l, precos)),
         ),
+      ),
+      ColunaTabela(
+        titulo: 'TOTAL',
+        largura: 1.15,
+        alinhamento: TextAlign.right,
+        texto: (l) => brl(l.qtd * l.preco),
+        chave: (l) => l.qtd * l.preco,
+        cor: mudo,
       ),
       ColunaTabela(
         titulo: 'VENDIDA',
@@ -591,7 +592,7 @@ class _CartaoLote extends StatelessWidget {
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
             ),
             Text(
-              fmtResultado(res),
+              '${_setaResultado(res)}${fmtResultado(res)}',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -612,6 +613,7 @@ class _CartaoLote extends StatelessWidget {
     return Cartao(
       padding: const EdgeInsets.all(14),
       child: Row(
+        spacing: 12,
         children: [
           Expanded(
             child: Column(
@@ -633,7 +635,9 @@ class _CartaoLote extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  '${fmtData(l.dataCompra)} · ${l.qtd} × ${brl(l.preco)}',
+                  // espaço inseparável: o preço não quebra entre "R$" e o valor
+                  '${fmtData(l.dataCompra)} · ${l.qtd} × '
+                  '${brl(l.preco).replaceAll(' ', ' ')}',
                   style: TextStyle(fontSize: 12, color: c.textoSuave),
                 ),
                 atual,

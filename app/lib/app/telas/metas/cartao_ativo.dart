@@ -1,7 +1,9 @@
-// Cartão de um ativo nas sugestões: o resumo do cenário sempre à vista (com
-// horizonte, fonte, data e hora) e, expandido, os três números separados
-// (ponto de equilíbrio, meta financeira e cenário de mercado), a simulação de
-// saída da posição e as compras com o botão de criar as metas.
+// Cartão de um ativo nas sugestões. Recolhido: ativo, quantidade e cotação,
+// a barra stop · atual · alvo, os selos (alvo, stop, R/R) e uma linha
+// discreta com horizonte, fonte, data e hora (nenhum alvo sem elas). Sem
+// oportunidade, uma linha cinza. Aberto: as abas Mercado | Meta financeira |
+// Equilíbrio, a simulação de saída, "Como calculei" e as compras com os
+// botões de criar as metas.
 
 import 'dart:async';
 
@@ -10,6 +12,8 @@ import 'package:flutter/material.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../servicos/api.dart';
 import '../../componentes/cartao.dart';
+import '../../componentes/sinal.dart';
+import '../../regras/apresentacao.dart';
 import '../../tema/cores_app.dart';
 import 'calculo_sugestao.dart';
 import 'controle_metas.dart';
@@ -70,6 +74,16 @@ class LinhaValor extends StatelessWidget {
   }
 }
 
+enum _Aba { mercado, meta, equilibrio }
+
+/// Há o que sugerir: oportunidade com alvo e stop.
+bool _comOportunidade(ResultadoAtivo r) =>
+    r.cenario != null && r.cenario!.oportunidade && r.temCenario;
+
+/// Preço atual do ativo: a cotação ou, sem ela, a âncora do cenário.
+double? _precoAtual(ResultadoAtivo r) =>
+    r.ativo.cotacao?.preco ?? r.cenario?.ancora;
+
 class CartaoAtivo extends StatefulWidget {
   const CartaoAtivo({
     super.key,
@@ -86,6 +100,8 @@ class CartaoAtivo extends StatefulWidget {
 
 class _CartaoAtivoState extends State<CartaoAtivo> {
   Timer? _espera;
+  bool _aberto = false;
+  _Aba? _aba;
 
   void _digitou() {
     _espera?.cancel();
@@ -102,75 +118,88 @@ class _CartaoAtivoState extends State<CartaoAtivo> {
 
   @override
   Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
     final r = widget.resultado;
     final ticker = r.ativo.ticker;
     final campos = widget.controle.camposDe(ticker);
+    final oportunidade = _comOportunidade(r);
+    final abas = [
+      if (oportunidade) (_Aba.mercado, 'Mercado'),
+      (_Aba.meta, 'Meta financeira'),
+      (_Aba.equilibrio, 'Equilíbrio'),
+    ];
+    // a aba escolhida some se a oportunidade sumir (troca de horizonte)
+    final aba = abas.any((a) => a.$1 == _aba) ? _aba! : abas.first.$1;
+    final conteudoAba = switch (aba) {
+      _Aba.mercado => _Mercado(r: r, campos: campos, aoMudar: _digitou),
+      _Aba.meta => _Meta(r: r, campos: campos, aoMudar: _digitou),
+      _Aba.equilibrio => _Equilibrio(r: r),
+    };
+    final aberto = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 10,
+      children: [
+        if (!oportunidade && r.cenario != null)
+          _SemOportunidade(motivo: r.cenario!.motivo),
+        BotaoSegmentado<_Aba>(
+          key: ValueKey('abas-$ticker'),
+          opcoes: abas,
+          valor: aba,
+          aoMudar: (v) => setState(() => _aba = v),
+        ),
+        conteudoAba,
+        _Expansivel(
+          chave: 'como-$ticker',
+          titulo: 'Como calculei',
+          filhos: _comoCalculei(context, r),
+        ),
+        if (r.posicao != null)
+          _Bloco('Compras (gerencial)', [
+            for (final compra in r.posicao!.compras)
+              _LinhaCompra(
+                resultado: r,
+                compra: compra,
+                controle: widget.controle,
+              ),
+          ]),
+      ],
+    );
     return Cartao(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      // o ListTile do ExpansionTile pinta sobre o Material, não sobre o cartão
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
       child: Material(
         type: MaterialType.transparency,
-        child: Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            key: ValueKey('abrir-$ticker'),
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: const EdgeInsets.only(bottom: 8),
-            expandedAlignment: Alignment.centerLeft,
-            expandedCrossAxisAlignment: CrossAxisAlignment.start,
-            title: _Resumo(r),
-            children: [
-              _Bloco('Ponto de equilíbrio', [_pontoEquilibrio(context, r)]),
-              _Bloco('Meta financeira (simulação)', [
-                if (r.posicao == null)
-                  _nota(context, 'Sem posição em aberto.')
-                else ...[
-                  _Campo(
-                    chave: 'lucro-$ticker',
-                    rotulo: 'Lucro líquido de IR desejado (R\$)',
-                    controlador: campos.lucro,
-                    aoMudar: _digitou,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              key: ValueKey('abrir-$ticker'),
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => setState(() => _aberto = !_aberto),
+              child: Row(
+                children: [
+                  Expanded(child: oportunidade ? _Resumo(r) : _LinhaCinza(r)),
+                  Icon(
+                    _aberto
+                        ? Icons.expand_less
+                        : (oportunidade
+                              ? Icons.expand_more
+                              : Icons.chevron_right),
+                    color: c.textoSuave,
                   ),
-                  ..._meta(context, r),
                 ],
-              ]),
-              _Bloco('Cenário de mercado', _cenario(context, r)),
-              if (r.posicao != null)
-                _Bloco('Simulação de saída da posição', [
-                  Row(
-                    spacing: 8,
-                    children: [
-                      Expanded(
-                        child: _Campo(
-                          chave: 'qtd-$ticker',
-                          rotulo: 'Quantidade',
-                          controlador: campos.qtd,
-                          aoMudar: _digitou,
-                        ),
-                      ),
-                      Expanded(
-                        child: _Campo(
-                          chave: 'preco-$ticker',
-                          rotulo: 'Saída (R\$)',
-                          controlador: campos.preco,
-                          aoMudar: _digitou,
-                        ),
-                      ),
-                    ],
-                  ),
-                  ..._saidas(context, r),
-                ]),
-              if (r.posicao != null)
-                _Bloco('Compras (gerencial)', [
-                  for (final compra in r.posicao!.compras)
-                    _LinhaCompra(
-                      resultado: r,
-                      compra: compra,
-                      controle: widget.controle,
-                    ),
-                ]),
-            ],
-          ),
+              ),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              alignment: Alignment.topCenter,
+              child: _aberto
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 10, right: 4),
+                      child: aberto,
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+          ],
         ),
       ),
     );
@@ -209,48 +238,526 @@ Widget _par(BuildContext context, String rotulo, String valor, {Color? cor}) {
   );
 }
 
-Widget _pontoEquilibrio(BuildContext context, ResultadoAtivo r) {
-  final pe = r.pontoEquilibrio;
-  if (pe == null) {
-    return _nota(context, 'Indisponível (sem posição em aberto).');
-  }
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _par(context, 'Preço de venda que zera o custo:', '${brl(pe)} por ação'),
-      _nota(
-        context,
-        'Custo médio das compras e taxa B3 da venda, no tick para cima.',
-        tamanho: 11,
-      ),
-    ],
+/// "100 un." ou "só no radar".
+String _textoPosicao(ResultadoAtivo r) {
+  final p = r.posicao;
+  return p != null && p.qtd > 0 ? '${p.qtd} un.' : 'só no radar';
+}
+
+/// Situação dos dados (falha, sem dados, desatualizado) num rótulo colorido.
+Widget? _pilulaEstado(BuildContext context, SugestaoAtivo a) {
+  if (a.estado == EstadoDados.ok) return null;
+  final c = CoresApp.de(context);
+  final cor = switch (a.estado) {
+    EstadoDados.falha => c.queda,
+    EstadoDados.desatualizado => c.aviso,
+    _ => c.textoSuave,
+  };
+  return Pilula(
+    texto: switch (a.estado) {
+      EstadoDados.semDados => 'Sem dados',
+      EstadoDados.desatualizado => 'Desatualizado',
+      _ => 'Falha',
+    },
+    cor: cor,
+    // fundo próprio: o do chip some no tema Terminal
+    fundo: Color.alphaBlend(cor.withValues(alpha: .18), c.cartao),
   );
 }
 
-List<Widget> _meta(BuildContext context, ResultadoAtivo r) {
-  final c = CoresApp.de(context);
-  final meta = r.meta;
-  final avisos = r.cenario?.avisos ?? const <String>[];
-  return [
-    if (r.erroMeta != null) _nota(context, r.erroMeta!, cor: c.queda),
-    if (meta != null) ...[
-      _par(
-        context,
-        'Preço de venda para o lucro desejado:',
-        '${brl(meta)} por ação',
-      ),
-      _nota(
-        context,
-        'Simulação sobre a posição inteira (${r.posicao!.qtd} un.); não é recomendação.',
-        tamanho: 11,
-      ),
-    ],
-    if (avisos.contains(textoMetaAcima))
-      _nota(context, textoMetaAcima, cor: c.aviso, negrito: true),
-  ];
+/// Aviso de dados antigos com a data da última barra e a hora da cotação.
+Widget? _avisoDesatualizado(BuildContext context, SugestaoAtivo a) {
+  if (a.estado != EstadoDados.desatualizado) return null;
+  final ultimaBarra = a.barras.isEmpty ? null : a.barras.last.data;
+  return _nota(
+    context,
+    'Dados desatualizados: ${ultimaBarra == null ? '' : 'última barra de ${fmtData(ultimaBarra)}'}'
+    '${a.cotacao == null ? '' : '; cotação de ${_dataHora(a.cotacao!.hora)}'}.',
+    cor: CoresApp.de(context).aviso,
+  );
 }
 
-List<Widget> _cenario(BuildContext context, ResultadoAtivo r) {
+/// Horizonte, fonte e a hora da cotação (ou a data da última barra).
+String _textoOrigem(ResultadoAtivo r) {
+  final a = r.ativo;
+  final ultimaBarra = a.barras.isEmpty ? null : a.barras.last.data;
+  return [
+    'Horizonte: ${textoHorizonte[r.horizonte]}',
+    'Yahoo',
+    if (a.cotacao != null)
+      'cotação ${_dataHora(a.cotacao!.hora)}'
+    else if (ultimaBarra != null)
+      'última barra ${fmtData(ultimaBarra)}',
+  ].join(' · ');
+}
+
+/// Resumo com oportunidade: ativo, barra, selos e a origem dos números.
+class _Resumo extends StatelessWidget {
+  const _Resumo(this.r);
+
+  final ResultadoAtivo r;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = r.ativo;
+    final cen = r.cenario!;
+    final atual = _precoAtual(r);
+    final pctAlvo = variacaoPct(atual, cen.alvo);
+    final pctStop = variacaoPct(atual, cen.stop);
+    final estado = _pilulaEstado(context, a);
+    final aviso = _avisoDesatualizado(context, a);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 6,
+      children: [
+        Wrap(
+          spacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              a.ticker,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            _nota(
+              context,
+              [
+                _textoPosicao(r),
+                if (atual != null) 'cotação ${brl(atual)}',
+              ].join(' · '),
+            ),
+            ?estado,
+          ],
+        ),
+        ?aviso,
+        _BarraAlvo(stop: cen.stop!, atual: atual, alvo: cen.alvo!),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            Selo(
+              texto: '${setaDe(sinalDe(pctAlvo))}Alvo ${pctCurto(pctAlvo)}',
+              alta: _altaDe(pctAlvo),
+            ),
+            Selo(
+              texto: '${setaDe(sinalDe(pctStop))}Stop ${pctCurto(pctStop)}',
+              alta: _altaDe(pctStop),
+            ),
+            Selo(texto: 'R/R ${fmtDec(cen.rr!, 2)}'),
+          ],
+        ),
+        _nota(context, _textoOrigem(r), tamanho: 11),
+      ],
+    );
+  }
+}
+
+bool? _altaDe(double? v) => switch (sinalDe(v)) {
+  Sinal.alta => true,
+  Sinal.queda => false,
+  Sinal.neutro => null,
+};
+
+/// Sem oportunidade, sem dados ou com falha: uma linha cinza com o motivo
+/// curto.
+class _LinhaCinza extends StatelessWidget {
+  const _LinhaCinza(this.r);
+
+  final ResultadoAtivo r;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final a = r.ativo;
+    final semDados =
+        a.estado == EstadoDados.falha || a.estado == EstadoDados.semDados;
+    final estado = _pilulaEstado(context, a);
+    final aviso = _avisoDesatualizado(context, a);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 4,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              a.ticker,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: c.textoSuave,
+              ),
+            ),
+            _nota(context, _textoPosicao(r)),
+            ?estado,
+            if (semDados)
+              _nota(
+                context,
+                a.mensagem ?? 'Sem dados.',
+                cor: a.estado == EstadoDados.falha ? c.queda : null,
+              )
+            else
+              _nota(context, textoSemOportunidade),
+          ],
+        ),
+        ?aviso,
+      ],
+    );
+  }
+}
+
+/// Barra horizontal Stop ●━━◆━━● Alvo, com o marcador da cotação atual
+/// proporcional entre os dois (limitado às pontas).
+class _BarraAlvo extends StatelessWidget {
+  const _BarraAlvo({
+    required this.stop,
+    required this.atual,
+    required this.alvo,
+  });
+
+  final double stop;
+  final double? atual;
+  final double alvo;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final pos = posicaoMarcador(stop: stop, atual: atual, alvo: alvo);
+    Widget ponto(Color cor) => Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(color: cor, shape: BoxShape.circle),
+    );
+    return Semantics(
+      label:
+          'Stop ${brl(stop)}, cotação ${atual == null ? 'indisponível' : brl(atual!)}, '
+          'alvo ${brl(alvo)}',
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 2,
+          children: [
+            SizedBox(
+              height: 14,
+              child: LayoutBuilder(
+                builder: (context, caixa) {
+                  final w = caixa.maxWidth;
+                  return Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      Positioned(
+                        left: 5,
+                        right: 5,
+                        child: Container(
+                          height: 3,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(2),
+                            gradient: LinearGradient(
+                              colors: [
+                                c.queda.withValues(alpha: .55),
+                                c.alta.withValues(alpha: .55),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(left: 0, child: ponto(c.queda)),
+                      Positioned(right: 0, child: ponto(c.alta)),
+                      if (pos != null)
+                        Positioned(
+                          key: const ValueKey('marcador-atual'),
+                          left: 7 + pos * (w - 14) - 6,
+                          child: Transform.rotate(
+                            angle: 0.785398,
+                            child: Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(
+                                color: c.texto,
+                                border: Border.all(color: c.cartao, width: 1.5),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            Row(
+              children: [
+                Text(
+                  'Stop ${brl(stop)}',
+                  style: TextStyle(fontSize: 11, color: c.queda),
+                ),
+                const Spacer(),
+                Text(
+                  'Alvo ${brl(alvo)}',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 11, color: c.alta),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Número em destaque das abas: rótulo pequeno e valor.
+class _Numero extends StatelessWidget {
+  const _Numero(this.rotulo, this.valor, {this.cor});
+
+  final String rotulo;
+  final String valor;
+  final Color? cor;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(c.textoSuave.withValues(alpha: .07), c.cartao),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 2,
+          children: [
+            Text(rotulo, style: TextStyle(fontSize: 11, color: c.textoSuave)),
+            Text(
+              valor,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: cor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Grade de números: duas colunas, cada linha na altura do maior.
+Widget _grade(List<Widget> itens) => Column(
+  spacing: 8,
+  children: [
+    for (var i = 0; i < itens.length; i += 2)
+      IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
+          children: [
+            Expanded(child: itens[i]),
+            Expanded(
+              child: i + 1 < itens.length ? itens[i + 1] : const SizedBox(),
+            ),
+          ],
+        ),
+      ),
+  ],
+);
+
+/// A saída de toda a posição a [preco] (o cenário "100%"), se houver.
+CenarioSaida? _saidaTotal(ResultadoAtivo r, double? preco) {
+  final cons = r.consolidado;
+  if (cons == null || preco == null) return null;
+  for (final s in cons.cenarios) {
+    if (s.qtd == cons.qtd && s.preco == preco) return s;
+  }
+  return null;
+}
+
+String _textoSaida(CenarioSaida s) =>
+    textoResultado(s.resultado, s.resultadoPct);
+
+/// Aba Mercado: vender em, ganho no alvo, resultado no stop e prazo, mais a
+/// simulação de saída.
+class _Mercado extends StatelessWidget {
+  const _Mercado({
+    required this.r,
+    required this.campos,
+    required this.aoMudar,
+  });
+
+  final ResultadoAtivo r;
+  final CamposAtivo campos;
+  final VoidCallback aoMudar;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final cen = r.cenario!;
+    final ticker = r.ativo.ticker;
+    final faixa =
+        cen.faixaMin != null &&
+            cen.faixaMax != null &&
+            cen.faixaMin != cen.faixaMax
+        ? '${brl(cen.faixaMin!)} a ${brl(cen.faixaMax!)}'
+        : brl(cen.alvo!);
+    final noAlvo = _saidaTotal(r, cen.alvo);
+    final noStop = _saidaTotal(r, cen.stop);
+    // sem posição (radar): por ação, bruto
+    final ganho = noAlvo != null
+        ? _textoSaida(noAlvo)
+        : '${textoResultado(cen.potencial, null)} por ação';
+    final stop = noStop != null
+        ? _textoSaida(noStop)
+        : '${textoResultado(cen.risco == null ? null : -cen.risco!, null)} '
+              'por ação';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
+      children: [
+        _grade([
+          _Numero('Vender em', faixa),
+          _Numero(
+            'Ganho estimado no alvo',
+            ganho,
+            cor: c.doValor(noAlvo?.resultado ?? cen.potencial),
+          ),
+          _Numero(
+            'No stop',
+            stop,
+            cor: c.doValor(
+              noStop?.resultado ?? (cen.risco == null ? null : -cen.risco!),
+            ),
+          ),
+          _Numero('Prazo', textoHorizonte[cen.horizonte] ?? '—'),
+        ]),
+        if (noAlvo != null)
+          _nota(
+            context,
+            'Vendendo toda a posição; líquido de taxas B3 e IR estimado.',
+            tamanho: 11,
+          ),
+        if (r.posicao != null)
+          _Expansivel(
+            chave: 'simular-$ticker',
+            titulo: 'Simular saída da posição',
+            filhos: [
+              Row(
+                spacing: 8,
+                children: [
+                  Expanded(
+                    child: _Campo(
+                      chave: 'qtd-$ticker',
+                      rotulo: 'Quantidade',
+                      controlador: campos.qtd,
+                      aoMudar: aoMudar,
+                    ),
+                  ),
+                  Expanded(
+                    child: _Campo(
+                      chave: 'preco-$ticker',
+                      rotulo: 'Saída (R\$)',
+                      controlador: campos.preco,
+                      aoMudar: aoMudar,
+                    ),
+                  ),
+                ],
+              ),
+              ..._saidas(context, r),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// Aba Meta financeira: o lucro desejado e o preço que o entrega.
+class _Meta extends StatelessWidget {
+  const _Meta({required this.r, required this.campos, required this.aoMudar});
+
+  final ResultadoAtivo r;
+  final CamposAtivo campos;
+  final VoidCallback aoMudar;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    if (r.posicao == null) return _nota(context, 'Sem posição em aberto.');
+    final meta = r.meta;
+    final avisos = r.cenario?.avisos ?? const <String>[];
+    final naMeta = _saidaTotal(r, meta);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 6,
+      children: [
+        _Campo(
+          chave: 'lucro-${r.ativo.ticker}',
+          rotulo: 'Lucro líquido de IR desejado (R\$)',
+          controlador: campos.lucro,
+          aoMudar: aoMudar,
+        ),
+        if (r.erroMeta != null) _nota(context, r.erroMeta!, cor: c.queda),
+        if (meta != null) ...[
+          _grade([
+            _Numero('Preço-alvo', '${brl(meta)} por ação'),
+            if (naMeta != null)
+              _Numero(
+                '${naMeta.rotulo} (${naMeta.qtd} un.)',
+                _textoSaida(naMeta),
+                cor: c.doValor(naMeta.resultado),
+              ),
+          ]),
+          _nota(
+            context,
+            'Simulação sobre a posição inteira (${r.posicao!.qtd} un.); não é recomendação.',
+            tamanho: 11,
+          ),
+        ],
+        if (avisos.contains(textoMetaAcima))
+          _nota(context, textoMetaAcima, cor: c.aviso, negrito: true),
+      ],
+    );
+  }
+}
+
+/// Aba Equilíbrio: o preço que zera o custo.
+class _Equilibrio extends StatelessWidget {
+  const _Equilibrio({required this.r});
+
+  final ResultadoAtivo r;
+
+  @override
+  Widget build(BuildContext context) {
+    final pe = r.pontoEquilibrio;
+    final p = r.posicao;
+    if (pe == null) {
+      return _nota(context, 'Indisponível (sem posição em aberto).');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 6,
+      children: [
+        _grade([
+          _Numero('Preço que zera o custo', '${brl(pe)} por ação'),
+          if (p?.precoMedio != null)
+            _Numero('Custo médio', brl(p!.precoMedio!)),
+        ]),
+        _nota(
+          context,
+          'Preço de venda que zera o custo: custo médio das compras e taxa '
+          'B3 da venda, no tick para cima.',
+          tamanho: 11,
+        ),
+      ],
+    );
+  }
+}
+
+/// "› Como calculei": as peças do cenário, a liquidez, a origem dos dados e
+/// os avisos.
+List<Widget> _comoCalculei(BuildContext context, ResultadoAtivo r) {
   final c = CoresApp.de(context);
   final cen = r.cenario;
   if (cen == null) {
@@ -262,12 +769,9 @@ List<Widget> _cenario(BuildContext context, ResultadoAtivo r) {
       ),
     ];
   }
-  final sufixo = 'por ação, sem taxas';
+  const sufixo = 'por ação, sem taxas';
   return [
-    Text(
-      'Horizonte: ${textoHorizonte[cen.horizonte]}',
-      style: const TextStyle(fontSize: 12),
-    ),
+    _nota(context, _textoOrigem(r)),
     if (cen.ancora != null)
       _par(context, 'Âncora (${cen.rotuloAncora}):', brl(cen.ancora!)),
     if (cen.alvo != null)
@@ -285,7 +789,6 @@ List<Widget> _cenario(BuildContext context, ResultadoAtivo r) {
       _par(context, 'Potencial ($sufixo):', brl(cen.potencial!)),
     if (cen.risco != null) _par(context, 'Risco ($sufixo):', brl(cen.risco!)),
     if (cen.rr != null) _par(context, 'R/R:', fmtDec(cen.rr!, 2)),
-    if (!cen.oportunidade) _SemOportunidade(motivo: cen.motivo),
     _par(
       context,
       'Volume financeiro médio (20 pregões):',
@@ -315,8 +818,8 @@ List<Widget> _saidas(BuildContext context, ResultadoAtivo r) {
       _par(
         context,
         '${s.rotulo} (${s.qtd} un. a ${brl(s.preco)}):',
-        '${brl(s.resultado)} (${fmtPct(s.resultadoPct)})',
-        cor: s.resultado >= 0 ? c.alta : c.queda,
+        _textoSaida(s),
+        cor: c.doValor(s.resultado),
       ),
   ];
 }
@@ -346,94 +849,70 @@ class _SemOportunidade extends StatelessWidget {
   }
 }
 
-/// Resumo à vista: ativo, posição, estado, alvo e stop (ou o motivo de não
-/// haver oportunidade) e o horizonte com a fonte, a data e a hora.
-class _Resumo extends StatelessWidget {
-  const _Resumo(this.r);
+/// Seção recolhível "› título" dentro do cartão aberto.
+class _Expansivel extends StatefulWidget {
+  const _Expansivel({
+    required this.chave,
+    required this.titulo,
+    required this.filhos,
+  });
 
-  final ResultadoAtivo r;
+  final String chave;
+  final String titulo;
+  final List<Widget> filhos;
+
+  @override
+  State<_Expansivel> createState() => _ExpansivelState();
+}
+
+class _ExpansivelState extends State<_Expansivel> {
+  bool _aberto = false;
 
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    final a = r.ativo;
-    final cen = r.cenario;
-    final p = r.posicao;
-    final ultimaBarra = a.barras.isEmpty ? null : a.barras.last.data;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 2,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              a.ticker,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            if (p != null && p.qtd > 0)
-              _nota(context, '${p.qtd} un. · custo médio ${brl(p.precoMedio!)}')
-            else
-              _nota(context, 'só no radar'),
-            if (a.estado != EstadoDados.ok)
-              Pilula(
-                texto: switch (a.estado) {
-                  EstadoDados.semDados => 'Sem dados',
-                  EstadoDados.desatualizado => 'Desatualizado',
-                  _ => 'Falha',
-                },
-                // fundo próprio: o do chip some no tema Terminal
-                cor: switch (a.estado) {
-                  EstadoDados.falha => c.queda,
-                  EstadoDados.desatualizado => c.aviso,
-                  _ => c.textoSuave,
-                },
-                fundo: Color.alphaBlend(
-                  (switch (a.estado) {
-                    EstadoDados.falha => c.queda,
-                    EstadoDados.desatualizado => c.aviso,
-                    _ => c.textoSuave,
-                  }).withValues(alpha: .18),
-                  c.cartao,
+        InkWell(
+          key: ValueKey(widget.chave),
+          onTap: () => setState(() => _aberto = !_aberto),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              spacing: 4,
+              children: [
+                Icon(
+                  _aberto ? Icons.expand_more : Icons.chevron_right,
+                  size: 18,
+                  color: c.textoSuave,
                 ),
-              ),
-          ],
-        ),
-        if (a.estado == EstadoDados.falha || a.estado == EstadoDados.semDados)
-          _nota(
-            context,
-            a.mensagem ?? 'Sem dados.',
-            cor: a.estado == EstadoDados.falha ? c.queda : null,
-          )
-        else ...[
-          if (a.estado == EstadoDados.desatualizado)
-            _nota(
-              context,
-              'Dados desatualizados: ${ultimaBarra == null ? '' : 'última barra de ${fmtData(ultimaBarra)}'}'
-              '${a.cotacao == null ? '' : '; cotação de ${_dataHora(a.cotacao!.hora)}'}.',
-              cor: c.aviso,
+                Text(
+                  widget.titulo,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: c.textoSuave,
+                  ),
+                ),
+              ],
             ),
-          if (cen != null && cen.oportunidade && r.temCenario)
-            Text(
-              'Alvo ${brl(cen.alvo!)} · Stop ${brl(cen.stop!)} · R/R ${fmtDec(cen.rr!, 2)}',
-              style: TextStyle(fontSize: 12, color: c.alta),
-            )
-          else
-            _SemOportunidade(motivo: cen?.motivo),
-          _nota(
-            context,
-            [
-              'Horizonte: ${textoHorizonte[r.horizonte]}',
-              'Yahoo',
-              if (a.cotacao != null)
-                'cotação ${_dataHora(a.cotacao!.hora)}'
-              else if (ultimaBarra != null)
-                'última barra ${fmtData(ultimaBarra)}',
-            ].join(' · '),
-            tamanho: 11,
           ),
-        ],
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          alignment: Alignment.topCenter,
+          child: _aberto
+              ? Padding(
+                  padding: const EdgeInsets.only(left: 22, top: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 2,
+                    children: widget.filhos,
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
       ],
     );
   }
@@ -448,23 +927,20 @@ class _Bloco extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 2,
-        children: [
-          Text(
-            titulo,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: c.textoSuave,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 2,
+      children: [
+        Text(
+          titulo,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: c.textoSuave,
           ),
-          ...filhos,
-        ],
-      ),
+        ),
+        ...filhos,
+      ],
     );
   }
 }

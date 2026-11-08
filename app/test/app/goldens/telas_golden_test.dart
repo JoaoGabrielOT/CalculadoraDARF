@@ -501,8 +501,18 @@ void main() {
               if (variante.isNotEmpty) {
                 await t.tap(find.byKey(const ValueKey('abrir-PETR4')));
                 await t.pumpAndSettle();
-                // 'expandido': o topo do cartão (os três números);
-                // 'saida': a simulação de saída e as compras
+                if (variante == 'saida') {
+                  for (final k in ['simular-PETR4', 'como-PETR4']) {
+                    await Scrollable.ensureVisible(
+                      t.element(find.byKey(ValueKey(k))),
+                    );
+                    await t.pumpAndSettle();
+                    await t.tap(find.byKey(ValueKey(k)));
+                    await t.pumpAndSettle();
+                  }
+                }
+                // 'expandido': o topo do cartão (resumo e aba Mercado);
+                // 'saida': a simulação de saída, "Como calculei" e as compras
                 await Scrollable.ensureVisible(
                   t.element(
                     variante == 'saida'

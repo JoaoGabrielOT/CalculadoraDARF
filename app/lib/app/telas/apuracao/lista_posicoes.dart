@@ -1,13 +1,16 @@
-// Ativos comprados em "Posição em dd/mm/aaaa": por ativo, quantidade, custo e
-// preço médio no fim do mês, com as compras expansíveis. Só leitura: ver uma
-// posição não gera venda, resultado nem imposto. A cotação atual só aparece
-// no corte de hoje, com fonte e hora; num mês passado não há cotação.
+// Ativos comprados em "Posição em dd/mm/aaaa": por ativo, quantidade, preço
+// médio, cotação e resultado em aberto; aberto, os cartões, o realizado e as
+// compras em "Mais detalhes". Só leitura: ver uma posição não gera venda,
+// resultado nem imposto. A cotação atual só aparece no corte de hoje, com
+// fonte e hora; num mês passado não há cotação.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/cartao.dart';
+import '../../componentes/sinal.dart';
+import '../../regras/apresentacao.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import 'controle_apuracao.dart';
@@ -120,13 +123,13 @@ class ListaPosicoes extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _Titulos(corrente: p!.corrente),
+                  const _Titulos(),
                   for (final a in itens)
                     _LinhaAtivo(
                       key: Key('ativo-${a.ticker}'),
                       ativo: a,
                       indicadores: _indicadorDe(controle, a.ticker),
-                      corrente: p.corrente,
+                      corrente: p!.corrente,
                       cotacao: p.corrente ? controle.cotacoes : null,
                       compacto: false,
                     ),
@@ -167,13 +170,10 @@ class _Cotacao extends StatelessWidget {
   }
 }
 
-const _flex = [1.0, .7, .8, 1.3, 1.3];
-const _flexAtual = [1.1, 1.5];
+const _flex = [1.0, .6, 1.0, 1.0, 1.9];
 
 class _Titulos extends StatelessWidget {
-  const _Titulos({required this.corrente});
-
-  final bool corrente;
+  const _Titulos();
 
   @override
   Widget build(BuildContext context) {
@@ -195,21 +195,19 @@ class _Titulos extends StatelessWidget {
       child: Row(
         children: [
           t('TICKER', _flex[0], direita: false),
-          t('TIPO', _flex[1], direita: false),
-          t('QTD', _flex[2]),
-          t('CUSTO', _flex[3]),
-          t('PREÇO MÉDIO', _flex[4]),
-          if (corrente) ...[
-            t('ATUAL', _flexAtual[0]),
-            t('VALOR DE MERCADO', _flexAtual[1]),
-          ],
+          t('QTD', _flex[1]),
+          t('PREÇO MÉDIO', _flex[2]),
+          t('COTAÇÃO', _flex[3]),
+          t('RESULTADO EM ABERTO', _flex[4]),
         ],
       ),
     );
   }
 }
 
-/// Um ativo da posição; toque abre as compras que formam o saldo.
+/// Um ativo da posição: a linha resume quantidade, preço médio, cotação e o
+/// resultado em aberto; o toque abre os cartões, o realizado e, em "Mais
+/// detalhes", as compras e a lista longa dos indicadores.
 class _LinhaAtivo extends StatefulWidget {
   const _LinhaAtivo({
     super.key,
@@ -234,105 +232,112 @@ class _LinhaAtivo extends StatefulWidget {
 
 class _LinhaAtivoState extends State<_LinhaAtivo> {
   bool _aberto = false;
-
-  String _textoAtual(CotacaoAtual? cot, bool tentou) =>
-      cot != null ? brl(cot.preco) : (tentou ? '—' : '…');
-
-  String _textoValor(CotacaoAtual? cot, bool tentou) => cot != null
-      ? brl(arredondar(widget.ativo.qtd * cot.preco, 2))
-      : (tentou ? '—' : '…');
+  bool _detalhes = false;
 
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     final a = widget.ativo;
+    final ind = widget.indicadores;
     final cotacoes = widget.cotacao;
-    final cot = cotacoes?[a.ticker];
-    final tentou = cotacoes?.containsKey(a.ticker) ?? false;
+    final preco = cotacoes?[a.ticker]?.preco;
+    // "…" só enquanto a cotação de hoje não voltou; sem ela, "—"
+    final esperando =
+        cotacoes != null && preco == null && !cotacoes.containsKey(a.ticker);
+    final semValor = esperando ? '…' : '—';
     final medio = a.precoMedio;
-    final custo = a.custoFiscal ?? a.custoGerencial;
-    final compras = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 8,
-      children: [
-        _Compras(ativo: a, key: Key('compras-${a.ticker}')),
-        if (widget.indicadores != null)
-          PainelIndicadores(
-            indicadores: widget.indicadores!,
-            corrente: widget.corrente,
-            cotacoes: widget.cotacao ?? const {},
-          ),
-      ],
-    );
+    final custo = ind?.custoRemanescente ?? a.custoFiscal ?? a.custoGerencial;
+    final valor = valorAtual(a.qtd, preco);
+    final emAberto = valor == null ? null : arredondar(valor - custo, 2);
+    final textoAberto = emAberto == null
+        ? semValor
+        : textoResultado(emAberto, pctSobre(emAberto, custo));
+    final corAberto = c.doValor(emAberto);
+    final textoCotacao = preco == null ? semValor : brl(preco);
     final seta = Icon(
       _aberto ? Icons.expand_less : Icons.expand_more,
       size: 20,
       color: c.textoSuave,
     );
+    final expandido = _Expandido(
+      ativo: a,
+      indicadores: ind,
+      corrente: widget.corrente,
+      cotacoes: cotacoes ?? const {},
+      compacto: widget.compacto,
+      custo: custo,
+      valor: valor == null ? semValor : brl(valor),
+      emAberto: textoAberto,
+      corAberto: corAberto,
+      detalhes: _detalhes,
+      alternarDetalhes: () => setState(() => _detalhes = !_detalhes),
+    );
+    final corpo = AnimatedSize(
+      duration: const Duration(milliseconds: 180),
+      alignment: Alignment.topCenter,
+      child: _aberto ? expandido : const SizedBox(width: double.infinity),
+    );
     if (widget.compacto) {
       return Cartao(
         padding: const EdgeInsets.all(14),
-        child: InkWell(
-          onTap: () => setState(() => _aberto = !_aberto),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 4,
-            children: [
-              Row(
-                spacing: 8,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: () => setState(() => _aberto = !_aberto),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 4,
                 children: [
-                  Text(
-                    a.ticker,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    spacing: 8,
+                    children: [
+                      Text(
+                        a.ticker,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Pilula(texto: a.tipo),
+                      Expanded(
+                        child: Text(
+                          textoAberto,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: corAberto,
+                          ),
+                        ),
+                      ),
+                      seta,
+                    ],
                   ),
-                  Pilula(texto: a.tipo),
-                  const Spacer(),
                   Text(
-                    '${a.qtd}',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    '${a.qtd} un. · PM ${medio == null ? '—' : brl(medio)}'
+                    ' · cotação $textoCotacao',
+                    style: TextStyle(fontSize: 12, color: c.textoSuave),
                   ),
-                  seta,
                 ],
               ),
-              Text(
-                'Custo ${brl(custo)} · Preço médio '
-                '${medio == null ? '—' : brl(medio)}',
-                style: TextStyle(fontSize: 12, color: c.textoSuave),
-              ),
-              if (a.custoPorCompra)
-                Text(
-                  textoCustoPorCompra,
-                  style: TextStyle(fontSize: 11, color: c.textoSuave),
-                ),
-              if (cotacoes != null)
-                Text(
-                  'Atual: ${_textoAtual(cot, tentou)} · '
-                  'Valor de mercado: ${_textoValor(cot, tentou)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              if (_aberto) compras,
-            ],
-          ),
+            ),
+            corpo,
+          ],
         ),
       );
     }
-    Widget col(String texto, double flex, {bool direita = true}) => Expanded(
-      flex: (flex * 100).round(),
-      child: Text(
-        texto,
-        textAlign: direita ? TextAlign.right : TextAlign.left,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
+    Widget col(String texto, double flex, {bool direita = true, Color? cor}) =>
+        Expanded(
+          flex: (flex * 100).round(),
+          child: Text(
+            texto,
+            textAlign: direita ? TextAlign.right : TextAlign.left,
+            style: cor == null
+                ? null
+                : TextStyle(color: cor, fontWeight: FontWeight.bold),
+          ),
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -344,39 +349,253 @@ class _LinhaAtivoState extends State<_LinhaAtivo> {
             child: Row(
               children: [
                 SizedBox(width: 24, child: seta),
-                col(a.ticker, _flex[0], direita: false),
-                col(a.tipo, _flex[1], direita: false),
-                col('${a.qtd}', _flex[2]),
                 Expanded(
-                  flex: (_flex[3] * 100).round(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  flex: (_flex[0] * 100).round(),
+                  child: Wrap(
+                    spacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(brl(custo)),
-                      if (a.custoPorCompra)
-                        Text(
-                          textoCustoPorCompra,
-                          style: TextStyle(fontSize: 10, color: c.textoSuave),
-                        ),
+                      Text(
+                        a.ticker,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        a.tipo,
+                        style: TextStyle(fontSize: 11, color: c.textoSuave),
+                      ),
                     ],
                   ),
                 ),
-                col(medio == null ? '—' : brl(medio), _flex[4]),
-                if (cotacoes != null) ...[
-                  col(_textoAtual(cot, tentou), _flexAtual[0]),
-                  col(_textoValor(cot, tentou), _flexAtual[1]),
-                ],
+                col('${a.qtd}', _flex[1]),
+                col(medio == null ? '—' : brl(medio), _flex[2]),
+                col(textoCotacao, _flex[3]),
+                col(textoAberto, _flex[4], cor: corAberto),
               ],
             ),
           ),
         ),
-        if (_aberto)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 0, 8, 10),
-            child: compras,
-          ),
+        Padding(padding: const EdgeInsets.fromLTRB(32, 0, 8, 0), child: corpo),
       ],
     );
+  }
+}
+
+/// O ativo aberto: quatro cartões (2×2 no celular), o realizado do mês e o
+/// acumulado e, em "Mais detalhes", as compras e o restante dos indicadores.
+class _Expandido extends StatelessWidget {
+  const _Expandido({
+    required this.ativo,
+    required this.indicadores,
+    required this.corrente,
+    required this.cotacoes,
+    required this.compacto,
+    required this.custo,
+    required this.valor,
+    required this.emAberto,
+    required this.corAberto,
+    required this.detalhes,
+    required this.alternarDetalhes,
+  });
+
+  final PosicaoAtivo ativo;
+  final IndicadoresAtivo? indicadores;
+  final bool corrente;
+  final Map<String, CotacaoAtual?> cotacoes;
+  final bool compacto;
+  final double custo;
+  final String valor;
+  final String emAberto;
+  final Color? corAberto;
+  final bool detalhes;
+  final VoidCallback alternarDetalhes;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final a = ativo;
+    final i = indicadores;
+    final pe = i?.pontoEquilibrio;
+    String dica(String id) => i == null ? '' : formulaIndicador(i, id);
+    final cartoes = [
+      _MiniCartao('Investido', brl(custo), dica: dica('custo')),
+      _MiniCartao('Valor atual', valor, dica: 'Quantidade × cotação atual.'),
+      _MiniCartao(
+        'Em aberto',
+        emAberto,
+        cor: corAberto,
+        dica: dica('naoRealizado'),
+      ),
+      _MiniCartao(
+        'Equilíbrio',
+        pe == null ? '—' : brl(pe),
+        dica: dica('equilibrio'),
+      ),
+    ];
+    Widget linha(List<Widget> filhos) => IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [for (final f in filhos) Expanded(child: f)],
+      ),
+    );
+    final grade = Column(
+      key: Key('cartoes-${a.ticker}'),
+      spacing: 8,
+      children: compacto
+          ? [linha(cartoes.sublist(0, 2)), linha(cartoes.sublist(2))]
+          : [linha(cartoes)],
+    );
+    final suave = TextStyle(fontSize: 12, color: c.textoSuave);
+    Widget realizado(String rotulo, String texto, double v, {String? info}) =>
+        Row(
+          spacing: 8,
+          children: [
+            Expanded(
+              child: Wrap(
+                spacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(rotulo, style: suave),
+                  if (info != null)
+                    Tooltip(
+                      message: info,
+                      child: Icon(
+                        Icons.info_outline,
+                        size: 14,
+                        color: c.textoSuave,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Text(
+              texto,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: c.doValor(v),
+              ),
+            ),
+          ],
+        );
+    final rent = i?.rentabilidadeRealizada;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          grade,
+          if (i != null) ...[
+            realizado(
+              'Realizado no mês',
+              textoResultado(i.resultadoMes, rent == null ? null : rent * 100),
+              i.resultadoMes,
+              info:
+                  'Resultado: ${rotuloMetodo(i)}. Custo remanescente: '
+                  '${i.custoPorCompra ? 'por compra' : 'fiscal'}.',
+            ),
+            realizado(
+              'Acumulado desde ${i.desde}',
+              textoResultado(i.resultadoAcumulado, null),
+              i.resultadoAcumulado,
+            ),
+          ],
+          InkWell(
+            key: Key('detalhes-${a.ticker}'),
+            onTap: alternarDetalhes,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                spacing: 4,
+                children: [
+                  Icon(
+                    detalhes ? Icons.expand_more : Icons.chevron_right,
+                    size: 18,
+                    color: c.textoSuave,
+                  ),
+                  Text(
+                    'Mais detalhes',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: c.textoSuave,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            alignment: Alignment.topCenter,
+            child: !detalhes
+                ? const SizedBox(width: double.infinity)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 8,
+                    children: [
+                      Text(
+                        'Tipo: ${a.tipo}'
+                        '${a.custoPorCompra ? ' · $textoCustoPorCompra' : ''}',
+                        style: suave,
+                      ),
+                      _Compras(ativo: a, key: Key('compras-${a.ticker}')),
+                      if (i != null)
+                        PainelIndicadores(
+                          indicadores: i,
+                          corrente: corrente,
+                          cotacoes: cotacoes,
+                          ocultar: idsResumo,
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Cartão pequeno: rótulo e valor à direita, com a fórmula na dica.
+class _MiniCartao extends StatelessWidget {
+  const _MiniCartao(this.titulo, this.valor, {this.cor, this.dica = ''});
+
+  final String titulo;
+  final String valor;
+  final Color? cor;
+  final String dica;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final conteudo = DecoratedBox(
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(c.textoSuave.withValues(alpha: .07), c.cartao),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 2,
+          children: [
+            Text(titulo, style: TextStyle(fontSize: 11, color: c.textoSuave)),
+            Text(
+              valor,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: cor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return dica.isEmpty ? conteudo : Tooltip(message: dica, child: conteudo);
   }
 }
 

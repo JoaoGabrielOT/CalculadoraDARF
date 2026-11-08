@@ -39,38 +39,49 @@ class PainelSugestoes extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // título, "Atualizado às HH:MM" e o botão numa linha só, discretos
         Padding(
-          padding: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.only(top: 6),
           child: Row(
             children: [
-              Text(
-                'SUGESTÕES DE SAÍDA POR ATIVO',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: c.textoSuave,
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'SUGESTÕES DE SAÍDA POR ATIVO',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: c.textoSuave,
+                      ),
+                    ),
+                    if (controle.textoSug.isNotEmpty)
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          controle.textoSug,
+                          style: TextStyle(fontSize: 11, color: c.textoSuave),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              const Spacer(),
-              OutlinedButton(
+              TextButton.icon(
                 onPressed: () => unawaited(controle.recarregarSugestoes()),
-                child: const Text('Atualizar'),
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Atualizar'),
+                style: TextButton.styleFrom(
+                  foregroundColor: c.textoSuave,
+                  visualDensity: VisualDensity.compact,
+                ),
               ),
             ],
           ),
         ),
-        if (controle.textoSug.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Semantics(
-              liveRegion: true,
-              child: Text(
-                controle.textoSug,
-                style: TextStyle(fontSize: 12, color: c.textoSuave),
-              ),
-            ),
-          ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Expanded(child: _Corpo(controle: controle)),
       ],
     );
