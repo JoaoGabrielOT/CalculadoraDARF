@@ -85,15 +85,22 @@ do {
   }
   if (-not $migrou) { Start-Sleep -Milliseconds 500 }
 } while (-not $migrou -and (Get-Date) -lt $limite)
-if (-not $migrou) { Falhar 'config.json do destino sem 2.1-custo-medio em migracoes (90 s)' }
+if (-not $migrou) {
+  Get-Process calculadoradarf -ErrorAction SilentlyContinue | Stop-Process -Force
+  Falhar 'config.json do destino sem 2.1-custo-medio em migracoes (90 s)'
+}
 $backups = @(Get-ChildItem (Join-Path $suporte 'dados\backup') -Directory -Filter 'pre-2.4.0-*' -ErrorAction SilentlyContinue)
 if ($backups.Count -ne 1) { Falhar "esperada 1 pasta backup\pre-2.4.0-*, achadas $($backups.Count)" }
 $jsonOrigem = @(Get-ChildItem $origem -File -Filter '*.json')
 $jsonBackup = @(Get-ChildItem $backups[0].FullName -File)
-if ($jsonBackup.Count -ne $jsonOrigem.Count) { Falhar "backup tem $($jsonBackup.Count) arquivos, esperado $($jsonOrigem.Count)" }
 foreach ($f in $jsonOrigem) {
   $b = Join-Path $backups[0].FullName $f.Name
   if (-not (Test-Path $b) -or (Get-FileHash $b).Hash -ne $hashesOrigem[$f.FullName]) { Falhar "backup diferente da origem: $($f.Name)" }
+}
+# o marcador da migração 1.12 também é um .json da pasta de dados e entra no backup
+$extras = @($jsonBackup | Where-Object { $nome = $_.Name; -not ($jsonOrigem | Where-Object { $_.Name -eq $nome }) } | ForEach-Object Name)
+foreach ($e in $extras) {
+  if ($e -ne '.migrado_1_12.json') { Falhar "arquivo inesperado no backup: $e" }
 }
 Aviso "migração 2.1-custo-medio registrada e backup $($backups[0].Name) com os mesmos arquivos"
 # 4b. atualização silenciosa com o app aberto: CloseApplications fecha, o [Run] reabre

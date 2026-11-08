@@ -14,3 +14,4 @@ abrir-sessao-claude.cmd
 CONTEXTO_SESSAO.md
 
 .superpowers/
+app/test/app/goldens/failures/
