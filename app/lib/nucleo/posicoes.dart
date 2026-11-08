@@ -18,6 +18,8 @@ class CompraNaPosicao {
   });
 
   final String loteId;
+
+  /// Mês do lote raiz da cadeia (ou do mês aberto), não o mês da compra.
   final String mes;
   final String dataCompra;
   final int qtdOriginal;
@@ -57,52 +59,88 @@ String dataCorteDoMes(String mes, String hoje) {
   return somarDias('${proximoMes(mes)}-01', -1);
 }
 
+String _chave(Lote l) =>
+    (l.origem != null && l.origem!.isNotEmpty) ? l.origem! : l.id;
+
+int _vendidoAte(Lote l, String dataCorte) => l.vendas.fold(
+  0,
+  (soma, v) => compararTexto(v.data, dataCorte) <= 0 ? soma + v.qtd : soma,
+);
+
 /// Posições abertas em [dataCorte] (`AAAA-MM-DD`), ordenadas por ticker.
 ///
-/// A cadeia de uma compra é `origem ?? id`; a quantidade comprada é a do lote
-/// raiz (`id == chave`), e as cópias não somam compra. As vendas são todas as
-/// da cadeia, em qualquer mês, até a data de corte.
+/// Meses fechados são histórico imutável. Para cortes dentro deles, a cadeia
+/// de uma compra é `origem ?? id`; a quantidade comprada é a do lote raiz
+/// (`id == chave`), e as cópias não somam compra. As vendas são todas as da
+/// cadeia, em qualquer mês, até a data de corte.
+///
+/// Para cortes a partir do primeiro mês aberto, vale o estado desse mês: a
+/// cadeia só existe se tiver lote nele (compra excluída conta 0 dali em
+/// diante), com a `qtd` e o `preco` como estão (editados) menos as vendas do
+/// próprio mês até o corte. Vendas retroativas já reduziram a `qtd` desse
+/// lote, por isso as de outros meses não são subtraídas de novo.
 List<PosicaoAtivo> posicoesEm(Map<String, Mes> meses, String dataCorte) {
-  final cadeias = <String, List<(String, Lote)>>{};
   final nomes = ordenadoCom(meses.keys, compararTexto);
-  for (final nome in nomes) {
-    for (final l in meses[nome]!.lotes) {
-      final chave = (l.origem != null && l.origem!.isNotEmpty)
-          ? l.origem!
-          : l.id;
-      (cadeias[chave] ??= []).add((nome, l));
-    }
-  }
+  final abertos = [
+    for (final n in nomes)
+      if (!meses[n]!.fechado) n,
+  ];
   final porTicker = <String, List<CompraNaPosicao>>{};
   final tipos = <String, String>{};
-  cadeias.forEach((chave, lotes) {
-    // raiz: o lote da compra original; sem ele (dados parciais), o mais antigo
-    final raiz = lotes.firstWhere(
-      (p) => p.$2.id == chave,
-      orElse: () => lotes.first,
-    );
-    final l = raiz.$2;
-    if (compararTexto(l.dataCompra, dataCorte) > 0) return;
-    var vendidas = 0;
-    for (final p in lotes) {
-      for (final v in p.$2.vendas) {
-        if (compararTexto(v.data, dataCorte) <= 0) vendidas += v.qtd;
-      }
-    }
-    final resta = l.qtd - vendidas;
+  void somar(Lote l, String mes, int qtdOriginal, int resta) {
     if (resta <= 0) return;
     tipos[l.ticker] = l.tipo;
     (porTicker[l.ticker] ??= []).add(
       CompraNaPosicao(
         loteId: l.id,
-        mes: raiz.$1,
+        mes: mes,
         dataCompra: l.dataCompra,
-        qtdOriginal: l.qtd,
+        qtdOriginal: qtdOriginal,
         restante: resta,
         preco: l.preco,
       ),
     );
-  });
+  }
+
+  if (abertos.isNotEmpty &&
+      compararTexto(dataCorte.substring(0, 7), abertos.first) >= 0) {
+    final aberto = abertos.first;
+    final cadeias = <String, List<Lote>>{};
+    for (final l in meses[aberto]!.lotes) {
+      (cadeias[_chave(l)] ??= []).add(l);
+    }
+    for (final lotes in cadeias.values) {
+      final l = lotes.first;
+      if (compararTexto(l.dataCompra, dataCorte) > 0) continue;
+      var qtd = 0;
+      var resta = 0;
+      for (final x in lotes) {
+        qtd += x.qtd;
+        resta += x.qtd - _vendidoAte(x, dataCorte);
+      }
+      somar(l, aberto, qtd, resta);
+    }
+  } else {
+    final cadeias = <String, List<(String, Lote)>>{};
+    for (final nome in nomes) {
+      for (final l in meses[nome]!.lotes) {
+        (cadeias[_chave(l)] ??= []).add((nome, l));
+      }
+    }
+    cadeias.forEach((chave, lotes) {
+      final raiz = lotes.firstWhere(
+        (p) => p.$2.id == chave,
+        orElse: () => _maisAntigo(lotes, meses),
+      );
+      final l = raiz.$2;
+      if (compararTexto(l.dataCompra, dataCorte) > 0) return;
+      var vendidas = 0;
+      for (final p in lotes) {
+        vendidas += _vendidoAte(p.$2, dataCorte);
+      }
+      somar(l, raiz.$1, l.qtd, l.qtd - vendidas);
+    });
+  }
   final tickers = ordenadoCom(porTicker.keys, compararTexto);
   return [
     for (final t in tickers)
@@ -120,4 +158,19 @@ List<PosicaoAtivo> posicoesEm(Map<String, Mes> meses, String dataCorte) {
         }),
       ),
   ];
+}
+
+/// Cadeia sem lote raiz (dados parciais): a compra mais antiga que não vem de
+/// mês de venda retroativa, com a maior `qtd` entre as de mesma data.
+(String, Lote) _maisAntigo(List<(String, Lote)> lotes, Map<String, Mes> meses) {
+  final normais = [
+    for (final p in lotes)
+      if (!meses[p.$1]!.retroativo) p,
+  ];
+  return ordenadoCom(normais.isEmpty ? lotes : normais, (a, b) {
+    final c = compararTexto(a.$2.dataCompra, b.$2.dataCompra);
+    if (c != 0) return c;
+    if (a.$2.qtd != b.$2.qtd) return b.$2.qtd - a.$2.qtd;
+    return compararTexto(a.$1, b.$1);
+  }).first;
 }

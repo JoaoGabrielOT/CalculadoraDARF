@@ -191,6 +191,7 @@ As metas continuam por compra (`loteId`) e a venda automática continua com uma 
 - **Cadeias:** a chave da cadeia é `origem ?? id`. A quantidade comprada da cadeia é a `qtd` do lote cuja `id == chave`, a compra original. Cópias e lotes retroativos com `origem` não somam compra. As vendas da cadeia são todas as `Venda` dos lotes da cadeia, em qualquer mês. Os lotes retroativos sem `origem` (raiz no mês atual) formam uma cadeia própria, comprada e vendida, o que mantém a soma certa sem inventar vínculos.
 - **Posição na data C:** só as cadeias com data de compra ≤ C, com `restante(C)` = compra − vendas com `data ≤ C`. Agregada por ticker, com a lista de compras expansível.
 - **Custo:** o gerencial é `Σ restante(C) × preço`. O fiscal, para meses por custo médio, é a `posicao_inicial` do mês de C mais os eventos até C, pelo mesmo algoritmo da §5.2. Para meses anteriores ao corte o custo fica "por compra" e o rótulo diz isso.
+- **Mês aberto:** meses fechados são histórico imutável. Para cortes a partir do primeiro mês aberto vale o estado dele: a cadeia só existe se tiver lote nesse mês (compra excluída conta 0 dali em diante), com `qtd` e `preco` como estão e as vendas do próprio mês até C.
 - **Função pura sem efeitos:** não grava nada e não gera movimentação, resultado ou imposto (teste explícito).
 
 ### 7.2 Tela da apuração
