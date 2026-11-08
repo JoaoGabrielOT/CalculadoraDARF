@@ -1480,6 +1480,14 @@ void main() {
         );
       });
 
+      test('-0 é gravado como 0.0, nunca -0.0', () async {
+        gravarCorteAberto();
+        await servicos.definirPrejuizoInicial(-0.0, -0.0);
+        final g = repo.carregar('2026-10').prejuizoAnterior!;
+        expect(g.comum.isNegative, isFalse);
+        expect(g.dayTrade.isNegative, isFalse);
+      });
+
       test('edita enquanto o mês de corte está aberto e recalcula', () async {
         gravarCorteAberto();
         var p = await servicos.prejuizoInicial();

@@ -623,8 +623,9 @@ class ApuracaoLocal {
       );
     }
     d.prejuizoAnterior = PrejuizoAcumulado(
-      comum: arredondar(comum, 2),
-      dayTrade: arredondar(dayTrade, 2),
+      // "+ 0.0" troca -0.0 por 0.0
+      comum: arredondar(comum, 2) + 0.0,
+      dayTrade: arredondar(dayTrade, 2) + 0.0,
     );
     repo.salvar(d);
     _gravou();

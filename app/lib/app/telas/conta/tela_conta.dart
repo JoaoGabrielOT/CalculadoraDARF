@@ -494,6 +494,10 @@ class _PrejuizoInicialState extends State<_PrejuizoInicial> {
   final _comum = TextEditingController();
   final _dayTrade = TextEditingController();
   PrejuizoInicial? _dados;
+  // último texto posto pelo app em cada campo: se o campo difere, o usuário
+  // está editando e uma recarga não o sobrescreve
+  String _baseComum = '';
+  String _baseDayTrade = '';
   int _versao = -1;
   int _pedido = 0;
   bool _salvando = false;
@@ -518,11 +522,15 @@ class _PrejuizoInicialState extends State<_PrejuizoInicial> {
     if (!mounted || pedido != _pedido) return;
     setState(() {
       _dados = dados?.mesCorte == null ? null : dados;
-      if (dados != null) {
-        _comum.text = precoTexto(dados.comum);
-        _dayTrade.text = precoTexto(dados.dayTrade);
-      }
+      if (dados != null) _mostrar(dados.comum, dados.dayTrade);
     });
+  }
+
+  void _mostrar(double comum, double dayTrade) {
+    if (_comum.text == _baseComum) _comum.text = precoTexto(comum);
+    if (_dayTrade.text == _baseDayTrade) _dayTrade.text = precoTexto(dayTrade);
+    _baseComum = precoTexto(comum);
+    _baseDayTrade = precoTexto(dayTrade);
   }
 
   Future<void> _salvar(ServicosApp servicos) async {
@@ -530,8 +538,11 @@ class _PrejuizoInicialState extends State<_PrejuizoInicial> {
     final double comum;
     final double dayTrade;
     try {
-      comum = _comum.text.trim().isEmpty ? 0 : parseValor(_comum.text);
-      dayTrade = _dayTrade.text.trim().isEmpty ? 0 : parseValor(_dayTrade.text);
+      // "+ 0.0" troca -0.0 por 0.0
+      comum = (_comum.text.trim().isEmpty ? 0 : parseValor(_comum.text)) + 0.0;
+      dayTrade =
+          (_dayTrade.text.trim().isEmpty ? 0 : parseValor(_dayTrade.text)) +
+          0.0;
     } on FormatException {
       setState(() {
         _erro = 'Valor inválido.';
@@ -546,7 +557,14 @@ class _PrejuizoInicialState extends State<_PrejuizoInicial> {
     });
     try {
       await servicos.definirPrejuizoInicial(comum, dayTrade);
-      if (mounted) setState(() => _ok = 'Prejuízo inicial salvo.');
+      if (mounted) {
+        setState(() {
+          // o que foi salvo substitui o digitado (formato normalizado)
+          _comum.text = _baseComum = precoTexto(comum);
+          _dayTrade.text = _baseDayTrade = precoTexto(dayTrade);
+          _ok = 'Prejuízo inicial salvo.';
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _erro = textoErro(e));
     } finally {

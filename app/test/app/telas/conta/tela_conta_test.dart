@@ -338,6 +338,52 @@ void main() {
       expect(find.text('Prejuízo inicial salvo.'), findsOneWidget);
     });
 
+    testWidgets('"-0" vira zero e o salvo aparece normalizado', (t) async {
+      final s = _servicos()
+        ..prejuizo = const PrejuizoInicial(mesCorte: '2026-10', editavel: true);
+      await _abrirConta(t, s, tamanho: _celular);
+      final comum = find.byKey(const Key('prejuizo-comum'));
+      await t.enterText(comum, '-0');
+      await t.enterText(find.byKey(const Key('prejuizo-dt')), '1500');
+      await t.tap(find.byKey(const Key('prejuizo-salvar')));
+      await t.pumpAndSettle();
+      expect(s.prejuizo.comum.isNegative, isFalse);
+      expect(s.chamadas, contains('definirPrejuizoInicial(0.0, 1500.0)'));
+      expect(t.widget<TextField>(comum).controller!.text, '0,00');
+      expect(
+        t
+            .widget<TextField>(find.byKey(const Key('prejuizo-dt')))
+            .controller!
+            .text,
+        '1500,00',
+      );
+    });
+
+    testWidgets('recarga por sincronização não sobrescreve o que se edita', (
+      t,
+    ) async {
+      final s = _servicos()
+        ..prejuizo = const PrejuizoInicial(
+          mesCorte: '2026-10',
+          comum: 100,
+          editavel: true,
+        );
+      await _abrirConta(t, s, tamanho: _celular);
+      final comum = find.byKey(const Key('prejuizo-comum'));
+      final dt = find.byKey(const Key('prejuizo-dt'));
+      await t.enterText(comum, '777');
+      s.prejuizo = const PrejuizoInicial(
+        mesCorte: '2026-10',
+        comum: 100,
+        dayTrade: 50,
+        editavel: true,
+      );
+      s.eventosFalsos.add(const EventoDadosMudaram());
+      await t.pumpAndSettle();
+      expect(t.widget<TextField>(comum).controller!.text, '777');
+      expect(t.widget<TextField>(dt).controller!.text, '50,00');
+    });
+
     testWidgets('erro do serviço aparece sob o botão', (t) async {
       final s = _servicos()
         ..prejuizo = const PrejuizoInicial(mesCorte: '2026-10', editavel: true)
@@ -399,7 +445,7 @@ void main() {
   group('Sobre', () {
     testWidgets('mostra o nome e a versão', (t) async {
       await _abrirConta(t, _servicos(), tamanho: _celular);
-      expect(find.text('Versão 2.3.0'), findsOneWidget);
+      expect(find.text('Versão 2.4.0'), findsOneWidget);
     });
 
     testWidgets('sem nova versão avisa que já está na mais recente', (t) async {
@@ -408,7 +454,7 @@ void main() {
       await t.tap(_botao('Verificar atualização'));
       await t.pumpAndSettle();
       expect(
-        find.text('Você já está na versão mais recente (2.3.0).'),
+        find.text('Você já está na versão mais recente (2.4.0).'),
         findsOneWidget,
       );
     });
@@ -438,7 +484,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Nova versão disponível'), findsOneWidget);
       expect(
-        find.text('Você já está na versão mais recente (2.3.0).'),
+        find.text('Você já está na versão mais recente (2.4.0).'),
         findsNothing,
       );
     });

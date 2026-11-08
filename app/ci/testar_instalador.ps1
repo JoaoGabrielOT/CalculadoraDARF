@@ -26,7 +26,7 @@ $origemPai = Join-Path $env:RUNNER_TEMP 'Área de Trabalho\Calculadora DARF'
 $origem = Join-Path $origemPai 'dados'
 New-Item -ItemType Directory -Force -Path (Join-Path $origem 'logos') | Out-Null
 [IO.File]::WriteAllText((Join-Path $origem 'config.json'), '{"tema": "Dark", "radar": []}', $utf8)
-[IO.File]::WriteAllText((Join-Path $origem '2026-10.json'), '{"mes": "2026-10", "fechado": false, "darf_anterior": 0.0, "lotes": [], "excluidos": {}}', $utf8)
+[IO.File]::WriteAllText((Join-Path $origem '2026-10.json'), '{"mes": "2026-10", "fechado": false, "darf_anterior": 0.0, "lotes": [{"id": "L1", "ticker": "AAPL34", "tipo": "Ação", "data_compra": "2026-10-05", "qtd": 100, "preco": 30.0, "vendas": [], "mod": 0}], "excluidos": {}}', $utf8)
 [IO.File]::WriteAllBytes((Join-Path $origem 'logos\X.png'), [byte[]](137, 80, 78, 71, 13, 10, 26, 10))
 $hashesOrigem = @{}
 Get-ChildItem $origem -Recurse -File | ForEach-Object { $hashesOrigem[$_.FullName] = (Get-FileHash $_.FullName).Hash }
@@ -75,6 +75,27 @@ foreach ($f in $hashesOrigem.Keys) {
 }
 if (@(Get-ChildItem $origem -Recurse -File).Count -ne $hashesOrigem.Count) { Falhar 'origem ganhou ou perdeu arquivos' }
 Aviso 'pasta dados\ antiga intacta'
+# 4a. migração 2.1-custo-medio: backup pre-2.4.0-* com os mesmos arquivos e id no config.json
+$cfgDestino = Join-Path $suporte 'dados\config.json'
+$limite = (Get-Date).AddSeconds(90)
+$migrou = $false
+do {
+  if (Test-Path $cfgDestino) {
+    try { $migrou = @((Get-Content $cfgDestino -Raw -Encoding UTF8 | ConvertFrom-Json).migracoes) -contains '2.1-custo-medio' } catch { $migrou = $false }
+  }
+  if (-not $migrou) { Start-Sleep -Milliseconds 500 }
+} while (-not $migrou -and (Get-Date) -lt $limite)
+if (-not $migrou) { Falhar 'config.json do destino sem 2.1-custo-medio em migracoes (90 s)' }
+$backups = @(Get-ChildItem (Join-Path $suporte 'dados\backup') -Directory -Filter 'pre-2.4.0-*' -ErrorAction SilentlyContinue)
+if ($backups.Count -ne 1) { Falhar "esperada 1 pasta backup\pre-2.4.0-*, achadas $($backups.Count)" }
+$jsonOrigem = @(Get-ChildItem $origem -File -Filter '*.json')
+$jsonBackup = @(Get-ChildItem $backups[0].FullName -File)
+if ($jsonBackup.Count -ne $jsonOrigem.Count) { Falhar "backup tem $($jsonBackup.Count) arquivos, esperado $($jsonOrigem.Count)" }
+foreach ($f in $jsonOrigem) {
+  $b = Join-Path $backups[0].FullName $f.Name
+  if (-not (Test-Path $b) -or (Get-FileHash $b).Hash -ne $hashesOrigem[$f.FullName]) { Falhar "backup diferente da origem: $($f.Name)" }
+}
+Aviso "migração 2.1-custo-medio registrada e backup $($backups[0].Name) com os mesmos arquivos"
 # 4b. atualização silenciosa com o app aberto: CloseApplications fecha, o [Run] reabre
 $antes = @(Get-Process calculadoradarf -ErrorAction SilentlyContinue)
 if ($antes.Count -eq 0) { Falhar 'app não está rodando antes da atualização' }
