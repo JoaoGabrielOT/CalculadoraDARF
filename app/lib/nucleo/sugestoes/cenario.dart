@@ -64,6 +64,7 @@ const _semOportunidade = 'Sem oportunidade identificada';
 const _motivoRr = 'relação risco/retorno abaixo de 1,5';
 const _motivoEquilibrio = 'alvo abaixo do ponto de equilíbrio';
 const _motivoDados = 'dados insuficientes';
+const _motivoDesatualizado = 'dados desatualizados';
 const _motivoSemResistencia = 'sem resistência acima da cotação';
 const _motivoIntradiario =
     'Análise intradiária indisponível: sem cotação atual';
@@ -156,9 +157,9 @@ bool barrasDesatualizadas(List<BarraDiaria> barras, String hoje) {
   return ultima.compareTo(esperado) < 0;
 }
 
-/// Resultado de um cenário de mercado. Preços em R$ por ação; [potencial] e
-/// [risco] são a distância da âncora até o alvo e até o stop (por ação, sem
-/// taxas); o resultado líquido de taxas e imposto está em [consolidar].
+/// Resultado de um cenário de mercado. Preços em R$ por ação; [potencial],
+/// [risco] e [rr] são por ação e brutos (sem taxas nem imposto): distância da
+/// âncora até o alvo e até o stop. O líquido só existe em [consolidar].
 class CenarioMercado {
   CenarioMercado({
     required this.horizonte,
@@ -410,6 +411,8 @@ CenarioMercado cenarioDayTrade({
   final atr = _atr(f);
   if (atr <= 0) return semDados();
   final ontem = f.last;
+  // Os pivôs precisam do último pregão fechado esperado.
+  if (barrasDesatualizadas(f, hoje)) return semDados(_motivoDesatualizado);
   final p = calcularPivos(ontem.alta, ontem.baixa, ontem.fech);
   final candidato = maxPython(p.s1, ancora - atr);
   final stop = pisoTick(ticker, candidato < ancora ? candidato : ancora - atr);
@@ -431,9 +434,10 @@ CenarioMercado cenarioDayTrade({
   );
 }
 
-/// Meta financeira: preço de venda, no tick para cima, que cobre o ganho
-/// [lucroDesejado] (G), o custo `Q·PM·(1+t)` e a corretagem das duas pontas.
-/// É simulação: nunca vira recomendação.
+/// Meta financeira: preço de venda, no tick para cima, para sobrar
+/// [lucroDesejado] líquido de IR (como a Calculadora de metas): ganho bruto
+/// G = L/(1 − alíquota) (só com L > 0), custo `Q·PM·(1+t)` e corretagem de
+/// compra e venda. É simulação: nunca vira recomendação.
 double metaFinanceira(
   String ticker,
   int qtd,
@@ -442,12 +446,22 @@ double metaFinanceira(
   bool dayTrade = false,
 }) {
   if (qtd <= 0) throw ErroValidacao('Quantidade inválida.');
+  if (!lucroDesejado.isFinite) throw ErroValidacao('Lucro desejado inválido.');
   final t = dayTrade ? taxaB3Daytrade : taxaB3Swing;
-  final corretagem = 2 * corretagemPorOrdem;
-  return tetoTick(
-    ticker,
-    (lucroDesejado + qtd * precoMedio * (1 + t) + corretagem) / (qtd * (1 - t)),
-  );
+  final aliq = dayTrade ? aliqDaytrade : aliqSwing;
+  final bruto = lucroDesejado > 0 ? lucroDesejado / (1 - aliq) : lucroDesejado;
+  final corretagem = corretagemPorOrdem * (1 + qtd / qtd);
+  final exato =
+      (bruto + qtd * precoMedio * (1 + t) + corretagem) / (qtd * (1 - t));
+  if (!exato.isFinite) {
+    throw ErroValidacao('Valores grandes demais para calcular.');
+  }
+  if (exato <= 0) {
+    throw ErroValidacao(
+      'Com esse resultado o preço de venda seria zero ou negativo.',
+    );
+  }
+  return maxPython(tetoTick(ticker, exato), tickDe(ticker, exato));
 }
 
 /// Saída simulada de [qtd] ações a [preco].
@@ -467,7 +481,8 @@ class CenarioSaida {
   /// Líquido de taxas B3 e do IR estimado, em R$.
   final double resultado;
 
-  /// `resultado / (qtd × preço médio) × 100`; nulo sem custo.
+  /// `resultado / compra × 100`, com `compra` o custo baixado das [qtd]
+  /// ações; nulo sem custo.
   final double? resultadoPct;
 }
 

@@ -1,4 +1,7 @@
 import 'package:calculadoradarf/nucleo/datas.dart';
+import 'package:calculadoradarf/nucleo/erros.dart';
+import 'package:calculadoradarf/nucleo/metas/preco_alvo.dart';
+import 'package:calculadoradarf/nucleo/modelos/lote.dart';
 import 'package:calculadoradarf/nucleo/modelos/barras.dart';
 import 'package:calculadoradarf/nucleo/posicoes.dart';
 import 'package:calculadoradarf/nucleo/sugestoes/cenario.dart';
@@ -201,7 +204,15 @@ void main() {
   });
 
   group('day trade', () {
-    final anterior = [...barras(24), _b(24, fech: 10.2)];
+    // Termina na sexta 06/11, o último pregão fechado antes de _hoje.
+    BarraDiaria dia(int i, {double fech = 10.0}) => BarraDiaria(
+      data: somarDias('2026-11-06', i - 24),
+      alta: 10.5,
+      baixa: 9.5,
+      fech: fech,
+      volume: 1000,
+    );
+    final anterior = [for (var i = 0; i < 24; i++) dia(i), dia(24, fech: 10.2)];
 
     test('pelos pivôs do pregão anterior', () {
       final c = cenarioDayTrade(
@@ -230,6 +241,20 @@ void main() {
       );
       expect(c.oportunidade, isFalse);
       expect(c.motivo, 'Análise intradiária indisponível: sem cotação atual');
+      expect(c.alvo, isNull);
+      expect(c.stop, isNull);
+    });
+
+    test('pivôs de barra desatualizada não valem', () {
+      final c = cenarioDayTrade(
+        ticker: 'PETR4',
+        barras: barras(25), // termina em 25/10
+        hoje: _hoje,
+        cotacao: _cot(10.0),
+        pregaoAberto: true,
+        qtd: 100,
+      );
+      expect(c.motivo, 'dados desatualizados');
       expect(c.alvo, isNull);
       expect(c.stop, isNull);
     });
@@ -291,7 +316,7 @@ void main() {
     const avisoMeta = 'Meta acima do cenário de mercado para o horizonte';
 
     test('fórmula com tick para cima', () {
-      expect(metaFinanceira('PETR4', 100, 10.00, 100), 11.01);
+      expect(metaFinanceira('PETR4', 100, 10.00, 100), 11.19);
     });
 
     test('acima do cenário vira aviso e não muda a oportunidade', () {
@@ -306,11 +331,51 @@ void main() {
         barras: barras(25),
         hoje: _hoje,
         qtd: 100,
-        meta: 11.01,
+        meta: 11.19,
       );
       expect(com.avisos, contains(avisoMeta));
       expect(sem.avisos, isNot(contains(avisoMeta)));
       expect(com.oportunidade, sem.oportunidade);
+    });
+
+    test('mesmo preço da Calculadora de metas (swing e day trade)', () {
+      final lote = Lote(
+        id: 'a',
+        ticker: 'PETR4',
+        tipo: 'Ação',
+        dataCompra: '2026-01-05',
+        qtd: 100,
+        preco: 10.0,
+      );
+      for (final dt in [false, true]) {
+        for (final l in [100.0, 250.5, 0.0, -50.0]) {
+          expect(
+            metaFinanceira('PETR4', 100, 10.0, l, dayTrade: dt),
+            calcularPrecoAlvo(lote, 100, l, dayTrade: dt).preco,
+            reason: 'dt=$dt lucro=$l',
+          );
+        }
+      }
+    });
+
+    test('day trade usa 20% de IR e 0,023%', () {
+      // G = 100 / 0,8 = 125; (125 + 1000 * 1,00023) / (100 * 0,99977)
+      expect(metaFinanceira('PETR4', 100, 10.0, 100, dayTrade: true), 11.26);
+    });
+
+    test('valores inválidos lançam ErroValidacao', () {
+      expect(
+        () => metaFinanceira('PETR4', 100, 10.0, double.nan),
+        throwsA(isA<ErroValidacao>()),
+      );
+      expect(
+        () => metaFinanceira('PETR4', 0, 10.0, 100),
+        throwsA(isA<ErroValidacao>()),
+      );
+      expect(
+        () => metaFinanceira('PETR4', 100, 10.0, -5000),
+        throwsA(isA<ErroValidacao>()),
+      );
     });
 
     test('meta abaixo do alvo não gera aviso', () {
@@ -342,7 +407,7 @@ void main() {
       final r = consolidar(
         _posicao(100, 700.0),
         c,
-        meta: 11.01,
+        meta: 11.19,
         qtdDigitada: 30,
       );
       expect(r.ticker, 'PETR4');
@@ -360,7 +425,19 @@ void main() {
       expect(cem.resultado, closeTo(349.475 - 349.475 * 0.15, 1e-9));
       expect(cem.resultadoPct, closeTo(cem.resultado / 700.0 * 100, 1e-9));
       expect(r.cenarios.any((s) => s.preco == 8.0), isTrue);
-      expect(r.cenarios.any((s) => s.preco == 11.01), isTrue);
+      expect(r.cenarios.any((s) => s.preco == 11.19), isTrue);
+    });
+
+    test('horizonte day trade: IR de 20% e taxa de 0,023%', () {
+      final c = CenarioMercado(
+        horizonte: Horizonte.dayTrade,
+        alvo: 10.5,
+        stop: 9.0,
+      );
+      final r = consolidar(_posicao(100, 700.0), c);
+      final cem = r.cenarios.firstWhere((s) => s.preco == 10.5 && s.qtd == 100);
+      final liquido = 1050 - 700 - (700 + 1050) * 0.00023;
+      expect(cem.resultado, closeTo(liquido * 0.8, 1e-9));
     });
 
     test('perda no stop não paga imposto', () {
@@ -383,8 +460,8 @@ void main() {
         hoje: _hoje,
         qtd: 100,
       );
-      final r = consolidar(_posicao(100, 700.0), c, meta: 11.01);
-      expect(r.cenarios.every((s) => s.preco == 11.01), isTrue);
+      final r = consolidar(_posicao(100, 700.0), c, meta: 11.19);
+      expect(r.cenarios.every((s) => s.preco == 11.19), isTrue);
       expect(r.cenarios.length, 3);
     });
 
@@ -429,6 +506,14 @@ void main() {
       final domingo = _hora('2026-11-08T12:00:00-03:00');
       expect(info('2026-11-06T17:50:00-03:00', domingo).atual, isTrue);
       expect(info('2026-11-05T17:50:00-03:00', domingo).atual, isFalse);
+    });
+
+    test('feriado: o último pregão é o dia útil anterior', () {
+      // 20/11/2026 (sexta) é feriado; quinta 19/11 foi o último pregão.
+      final feriado = _hora('2026-11-20T12:00:00-03:00');
+      expect(info('2026-11-19T17:50:00-03:00', feriado).atual, isTrue);
+      expect(info('2026-11-18T17:50:00-03:00', feriado).atual, isFalse);
+      expect(pregaoAbertoEm(feriado), isFalse);
     });
 
     test('pregaoAbertoEm', () {

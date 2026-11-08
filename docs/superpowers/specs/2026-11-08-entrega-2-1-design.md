@@ -232,7 +232,7 @@ Ficam na visão "Posição" e no detalhamento do mês, com rótulos que diferenc
 ### 9.2 Três números com rótulos distintos
 
 - **Ponto de equilíbrio** (sempre que houver custo): fórmula da §8, arredondada **para cima** no tick.
-- **Meta financeira** (só quando o usuário informa o lucro desejado): fórmula atual de `preco_alvo.dart`, `P = (G + Q·PM·(1+t) + C)/(Q·(1−t))`, arredondada para cima no tick. É **simulação**: nunca vira recomendação e, quando fica acima do cenário de mercado, aparece "Meta acima do cenário de mercado para o horizonte".
+- **Meta financeira** (só quando o usuário informa o lucro desejado, líquido de IR como na Calculadora de metas): fórmula atual de `preco_alvo.dart`, `P = (G + Q·PM·(1+t) + C)/(Q·(1−t))`, arredondada para cima no tick. É **simulação**: nunca vira recomendação e, quando fica acima do cenário de mercado, aparece "Meta acima do cenário de mercado para o horizonte".
 - **Cenário de mercado:** a metodologia da §9.3.
 
 ### 9.3 Metodologia do cenário de mercado
