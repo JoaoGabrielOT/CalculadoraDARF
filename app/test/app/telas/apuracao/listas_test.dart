@@ -503,6 +503,33 @@ void main() {
     expect(_textoCelula(t, 'G1.2', 3), '6');
   });
 
+  testWidgets('tocar numa linha filha seleciona o grupo', (t) async {
+    final s = ServicosFalsos();
+    s.visoes['2026-10'] = visaoExemplo(mesComGrupo());
+    await _montar(t, servicos: s);
+    await t.tap(find.byKey(const Key('linha-G1')));
+    await t.pump(const Duration(milliseconds: 400));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('linha-G1.2')));
+    await t.pump(const Duration(milliseconds: 400));
+    await t.pumpAndSettle();
+    final controle = Provider.of<ControleApuracao>(
+      t.element(find.byKey(const Key('tabela-vendas'))),
+      listen: false,
+    );
+    expect(controle.vendaSelecionada, 'G1');
+  });
+
+  testWidgets('cartão Lucro bruto conta grupos como a lista de vendas', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    s.visoes['2026-10'] = visaoExemplo(mesComGrupo());
+    await _montar(t, servicos: s);
+    expect(t.widget<Text>(find.byKey(const Key('contagem-vendas'))).data, '3');
+    expect(find.text('3 vendas no mês'), findsOneWidget);
+  });
+
   testWidgets('venda simples continua igual', (t) async {
     final s = ServicosFalsos();
     s.visoes['2026-10'] = visaoExemplo(mesComGrupo());

@@ -306,7 +306,7 @@ void main() {
   group('Sobre', () {
     testWidgets('mostra o nome e a versão', (t) async {
       await _abrirConta(t, _servicos(), tamanho: _celular);
-      expect(find.text('Versão 2.2.0'), findsOneWidget);
+      expect(find.text('Versão 2.3.0'), findsOneWidget);
     });
 
     testWidgets('sem nova versão avisa que já está na mais recente', (t) async {
@@ -315,7 +315,7 @@ void main() {
       await t.tap(_botao('Verificar atualização'));
       await t.pumpAndSettle();
       expect(
-        find.text('Você já está na versão mais recente (2.2.0).'),
+        find.text('Você já está na versão mais recente (2.3.0).'),
         findsOneWidget,
       );
     });
@@ -345,7 +345,7 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Nova versão disponível'), findsOneWidget);
       expect(
-        find.text('Você já está na versão mais recente (2.2.0).'),
+        find.text('Você já está na versão mais recente (2.3.0).'),
         findsNothing,
       );
     });

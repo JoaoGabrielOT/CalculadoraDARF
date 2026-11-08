@@ -144,7 +144,10 @@ jobs:
         run: gh release download --repo "$GITHUB_REPOSITORY" --pattern CalculadoraDARF.apk --dir anterior
 
       - name: Conferir o APK contra o publicado
-        run: bash app/ci/conferir_apk.sh CalculadoraDARF.apk "$NUMERO" anterior/CalculadoraDARF.apk
+        run: |
+          modo=branch
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_type }}" = "tag" ]; then modo=tag; fi
+          bash app/ci/conferir_apk.sh CalculadoraDARF.apk "$NUMERO" anterior/CalculadoraDARF.apk "$modo"
 
       - uses: actions/upload-artifact@v4
         with:

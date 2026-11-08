@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # Confere o APK novo contra o esperado e contra o publicado (mesmo pacote, versionCode maior, mesma assinatura).
-# Uso: conferir_apk.sh <novo.apk> <versionCode esperado> <anterior.apk>
+# Uso: conferir_apk.sh <novo.apk> <versionCode esperado> <anterior.apk> [tag|branch]
+# Em execução por tag (padrão) o versionCode precisa ser maior que o publicado; em push de branch ou
+# workflow_dispatch ("branch") basta ser maior ou igual, e igual vira aviso.
 set -euo pipefail
 
-if [ "$#" -ne 3 ]; then
-  echo "Uso: $0 <novo.apk> <versionCode esperado> <anterior.apk>" >&2
+if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
+  echo "Uso: $0 <novo.apk> <versionCode esperado> <anterior.apk> [tag|branch]" >&2
   exit 2
 fi
-NOVO="$1"; ESPERADO="$2"; ANTERIOR="$3"
+NOVO="$1"; ESPERADO="$2"; ANTERIOR="$3"; MODO="${4:-tag}"
+if [ "$MODO" != "tag" ] && [ "$MODO" != "branch" ]; then
+  echo "Modo inválido: $MODO (use tag ou branch)" >&2
+  exit 2
+fi
 
 BT="$(ls -d "${ANDROID_HOME:?ANDROID_HOME não definido}"/build-tools/*/ | sort -V | tail -n 1)"
 AAPT2="${BT}aapt2"
@@ -46,12 +52,17 @@ else
   erro "drawable/ic_notificacao" "ausente"
 fi
 
-# 4. mesmo pacote do publicado e versionCode maior
+# 4. mesmo pacote do publicado e versionCode maior (ou igual fora de tag)
 pacote_ant="$(pacote_de "$badging_ant")"
 codigo_ant="$(codigo_de "$badging_ant")"
 if [ "$pacote_ant" = "$pacote" ]; then ok "mesmo pacote do publicado"; else erro "pacote do publicado" "$pacote_ant"; fi
-if [ -n "$codigo" ] && [ -n "$codigo_ant" ] && [ "$codigo" -gt "$codigo_ant" ]; then
+if [ -z "$codigo" ] || [ -z "$codigo_ant" ]; then
+  erro "versionCode maior que o publicado" "novo=$codigo anterior=$codigo_ant"
+elif [ "$codigo" -gt "$codigo_ant" ]; then
   ok "versionCode $codigo maior que o publicado ($codigo_ant)"
+elif [ "$MODO" = "branch" ] && [ "$codigo" -eq "$codigo_ant" ]; then
+  echo "::warning title=APK::versionCode $codigo igual ao publicado (execução de branch, sem publicar)"
+  ok "versionCode $codigo igual ao publicado ($codigo_ant), aceito fora de tag"
 else
   erro "versionCode maior que o publicado" "novo=$codigo anterior=$codigo_ant"
 fi

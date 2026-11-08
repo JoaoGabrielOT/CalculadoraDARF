@@ -217,7 +217,7 @@ class _ExpandidoState extends State<_Expandido> {
               expandidas: _abertos,
               selecionado: controle.vendaSelecionada,
               aoSelecionar: (g) {
-                controle.selecionarVenda(g.op.vendaId);
+                controle.selecionarVenda(grupoDe(g.op.vendaId));
                 if (g.agrupado) {
                   setState(() {
                     if (!_abertos.remove(g.op.vendaId)) {
@@ -228,7 +228,7 @@ class _ExpandidoState extends State<_Expandido> {
               },
               aoDuploClique: editavel
                   ? (g) {
-                      controle.selecionarVenda(g.op.vendaId);
+                      controle.selecionarVenda(grupoDe(g.op.vendaId));
                       controle.editarVenda(context, id: g.op.vendaId);
                     }
                   : null,

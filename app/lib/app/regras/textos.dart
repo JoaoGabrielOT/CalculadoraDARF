@@ -7,6 +7,7 @@ import '../../nucleo/nucleo.dart';
 import '../servicos/api.dart';
 import '../servicos/servicos_isolate.dart'
     show ErroRemoto, msgServicosEncerrados;
+import 'filtros.dart' show agruparVendas;
 
 const textoServicosEncerrados =
     'Os serviços do app foram encerrados. Feche e abra o app de novo.';
@@ -112,9 +113,10 @@ String textoFalha(Object e) {
 /// Subtexto do cartão da DARF (calculadora_darf.py:1587-1592).
 String textoInfoDarf(Apuracao r, String mes) => infoDarf(r, mes);
 
-/// "N venda(s) no mês" (py:1584).
+/// "N venda(s) no mês" (py:1584); a venda em várias compras conta uma vez,
+/// como na lista de vendas.
 String textoVendasNoMes(Apuracao r) {
-  final n = r.ops.length;
+  final n = agruparVendas(r.ops).length;
   return '$n venda${n != 1 ? 's' : ''} no mês';
 }
 
