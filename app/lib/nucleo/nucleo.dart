@@ -1,6 +1,7 @@
 // Barril de exports do núcleo de cálculo (API pública de lib/nucleo).
 
 export 'ambiente.dart';
+export 'alocacao.dart';
 export 'apuracao.dart';
 export 'armazenamento.dart';
 export 'armazenamento_arquivos.dart';

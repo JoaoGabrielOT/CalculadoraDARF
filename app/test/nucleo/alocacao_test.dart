@@ -1,0 +1,283 @@
+import 'package:calculadoradarf/nucleo/alocacao.dart';
+import 'package:calculadoradarf/nucleo/apuracao.dart';
+import 'package:calculadoradarf/nucleo/constantes.dart';
+import 'package:calculadoradarf/nucleo/erros.dart';
+import 'package:calculadoradarf/nucleo/modelos/lote.dart';
+import 'package:calculadoradarf/nucleo/modelos/mes.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+Lote _lote(
+  String id,
+  String data,
+  int qtd,
+  double preco, {
+  List<Venda>? vendas,
+  String ticker = 'PETR4',
+}) => Lote(
+  id: id,
+  ticker: ticker,
+  tipo: 'Ação',
+  dataCompra: data,
+  qtd: qtd,
+  preco: preco,
+  vendas: vendas,
+);
+
+List<(String, int, bool)> _resumo(List<ItemAlocacao> l) => [
+  for (final i in l) (i.lote.id, i.qtd, i.travado),
+];
+
+void main() {
+  final a = _lote('A', '2026-01-05', 100, 12.0);
+  final b = _lote('B', '2026-01-10', 100, 10.0);
+  final c = _lote('C', '2026-01-03', 100, 11.0);
+
+  group('automático', () {
+    test('automático escolhe o menor custo efetivo', () {
+      final r = alocarAutomatico([a, b, c], 150, '2026-02-10');
+      expect(_resumo(r), [('B', 100, false), ('C', 50, false)]);
+    });
+
+    test('desempate por data e depois por id', () {
+      final b2 = _lote('B', '2026-01-10', 100, 10.0);
+      final c2 = _lote('C', '2026-01-03', 100, 10.0);
+      expect(_resumo(alocarAutomatico([b2, c2], 50, '2026-02-10')), [
+        ('C', 50, false),
+      ]);
+      final x = _lote('X2', '2026-01-03', 100, 10.0);
+      final y = _lote('X1', '2026-01-03', 100, 10.0);
+      expect(_resumo(alocarAutomatico([x, y], 50, '2026-02-10')), [
+        ('X1', 50, false),
+      ]);
+    });
+
+    test('compras do dia primeiro e travadas', () {
+      final d = _lote('D', '2026-02-10', 50, 13.0);
+      final r = alocarAutomatico([b, d], 120, '2026-02-10');
+      expect(_resumo(r), [('D', 50, true), ('B', 70, false)]);
+    });
+
+    test('compra do dia maior que a venda consome só a venda', () {
+      final d = _lote('D', '2026-02-10', 50, 13.0);
+      final r = alocarAutomatico([b, d], 30, '2026-02-10');
+      expect(_resumo(r), [('D', 30, true)]);
+    });
+
+    test('venda parcial e várias compras', () {
+      final r = alocarAutomatico([a, c], 130, '2026-02-10');
+      expect(_resumo(r), [('C', 100, false), ('A', 30, false)]);
+      expect(r.fold(0, (s, i) => s + i.qtd), 130);
+    });
+
+    test('quantidade insuficiente lança', () {
+      expect(
+        () => alocarAutomatico([a, c], 250, '2026-02-10'),
+        throwsA(
+          isA<ErroValidacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            'Quantidade indisponível: só há 200 ações de PETR4 nessa data.',
+          ),
+        ),
+      );
+    });
+
+    test('usa só o que resta de cada compra', () {
+      final p = _lote(
+        'P',
+        '2026-01-01',
+        100,
+        9.0,
+        vendas: [Venda(id: 'v', data: '2026-01-08', qtd: 60, preco: 12)],
+      );
+      expect(_resumo(alocarAutomatico([p, a], 50, '2026-02-10')), [
+        ('P', 40, false),
+        ('A', 10, false),
+      ]);
+    });
+  });
+
+  group('elegíveis e custo', () {
+    test('comprasElegiveis filtra data, ticker e restante', () {
+      final cheio = _lote(
+        'F',
+        '2026-01-01',
+        10,
+        9.0,
+        vendas: [Venda(id: 'v', data: '2026-01-02', qtd: 10, preco: 10)],
+      );
+      final futuro = _lote('G', '2026-02-20', 10, 9.0);
+      final outro = _lote('H', '2026-01-01', 10, 9.0, ticker: 'VALE3');
+      final d = Mes(mes: '2026-02', lotes: [a, cheio, futuro, outro]);
+      expect(comprasElegiveis(d, 'PETR4', '2026-02-10').map((l) => l.id), [
+        'A',
+      ]);
+    });
+
+    test('custo unitário efetivo inclui taxa e corretagem', () {
+      final l = _lote('A', '2026-01-05', 100, 12.0);
+      expect(custoUnitarioEfetivo(l), closeTo(12.0 * (1 + taxaB3Swing), 1e-12));
+      final antes = corretagemPorOrdem;
+      corretagemPorOrdem = 5.0;
+      addTearDown(() => corretagemPorOrdem = antes);
+      expect(
+        custoUnitarioEfetivo(l),
+        closeTo(12.0 * (1 + taxaB3Swing) + 0.05, 1e-12),
+      );
+    });
+  });
+
+  group('validarManual', () {
+    final d = _lote('D', '2026-02-10', 50, 13.0);
+    final el = [a, b, d];
+    const dv = '2026-02-10';
+
+    test('seleção válida devolve nulo', () {
+      final sel = [ItemAlocacao(d, 50), ItemAlocacao(b, 70)];
+      expect(validarManual(el, sel, 120, dv), isNull);
+    });
+
+    test('soma diferente', () {
+      final sel = [ItemAlocacao(d, 50), ItemAlocacao(b, 60)];
+      expect(
+        validarManual(el, sel, 120, dv),
+        'A soma das compras escolhidas (110) é diferente da quantidade da '
+        'venda (120).',
+      );
+    });
+
+    test('item acima do disponível', () {
+      final sel = [ItemAlocacao(d, 50), ItemAlocacao(b, 101)];
+      expect(
+        validarManual(el, sel, 151, dv),
+        'A compra de 10/01/2026 tem só 100 ações disponíveis.',
+      );
+    });
+
+    test('compra do dia sem a quantidade obrigatória', () {
+      final sel = [ItemAlocacao(a, 100), ItemAlocacao(b, 20)];
+      expect(
+        validarManual(el, sel, 120, dv),
+        'As compras de hoje entram primeiro (day trade, regra da Receita).',
+      );
+    });
+
+    test('lote fora das elegíveis', () {
+      final x = _lote('X', '2026-01-01', 100, 9.0);
+      expect(
+        validarManual(el, [ItemAlocacao(x, 10)], 10, dv),
+        'Compra fora das disponíveis nessa data.',
+      );
+    });
+
+    test('manual não contorna day trade mesmo com a soma certa', () {
+      final sel = [ItemAlocacao(b, 30), ItemAlocacao(d, 20)];
+      expect(
+        validarManual(el, sel, 50, dv),
+        'As compras de hoje entram primeiro (day trade, regra da Receita).',
+      );
+    });
+
+    test('quantidade negativa não passa', () {
+      final sel = [
+        ItemAlocacao(b, 110),
+        ItemAlocacao(a, -10),
+        ItemAlocacao(d, 50),
+      ];
+      expect(validarManual(el, sel, 150, dv), isNotNull);
+    });
+  });
+
+  group('montarVendas e grupo', () {
+    test('um item mantém o id simples', () {
+      final v = montarVendas([ItemAlocacao(a, 10)], 'g', '2026-02-10', 15, 3);
+      expect(v.map((e) => e.id), ['g']);
+      expect(v.single.qtd, 10);
+      expect(v.single.preco, 15);
+      expect(v.single.mod, 3);
+    });
+
+    test('três itens recebem sufixos e o mesmo mod', () {
+      final v = montarVendas(
+        [ItemAlocacao(a, 1), ItemAlocacao(b, 2), ItemAlocacao(c, 3)],
+        'g',
+        '2026-02-10',
+        15,
+        7.5,
+      );
+      expect(v.map((e) => e.id), ['g.1', 'g.2', 'g.3']);
+      expect(v.map((e) => e.mod), [7.5, 7.5, 7.5]);
+      expect(v.map((e) => e.qtd), [1, 2, 3]);
+      expect(v.every((e) => e.data == '2026-02-10'), isTrue);
+    });
+
+    test('grupoDe', () {
+      expect(grupoDe('g.2'), 'g');
+      expect(grupoDe('auto-m1'), 'auto-m1');
+      expect(grupoDe('a.b.12'), 'a.b');
+      expect(grupoDe('g.x'), 'g.x');
+    });
+  });
+
+  group('prévia', () {
+    Mes mes() => Mes(
+      mes: '2026-02',
+      lotes: [
+        _lote('A', '2026-02-05', 100, 12.0),
+        _lote('B', '2026-02-10', 100, 10.0),
+      ],
+    );
+
+    test('prévia gerencial muda com a alocação', () {
+      final d = mes();
+      final pa = previa(d, [ItemAlocacao(d.lotes[0], 50)], 15.0, '2026-02-20');
+      final pb = previa(d, [ItemAlocacao(d.lotes[1], 50)], 15.0, '2026-02-20');
+      expect(pb.gerencial, greaterThan(pa.gerencial + 1));
+      final ce = custoUnitarioEfetivo(d.lotes[0]);
+      expect(
+        pa.linhas.single.resultadoGerencial,
+        closeTo(50 * 15.0 - 50 * ce - 50 * 15.0 * taxaB3Swing, 1e-9),
+      );
+      expect(pa.linhas.single.custoEfetivo, closeTo(ce, 1e-12));
+      expect(pa.qtdComum, 50);
+      expect(pa.qtdDt, 0);
+    });
+
+    test('prévia não altera o mês e o fiscal vem da apuração', () {
+      final d = mes();
+      final antes = apurar(d).lucroLiquido;
+      final p = previa(d, [ItemAlocacao(d.lotes[0], 50)], 15.0, '2026-02-20');
+      expect(d.lotes[0].vendas, isEmpty);
+      expect(apurar(d).lucroLiquido, antes);
+      final copia = Mes.fromJson(d.toJson());
+      copia.lotes[0].vendas.add(
+        Venda(id: 'x', data: '2026-02-20', qtd: 50, preco: 15.0),
+      );
+      expect(p.fiscal, closeTo(apurar(copia).lucroLiquido - antes, 1e-9));
+    });
+
+    test('compra do dia conta como day trade na prévia', () {
+      final d = mes();
+      final p = previa(
+        d,
+        [
+          ItemAlocacao(d.lotes[1], 40, travado: true),
+          ItemAlocacao(d.lotes[0], 10),
+        ],
+        15.0,
+        '2026-02-10',
+      );
+      expect(p.qtdDt, 40);
+      expect(p.qtdComum, 10);
+      expect(
+        p.linhas.first.resultadoGerencial,
+        closeTo(
+          40 * 15.0 -
+              40 * custoUnitarioEfetivo(d.lotes[1]) -
+              40 * 15.0 * taxaB3Daytrade,
+          1e-9,
+        ),
+      );
+    });
+  });
+}
