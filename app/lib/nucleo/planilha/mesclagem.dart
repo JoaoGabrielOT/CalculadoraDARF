@@ -19,9 +19,23 @@ T? escolher<T extends ComMod>(T? a, T? b) {
   return a.mod >= b.mod ? a : b;
 }
 
+/// Lado de onde vem o marcador de método (§5.3): o vencedor por `mod`, com
+/// uma exceção monotônica quando só um lado tem o custo médio (planilha
+/// regravada por uma 1.12, migração concorrente em dois aparelhos): o
+/// marcador fica, a menos que o vencedor seja um mês fechado sem marcador
+/// (fechado pelo método antigo) e o lado marcado ainda esteja aberto.
+Mes _ladoDoMetodo(Mes vencedor, Mes local, Mes remoto) {
+  final marcadoL = local.metodo == metodoCustoMedio;
+  if (marcadoL == (remoto.metodo == metodoCustoMedio)) return vencedor;
+  final marcado = marcadoL ? local : remoto;
+  if (vencedor.fechado && !marcado.fechado) return vencedor;
+  return marcado;
+}
+
 /// `mesclar_mes` (nucleo.py:988-1022). Com um lado nulo devolve o outro (a
 /// mesma instância); senão devolve objetos novos, sem `retroativo`, e o
-/// `resumo` só vem do vencedor quando ele está fechado.
+/// `resumo` só vem do vencedor quando ele está fechado. O marcador de método
+/// segue `_ladoDoMetodo`.
 Mes? mesclarMes(Mes? local, Mes? remoto) {
   if (local == null) return remoto;
   if (remoto == null) return local;
@@ -65,6 +79,7 @@ Mes? mesclarMes(Mes? local, Mes? remoto) {
     ];
     lotes.add(novo);
   }
+  final metodo = _ladoDoMetodo(meta, local, remoto).toJson();
   return Mes.fromJson({
     'mes': local.mes,
     'fechado': meta.fechado,
@@ -73,6 +88,8 @@ Mes? mesclarMes(Mes? local, Mes? remoto) {
     'lotes': lotes,
     'excluidos': excl,
     if (meta.resumo != null && meta.fechado) 'resumo': meta.resumo!.toJson(),
+    for (final k in camposMetodo)
+      if (metodo.containsKey(k)) k: metodo[k],
   });
 }
 

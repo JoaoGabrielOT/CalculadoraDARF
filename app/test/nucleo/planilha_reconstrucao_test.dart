@@ -1,6 +1,8 @@
 import 'package:calculadoradarf/nucleo/ambiente.dart';
+import 'package:calculadoradarf/nucleo/modelos/config.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
 import 'package:calculadoradarf/nucleo/planilha/celula.dart';
+import 'package:calculadoradarf/nucleo/planilha/montagem.dart';
 import 'package:calculadoradarf/nucleo/planilha/reconstrucao.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -101,4 +103,81 @@ void main() {
       }
     },
   );
+
+  group('coluna Detalhes do Resumo', () {
+    const detalhes =
+        '{"mes":"2026-11","metodo":"custo_medio",'
+        '"posicao_inicial":{"PETR4":{"qtd":100,"custo":2550.0}},'
+        '"prejuizo_anterior":{"comum":120.5,"day_trade":0.0}}';
+    Linha resumo(String mes, [Object? col14]) => [
+      mes, 'Aberto', 0, 'Sim', 0, 0, 0, 0, 0, 0, 0, 0, 5, //
+      ?col14,
+    ];
+
+    test('coluna 14 gravada e lida', () {
+      final marcado = Mes(
+        mes: '2026-11',
+        mod: 5,
+        metodo: metodoCustoMedio,
+        posicaoInicial: {'PETR4': PosicaoFiscal(qtd: 100, custo: 2550.0)},
+        prejuizoAnterior: PrejuizoAcumulado(comum: 120.5),
+      );
+      final linhas = montarLinhas([marcado], Config());
+      final d = reconstruir(linhas).meses['2026-11']!;
+      expect(d.metodo, metodoCustoMedio);
+      expect(d.toJson(), {
+        'mes': '2026-11',
+        'fechado': false,
+        'darf_anterior': 0.0,
+        'lotes': <Object?>[],
+        'excluidos': <String, Object?>{},
+        'mod': 5.0,
+        'metodo': 'custo_medio',
+        'posicao_inicial': {
+          'PETR4': {'qtd': 100, 'custo': 2550.0},
+        },
+        'prejuizo_anterior': {'comum': 120.5, 'day_trade': 0.0},
+      });
+    });
+
+    test('planilha de 13 colunas aceita (sem marcador)', () {
+      final d = reconstruir({
+        'Resumo': [resumo('11/2026')],
+      }).meses['2026-11']!;
+      expect(d.metodo, isNull);
+      expect(d.toJson().containsKey('metodo'), isFalse);
+      expect(d.posicaoInicial, isNull);
+      expect(d.prejuizoAnterior, isNull);
+    });
+
+    test('valor desalinhado ignorado (mês trocado)', () {
+      final dados = reconstruir({
+        'Resumo': [
+          resumo('10/2026', detalhes), // valor do mês 11 na linha do 10
+          resumo('11/2026', ''),
+        ],
+      });
+      expect(dados.meses['2026-10']!.metodo, isNull);
+      expect(dados.meses['2026-10']!.posicaoInicial, isNull);
+      expect(dados.meses['2026-11']!.metodo, isNull);
+    });
+
+    test('valor inválido ignorado', () {
+      for (final v in [
+        'não é JSON',
+        '[1, 2]',
+        '{"mes":"2026-11"}',
+        '{"mes":"2026-11","metodo":"outro"}',
+        '{"mes":"2026-11","metodo":"custo_medio",'
+            '"posicao_inicial":{"PETR4":{"qtd":1.5,"custo":1.0}}}',
+        12,
+      ]) {
+        final d = reconstruir({
+          'Resumo': [resumo('11/2026', v)],
+        }).meses['2026-11']!;
+        expect(d.metodo, isNull, reason: '$v');
+        expect(d.posicaoInicial, isNull, reason: '$v');
+      }
+    });
+  });
 }

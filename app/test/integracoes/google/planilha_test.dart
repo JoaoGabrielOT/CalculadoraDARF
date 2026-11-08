@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../nucleo/apoio/referencias.dart';
 import '../apoio/cliente_falso.dart';
+import '../apoio/layout_python.dart';
 
 const _agora = 1761000000.0;
 
@@ -98,6 +99,7 @@ void _conferirPedido(
   PedidoGravado r,
   Map<String, Object?> esperado,
   String id,
+  int? resumo,
 ) {
   expect(r.metodo, esperado['metodo'], reason: id);
   expect(
@@ -111,7 +113,7 @@ void _conferirPedido(
     caminho: '$id.params',
   );
   conferir(
-    r.texto.isEmpty ? null : r.json,
+    r.texto.isEmpty ? null : layoutPython(r.json, resumo),
     esperado['json'],
     caminho: '$id.json',
   );
@@ -138,6 +140,8 @@ void main() {
         ]);
       }
       final (p, falso) = await _montar(respostas);
+      // a coluna Detalhes do Resumo é só da 2.1
+      final resumo = idDoResumo(entrada['respostas']);
       final esperados = _lista(saida['pedidos']);
       Object? resultado;
       ErroGoogle? erro;
@@ -152,12 +156,17 @@ void main() {
       ];
       if (eh401) {
         expect(feitos, hasLength(2));
-        _conferirPedido(feitos[1], _mapa(esperados[0]), 'repetição do 401');
+        _conferirPedido(
+          feitos[1],
+          _mapa(esperados[0]),
+          'repetição do 401',
+          resumo,
+        );
         feitos.removeLast();
       }
       expect(feitos, hasLength(esperados.length));
       for (var i = 0; i < esperados.length; i++) {
-        _conferirPedido(feitos[i], _mapa(esperados[i]), 'pedido $i');
+        _conferirPedido(feitos[i], _mapa(esperados[i]), 'pedido $i', resumo);
       }
       if (saida.containsKey('erro')) {
         expect(erro, isNotNull, reason: 'esperava ${saida['erro']}');
@@ -166,7 +175,7 @@ void main() {
         expect(erro.status, saida['status']);
       } else {
         expect(erro, isNull);
-        conferir(resultado, saida['resultado']);
+        conferir(leituraPython(resultado), saida['resultado']);
       }
     });
   }

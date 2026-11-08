@@ -38,6 +38,8 @@ const List<EsquemaAba> esquemaAbas = [
     ColunaAba('DARF meses anteriores', 'moeda', 170),
     ColunaAba('Total DARF', 'destaque', 130),
     ColunaAba('Modificado', 'id', 80),
+    // só da 2.1: o marcador de método do mês (o Python lê as 13 primeiras)
+    ColunaAba('Detalhes', 'id', 80),
   ]),
   EsquemaAba('Compras', '#2563eb', [
     ColunaAba('Mês', 'centro', 90),

@@ -47,7 +47,7 @@ List<Linha> _completar(List<Linha>? linhas, int largura) => [
 
 /// `reconstruir` (nucleo.py:837-927).
 DadosPlanilha reconstruir(Map<String, List<Linha>> abas) {
-  final resumo = _completar(abas['Resumo'], 13);
+  final resumo = _completar(abas['Resumo'], 14);
   final compras = _completar(abas['Compras'], 13);
   final vendas = _completar(abas['Vendas'], 17);
   final amigosLinhas = _completar(abas['Amigos'], 3);
@@ -60,12 +60,13 @@ DadosPlanilha reconstruir(Map<String, List<Linha>> abas) {
   for (final row in resumo) {
     try {
       final mes = mesIso(row[0]);
-      meses[mes] = Mes(
+      final d = meses[mes] = Mes(
         mes: mes,
         fechado: row[1] == 'Fechado',
         darfAnterior: numOuPadrao(row[10]),
         mod: numOuPadrao(row[12]),
       );
+      _lerMarcador(d, row[13]);
     } catch (e) {
       if (!_erroDeLeitura(e)) rethrow;
     }
@@ -186,6 +187,33 @@ DadosPlanilha reconstruir(Map<String, List<Linha>> abas) {
     excluidos: exclCfg,
     caixa: caixa,
   );
+}
+
+/// Coluna Detalhes do Resumo (§5.3, só da 2.1): o marcador de custo médio
+/// vale só se o JSON traz o mês da própria linha (uma gravação da 1.12 pode
+/// deixar a coluna desalinhada); valor inválido ou de outro mês é ignorado.
+void _lerMarcador(Mes d, Object? valor) {
+  if (!verdadeiroPython(valor)) return;
+  final Mes lido;
+  try {
+    final json = jsonPythonDecode(strPython(valor));
+    if (json is! Map ||
+        json['mes'] != d.mes ||
+        json['metodo'] != metodoCustoMedio) {
+      return;
+    }
+    lido = Mes.fromJson({
+      for (final k in camposMetodo)
+        if (json.containsKey(k)) k: json[k],
+    });
+  } catch (e) {
+    if (!_erroDeLeitura(e)) rethrow;
+    return;
+  }
+  d
+    ..metodo = lido.metodo
+    ..posicaoInicial = lido.posicaoInicial
+    ..prejuizoAnterior = lido.prejuizoAnterior;
 }
 
 /// Posição do radar (nucleo.py:900-901). Posição que não cabe em int64 (o

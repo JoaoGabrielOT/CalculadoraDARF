@@ -62,6 +62,19 @@ Linha linhaMeta(Meta m) {
   ];
 }
 
+/// Coluna Detalhes do Resumo (§5.3): o marcador de custo médio com o próprio
+/// mês (protege contra linhas desalinhadas por uma gravação da 1.12); vazia
+/// no método por compra.
+String detalhesResumo(Mes d) {
+  if (d.metodo != metodoCustoMedio) return '';
+  final j = d.toJson();
+  return jsonPython({
+    'mes': d.mes,
+    for (final k in camposMetodo)
+      if (j.containsKey(k)) k: j[k],
+  }, compacto: true);
+}
+
 /// As oito abas a gravar, a partir dos [meses] já carregados (na ordem em que
 /// vão para a planilha) e da configuração [cfg].
 Map<String, List<Linha>> montarLinhas(List<Mes> meses, Config cfg) {
@@ -86,6 +99,7 @@ Map<String, List<Linha>> montarLinhas(List<Mes> meses, Config cfg) {
       arredondar(r.darfAnterior, 2),
       arredondar(r.darf, 2),
       d.mod,
+      detalhesResumo(d),
     ]);
     final ops = {for (final o in r.ops) o.vendaId: o};
     final linhasV = <Linha>[];

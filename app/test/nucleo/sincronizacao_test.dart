@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
+import 'package:calculadoradarf/nucleo/fechamento.dart';
+import 'package:calculadoradarf/nucleo/modelos/mes.dart';
 import 'package:calculadoradarf/nucleo/planilha/celula.dart';
 import 'package:calculadoradarf/nucleo/planilha/sincronizacao.dart';
 import 'package:calculadoradarf/nucleo/repositorio.dart';
@@ -51,7 +53,7 @@ void main() {
         caminho: r'$.arquivos',
       );
       conferir(
-        r.linhas,
+        semDetalhesDoResumo(r.linhas),
         saida['linhas'],
         caminho: r'$.linhas',
         // a ordem vem de um set no Python (nucleo.py:165-166)
@@ -59,4 +61,38 @@ void main() {
       );
     });
   }
+
+  test('mês fechado pelo custo médio continua marcado depois de uma '
+      'regravação da 1.12 (13 colunas, mod maior)', () {
+    ambiente = Ambiente.fixo(agora: 100);
+    final memoria = ArmazenamentoMemoria();
+    final repo = Repositorio(memoria);
+    repo.salvar(
+      Mes(
+        mes: '2026-11',
+        fechado: true,
+        mod: 10,
+        metodo: metodoCustoMedio,
+        posicaoInicial: {},
+        prejuizoAnterior: PrejuizoAcumulado(comum: 3.5),
+      ),
+      carimbar: false,
+    );
+    final cfg = repo.lerConfig();
+    final r = sincronizarLinhas(repo, cfg, {
+      'Resumo': [
+        ['11/2026', 'Fechado', 0, 'Sim', 0, 0, 0, 0, 0, 0, 0, 0, 20.0],
+      ],
+    });
+    final d = repo.carregar('2026-11');
+    expect(d.metodo, metodoCustoMedio);
+    expect(d.mod, 20.0);
+    expect(mesPorCustoMedio(repo, '2026-11'), isTrue);
+    expect(mesPorCustoMedio(repo, '2026-12'), isTrue);
+    expect(
+      r.linhas['Resumo']!.single[13],
+      '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":{},'
+      '"prejuizo_anterior":{"comum":3.5,"day_trade":0.0}}',
+    );
+  });
 }

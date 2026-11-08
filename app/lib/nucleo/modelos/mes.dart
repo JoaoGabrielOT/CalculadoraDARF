@@ -66,6 +66,9 @@ class ResumoApuracao {
 /// day trade por ativo no dia). Mês sem marcador usa o método por compra.
 const metodoCustoMedio = 'custo_medio';
 
+/// Campos do marcador no JSON do mês, na ordem em que são gravados.
+const camposMetodo = ['metodo', 'posicao_inicial', 'prejuizo_anterior'];
+
 /// Posição de um ticker no custo médio: quantidade e custo total.
 class PosicaoFiscal {
   PosicaoFiscal({required this.qtd, required this.custo});
@@ -124,7 +127,7 @@ class Mes implements ComMod {
         ? ResumoApuracao.fromJson(lerMapa(json['resumo']))
         : null,
     retroativo: lerBool(json['retroativo']),
-    metodo: json['metodo'] is String ? json['metodo']! as String : null,
+    metodo: json['metodo'] == metodoCustoMedio ? metodoCustoMedio : null,
     posicaoInicial: json['posicao_inicial'] is Map
         ? {
             for (final e in lerMapa(json['posicao_inicial']).entries)
@@ -134,7 +137,7 @@ class Mes implements ComMod {
     prejuizoAnterior: json['prejuizo_anterior'] is Map
         ? PrejuizoAcumulado.fromJson(lerMapa(json['prejuizo_anterior']))
         : null,
-  ).._ordem = json.keys.toList();
+  ).._lido(json);
 
   String mes;
   bool fechado;
@@ -161,6 +164,17 @@ class Mes implements ComMod {
 
   List<String>? _ordem;
 
+  /// `metodo` lido do arquivo quando não é `metodoCustoMedio`: volta como
+  /// estava na próxima gravação, em vez de ser apagado.
+  Object? _metodoLido;
+
+  /// Ordem das chaves e `metodo` inesperado do arquivo lido.
+  void _lido(Map<String, Object?> json) {
+    _ordem = json.keys.toList();
+    final metodo = json['metodo'];
+    _metodoLido = metodo == metodoCustoMedio ? null : metodo;
+  }
+
   Map<String, Object?> toJson() => emOrdem({
     'mes': mes,
     'fechado': fechado,
@@ -170,7 +184,10 @@ class Mes implements ComMod {
     if (retroativo) 'retroativo': true,
     'mod': mod,
     if (resumo != null) 'resumo': resumo!.toJson(),
-    if (metodo != null) 'metodo': metodo,
+    if (metodo != null)
+      'metodo': metodo
+    else if (_metodoLido != null)
+      'metodo': _metodoLido,
     if (posicaoInicial != null)
       'posicao_inicial': {
         for (final e in posicaoInicial!.entries) e.key: e.value.toJson(),

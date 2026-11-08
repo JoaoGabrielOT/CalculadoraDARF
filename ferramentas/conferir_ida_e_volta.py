@@ -6,6 +6,9 @@ Uso (na raiz do repositório, depois de `flutter test --tags ida_e_volta` em app
 Para cada arquivo gravado pelo teste Dart: confere que google_sync.celula dá as mesmas células que o Dart, passa as
 linhas pelo completamento de `Google.ler` (google_sync.py:441), roda nucleo.reconstruir e nucleo.reconstruir_metas e
 compara com o estado que o Dart tem depois da sincronização. A comparação é estrita (int != float, -0.0 != 0.0).
+Além dos casos de sincronizacao.json, aceita os roteiros só do Dart (nome com `dart_`), como o da planilha da 2.1 com
+o marcador de custo médio na 14ª coluna do Resumo: o Python ignora essa coluna, então os campos do marcador saem do
+estado do Dart antes da comparação.
 Imprime `IDA E VOLTA OK (<n> roteiros)` ou as diferenças, e sai com código 1.
 """
 import json
@@ -20,6 +23,8 @@ import google_sync  # noqa: E402
 
 nc = base.nc
 REFERENCIA = RAIZ / "app" / "test" / "referencias" / "sincronizacao.json"
+# campos do mês que só a 2.1 grava (marcador de custo médio); o Python não os lê da planilha
+CAMPOS_2_1 = ("metodo", "posicao_inicial", "prejuizo_anterior")
 
 
 def igual(a, b, caminho, difs):
@@ -86,6 +91,8 @@ def conferir(arquivo):
     # nc.montar_linhas): a aba Vendas sai ordenada por data de venda, enquanto o arquivo do mês guarda as vendas na
     # ordem de inserção; e a coluna Posição leva o índice quando o item do radar não tem `pos`.
     for mes in estado["meses"].values():
+        for campo in CAMPOS_2_1:
+            mes.pop(campo, None)
         for lote in mes["lotes"]:
             lote["vendas"].sort(key=lambda v: v["id"])
     for mes in meses.values():
@@ -109,10 +116,11 @@ def main():
     if not arquivos:
         print(f"nenhum arquivo em {pasta}")
         return 1
-    # a pasta tem de ter exatamente um arquivo por caso de sincronizacao.json (nada a mais, nada a menos)
+    # a pasta tem de ter exatamente um arquivo por caso de sincronizacao.json (nada a mais, nada a menos), além
+    # dos roteiros só do Dart
     casos = json.loads(REFERENCIA.read_text(encoding="utf-8"))["casos"]
     esperados = sorted(c["nome"] for c in casos)
-    achados = sorted(a.stem for a in arquivos)
+    achados = sorted(a.stem for a in arquivos if not a.stem.startswith("dart_"))
     if achados != esperados:
         print(f"a pasta {pasta} não bate com {REFERENCIA.name}: {len(achados)} arquivos para {len(esperados)} casos")
         for nome in sorted(set(esperados) - set(achados)):

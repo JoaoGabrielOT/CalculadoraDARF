@@ -113,3 +113,22 @@ bool _igual(Object? a, Object? e) {
     return false;
   }
 }
+
+/// Linhas gravadas sem a 14ª coluna do Resumo (Detalhes, só da 2.1), para
+/// comparar com o Python, que grava 13. Exige a coluna vazia: as referências
+/// não têm meses com o marcador de custo médio.
+Map<String, List<List<Object?>>> semDetalhesDoResumo(
+  Map<String, List<List<Object?>>> linhas,
+) => {
+  for (final e in linhas.entries)
+    e.key: e.key != 'Resumo'
+        ? e.value
+        : [
+            for (final l in e.value)
+              () {
+                expect(l, hasLength(14));
+                expect(l[13], '');
+                return l.sublist(0, 13);
+              }(),
+          ],
+};

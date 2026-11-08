@@ -3,6 +3,7 @@ import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../nucleo/apoio/referencias.dart';
+import '../apoio/layout_python.dart';
 
 Map<String, Object?> _mapa(Object? o) => o! as Map<String, Object?>;
 List<Object?> _lista(Object? o) => o! as List<Object?>;
@@ -64,11 +65,12 @@ void main() {
     test('corpos do Python: ${caso.nome}', () {
       switch (caso.funcao) {
         case 'criar_planilha':
-          conferir(_jsonDoPedido(caso, 0), corpoCriacao());
+          conferir(layoutPython(corpoCriacao(), null), _jsonDoPedido(caso, 0));
           final ids = _ids(_propsDeSheets(_jsonDaResposta(caso, 0)));
-          conferir(_jsonDoPedido(caso, 1), {
-            'requests': pedidosFormatacao(ids),
-          });
+          conferir(
+            layoutPython({'requests': pedidosFormatacao(ids)}, ids['Resumo']),
+            _jsonDoPedido(caso, 1),
+          );
         case 'garantir_abas':
           final meta = _jsonDaResposta(caso, 0);
           final existentes = _propsDeSheets(meta)
@@ -82,26 +84,33 @@ void main() {
             expect(_lista(_mapa(caso.saida)['pedidos']), hasLength(1));
             break;
           }
-          conferir(_jsonDoPedido(caso, 1), pedidoAbasFaltantes(faltando));
+          conferir(
+            layoutPython(pedidoAbasFaltantes(faltando), null),
+            _jsonDoPedido(caso, 1),
+          );
           final novas = _ids(
             _lista(_jsonDaResposta(caso, 1)['replies'])
                 .map((r) => _mapa(_mapa(r)['addSheet'])['properties']),
           );
-          conferir(_jsonDoPedido(caso, 2), {
-            'requests': pedidosFormatacao(novas),
-          });
+          conferir(
+            layoutPython({
+              'requests': pedidosFormatacao(novas),
+            }, novas['Resumo']),
+            _jsonDoPedido(caso, 2),
+          );
         case 'escrever':
           final dados = {
             for (final e in _mapa(_args(caso)[1]).entries)
               e.key: [for (final l in _lista(e.value)) _lista(l)],
           };
           final pedidos = _lista(_mapa(caso.saida)['pedidos']);
-          conferir(_jsonDoPedido(caso, pedidos.length - 1), {
-            'requests': pedidosEscrita(
-              _propriedades(_jsonDaResposta(caso, 0)),
-              dados,
-            ),
-          });
+          final props = _propriedades(_jsonDaResposta(caso, 0));
+          conferir(
+            layoutPython({
+              'requests': pedidosEscrita(props, dados),
+            }, props['Resumo']?.sheetId),
+            _jsonDoPedido(caso, pedidos.length - 1),
+          );
         case 'ler':
           final respostas = _lista(_mapa(caso.entrada)['respostas']);
           final meta = _mapa(_mapa(respostas[0])['json']);
@@ -137,7 +146,10 @@ void main() {
                   _lista(l),
               ],
           };
-          conferir(normalizarLeitura(lidas), _mapa(caso.saida)['resultado']);
+          conferir(
+            leituraPython(normalizarLeitura(lidas)),
+            _mapa(caso.saida)['resultado'],
+          );
         case 'buscar_planilha':
           expect(_mapa(_pedido(caso, 0)['params'])['q'], [
             consultaPlanilha(_args(caso)[0]! as String),
@@ -170,5 +182,42 @@ void main() {
     });
     expect(dados['rows'], isEmpty);
     expect(dados['fields'], 'userEnteredValue');
+  });
+
+  test('Resumo de 13 colunas (1.12/2.0) ganha a 14ª, Detalhes, oculta', () {
+    final linha = [for (var i = 0; i < 13; i++) i, '{"mes":"2026-11"}'];
+    final reqs = pedidosEscrita(
+      {
+        'Resumo': PropriedadesAba(
+          sheetId: 3,
+          titulo: 'Resumo',
+          linhas: 1000,
+          colunas: 13,
+        ),
+      },
+      {
+        'Resumo': [linha],
+      },
+    );
+    expect(reqs[0], {
+      'appendDimension': {'sheetId': 3, 'dimension': 'COLUMNS', 'length': 1},
+    });
+    expect(reqs[1], {
+      'updateDimensionProperties': {
+        'range': {
+          'sheetId': 3,
+          'dimension': 'COLUMNS',
+          'startIndex': 13,
+          'endIndex': 14,
+        },
+        'properties': {'hiddenByUser': true},
+        'fields': 'hiddenByUser',
+      },
+    });
+    final dados = reqs.last['updateCells']! as Map;
+    expect((dados['range']! as Map)['endColumnIndex'], 14);
+    final valores = ((dados['rows']! as List).single as Map)['values'] as List;
+    expect(valores, hasLength(14));
+    expect(valores[13], celula('{"mes":"2026-11"}'));
   });
 }
