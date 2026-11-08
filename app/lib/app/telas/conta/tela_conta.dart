@@ -470,8 +470,154 @@ class _BlocoConfiguracoes extends StatelessWidget {
               ),
             ],
           ),
+          const _PrejuizoInicial(),
         ],
       ),
+    );
+  }
+}
+
+const textoPrejuizoFechado =
+    'O mês de corte já foi fechado; o prejuízo inicial não pode mais ser '
+    'alterado.';
+
+/// Prejuízo acumulado antes do mês de corte do custo médio (D4): sem corte
+/// não aparece; só se edita com o mês de corte aberto.
+class _PrejuizoInicial extends StatefulWidget {
+  const _PrejuizoInicial();
+
+  @override
+  State<_PrejuizoInicial> createState() => _PrejuizoInicialState();
+}
+
+class _PrejuizoInicialState extends State<_PrejuizoInicial> {
+  final _comum = TextEditingController();
+  final _dayTrade = TextEditingController();
+  PrejuizoInicial? _dados;
+  int _versao = -1;
+  int _pedido = 0;
+  bool _salvando = false;
+  String _erro = '';
+  String _ok = '';
+
+  @override
+  void dispose() {
+    _comum.dispose();
+    _dayTrade.dispose();
+    super.dispose();
+  }
+
+  Future<void> _carregar(ServicosApp servicos) async {
+    final pedido = ++_pedido;
+    PrejuizoInicial? dados;
+    try {
+      dados = await servicos.prejuizoInicial();
+    } catch (_) {
+      // sem leitura (mês ilegível): o campo some e o aviso fica na apuração
+    }
+    if (!mounted || pedido != _pedido) return;
+    setState(() {
+      _dados = dados?.mesCorte == null ? null : dados;
+      if (dados != null) {
+        _comum.text = precoTexto(dados.comum);
+        _dayTrade.text = precoTexto(dados.dayTrade);
+      }
+    });
+  }
+
+  Future<void> _salvar(ServicosApp servicos) async {
+    if (_salvando) return;
+    final double comum;
+    final double dayTrade;
+    try {
+      comum = _comum.text.trim().isEmpty ? 0 : parseValor(_comum.text);
+      dayTrade = _dayTrade.text.trim().isEmpty ? 0 : parseValor(_dayTrade.text);
+    } on FormatException {
+      setState(() {
+        _erro = 'Valor inválido.';
+        _ok = '';
+      });
+      return;
+    }
+    setState(() {
+      _salvando = true;
+      _erro = '';
+      _ok = '';
+    });
+    try {
+      await servicos.definirPrejuizoInicial(comum, dayTrade);
+      if (mounted) setState(() => _ok = 'Prejuízo inicial salvo.');
+    } catch (e) {
+      if (mounted) setState(() => _erro = textoErro(e));
+    } finally {
+      if (mounted) setState(() => _salvando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final servicos = context.read<ServicosApp>();
+    final versao = context.select<EstadoApp, int>((e) => e.versaoDados);
+    if (versao != _versao) {
+      _versao = versao;
+      unawaited(_carregar(servicos));
+    }
+    final dados = _dados;
+    if (dados == null) return const SizedBox.shrink();
+    final cores = CoresApp.de(context);
+    final editavel = dados.editavel;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 8,
+      children: [
+        const Divider(),
+        Text(
+          'Prejuízo acumulado antes de ${fmtMes(dados.mesCorte!)} '
+          '(para compensar no imposto)',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        Row(
+          spacing: 8,
+          children: [
+            for (final (chave, rotulo, c) in [
+              ('prejuizo-comum', 'Operações comuns', _comum),
+              ('prejuizo-dt', 'Day trade', _dayTrade),
+            ])
+              Expanded(
+                child: TextField(
+                  key: ValueKey(chave),
+                  controller: c,
+                  enabled: editavel,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: rotulo,
+                    prefixText: 'R\$ ',
+                  ),
+                ),
+              ),
+          ],
+        ),
+        if (editavel)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton(
+              key: const ValueKey('prejuizo-salvar'),
+              onPressed: _salvando ? null : () => unawaited(_salvar(servicos)),
+              child: const Text('Salvar prejuízo'),
+            ),
+          )
+        else
+          Text(
+            textoPrejuizoFechado,
+            style: TextStyle(fontSize: 12, color: cores.textoSuave),
+          ),
+        if (_erro.isNotEmpty)
+          Text(_erro, style: TextStyle(fontSize: 12, color: cores.queda)),
+        if (_ok.isNotEmpty)
+          Text(_ok, style: TextStyle(fontSize: 12, color: cores.alta)),
+      ],
     );
   }
 }

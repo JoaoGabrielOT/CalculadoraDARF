@@ -239,6 +239,13 @@ class ServicosEco implements ServicosApp {
       caixaExemplo(saldo: valor + modo.index);
 
   @override
+  Future<PrejuizoInicial> prejuizoInicial() async =>
+      const PrejuizoInicial(mesCorte: 'eco', comum: 1, dayTrade: 2);
+
+  @override
+  Future<void> definirPrejuizoInicial(double comum, double dayTrade) async {}
+
+  @override
   Future<EstadoConta> conta() async =>
       const EstadoConta(email: 'eco@exemplo.com', ultimoErro: 'eco');
 

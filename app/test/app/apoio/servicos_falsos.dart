@@ -512,6 +512,23 @@ class ServicosFalsos implements ServicosApp {
         return visaoCaixa ?? caixaExemplo();
       });
 
+  PrejuizoInicial prejuizo = const PrejuizoInicial();
+
+  @override
+  Future<PrejuizoInicial> prejuizoInicial() =>
+      _chamar('prejuizoInicial', [], () => prejuizo);
+
+  @override
+  Future<void> definirPrejuizoInicial(double comum, double dayTrade) =>
+      _chamar('definirPrejuizoInicial', [comum, dayTrade], () {
+        prejuizo = PrejuizoInicial(
+          mesCorte: prejuizo.mesCorte,
+          comum: comum,
+          dayTrade: dayTrade,
+          editavel: prejuizo.editavel,
+        );
+      });
+
   // conta, sincronização e amigos
   EstadoConta estadoConta = const EstadoConta();
   List<Amigo> listaAmigos = [];

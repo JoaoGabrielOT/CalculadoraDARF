@@ -589,6 +589,14 @@ class ServicosIsolate implements ServicosApp {
   Future<VisaoCaixa> alterarSaldo(ModoSaldo modo, double valor) =>
       _chamar((s) => s.alterarSaldo(modo, valor));
 
+  @override
+  Future<PrejuizoInicial> prejuizoInicial() =>
+      _chamar((s) => s.prejuizoInicial());
+
+  @override
+  Future<void> definirPrejuizoInicial(double comum, double dayTrade) =>
+      _chamar((s) => s.definirPrejuizoInicial(comum, dayTrade));
+
   // conta, sincronização e amigos
   @override
   Future<EstadoConta> conta() => _chamar((s) => s.conta());

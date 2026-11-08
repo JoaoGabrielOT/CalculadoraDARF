@@ -306,6 +306,13 @@ class ServicosLocais implements ServicosApp {
   Future<VisaoCaixa> alterarSaldo(ModoSaldo modo, double valor) =>
       _apuracao.alterarSaldo(modo, valor);
 
+  @override
+  Future<PrejuizoInicial> prejuizoInicial() => _apuracao.prejuizoInicial();
+
+  @override
+  Future<void> definirPrejuizoInicial(double comum, double dayTrade) =>
+      _apuracao.definirPrejuizoInicial(comum, dayTrade);
+
   // --- conta, sincronização e amigos (Tarefa 4)
 
   @override

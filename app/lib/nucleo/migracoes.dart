@@ -140,8 +140,10 @@ Future<ResultadoMigracaoDados> migrarCustoMedio(
 
 /// Corte reaplicado (§11): com a migração registrada neste aparelho e nenhum
 /// mês marcado (o mês do corte voltou fechado, sem marcador, de um aparelho
-/// antigo pela sincronização), marca o primeiro mês aberto, sem carimbo, e
-/// devolve qual. Um mês ilegível pode ser o marcado: nesse caso nada muda.
+/// antigo pela sincronização), marca o primeiro mês aberto depois do último
+/// fechado (um aberto retroativo anterior a um fechado não é o corte), sem
+/// carimbo, e devolve qual. Um mês ilegível pode ser o marcado: nesse caso
+/// nada muda.
 String? reaplicarCorteCustoMedio(Repositorio repo) {
   Mes? primeiro;
   try {
@@ -151,7 +153,11 @@ String? reaplicarCorteCustoMedio(Repositorio repo) {
     for (final m in repo.listarMeses()) {
       final d = repo.carregar(m);
       if (d.metodo == metodoCustoMedio) return null;
-      if (!d.fechado) primeiro ??= d;
+      if (d.fechado) {
+        primeiro = null;
+      } else {
+        primeiro ??= d;
+      }
     }
   } catch (e) {
     if (!_erroDeLeitura(e)) rethrow;
@@ -161,4 +167,25 @@ String? reaplicarCorteCustoMedio(Repositorio repo) {
   marcarCustoMedio(primeiro);
   repo.salvar(primeiro, carimbar: false);
   return primeiro.mes;
+}
+
+/// Com a migração registrada, nenhum mês marcado (todos legíveis) e [mes]
+/// ainda sem arquivo e depois de todos os fechados, ele é o corte: quem
+/// carrega marca em memória e a primeira gravação leva o marcador.
+bool mesEhCorteImplicito(Repositorio repo, String mes) {
+  try {
+    if (!repo.lerConfig().migracoes.contains(idMigracaoCustoMedio) ||
+        repo.existeMes(mes)) {
+      return false;
+    }
+    for (final m in repo.listarMeses()) {
+      final d = repo.carregar(m);
+      if (d.metodo == metodoCustoMedio) return false;
+      if (d.fechado && compararTexto(m, mes) > 0) return false;
+    }
+  } catch (e) {
+    if (!_erroDeLeitura(e)) rethrow;
+    return false;
+  }
+  return true;
 }

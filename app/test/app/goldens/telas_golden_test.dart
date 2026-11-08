@@ -202,6 +202,12 @@ ServicosFalsos _servicos() {
       ultimaSync: _agora - 120,
       linkPlanilha: 'https://docs.google.com/spreadsheets/d/abc',
     )
+    ..prejuizo = const PrejuizoInicial(
+      mesCorte: '2026-10',
+      comum: 1250,
+      dayTrade: 80,
+      editavel: true,
+    )
     ..listaAmigos = [Amigo(email: 'amigo@gmail.com', desde: '2026-09-01')]
     ..cotacoesFalsas = {
       'PETR4': CotacaoOk(_dados('PETR4', 'Petrobras PN', 36.2, 1.85)),
@@ -541,6 +547,14 @@ void main() {
                 listen: false,
               ).irPara(aba);
               await t.pumpAndSettle();
+              if (aba == Aba.conta) {
+                // mostra inteiro o bloco do prejuízo inicial (Configurações)
+                await Scrollable.ensureVisible(
+                  t.element(find.byKey(const Key('prejuizo-salvar'))),
+                  alignment: 0.8,
+                );
+                await t.pumpAndSettle();
+              }
               await _decodificarImagens(t);
               await expectLater(
                 find.byKey(chaveCaptura),

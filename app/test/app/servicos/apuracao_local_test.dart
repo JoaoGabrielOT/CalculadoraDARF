@@ -1413,6 +1413,134 @@ void main() {
       expect(disco.ler('2026-10.json'), antes);
     });
 
+    test('migração registrada, nenhum mês marcado e mês de hoje sem arquivo '
+        'depois de todos os fechados: é o corte, em memória, e a primeira '
+        'gravação leva o marcador', () async {
+      gravarMes('2026-09', [compra('L0', data: '2026-09-01')], fechado: true);
+      final cfg = repo.lerConfig()..migracoes = [idMigracaoCustoMedio];
+      repo.gravarConfig(cfg);
+      final v = await servicos.carregarMes('2026-10');
+      expect(v.dados.metodo, metodoCustoMedio);
+      expect(v.apuracao.metodo, metodoCustoMedio);
+      expect(repo.existeMes('2026-10'), isFalse);
+      expect(repo.carregar('2026-09').metodo, isNull);
+      final c = await servicos.registrarCompra(
+        '2026-10',
+        const NovaCompra(
+          ticker: 'VALE3',
+          dataCompra: '2026-10-02',
+          qtd: 10,
+          preco: 50,
+        ),
+      );
+      expect(c.dados.metodo, metodoCustoMedio);
+      expect(repo.carregar('2026-10').metodo, metodoCustoMedio);
+    });
+
+    test('mês sem arquivo anterior a um mês fechado não vira corte', () async {
+      gravarMes('2026-11', [compra('L0', data: '2026-11-01')], fechado: true);
+      final cfg = repo.lerConfig()..migracoes = [idMigracaoCustoMedio];
+      repo.gravarConfig(cfg);
+      final v = await servicos.carregarMes('2026-10');
+      expect(v.dados.metodo, isNull);
+    });
+
+    group('prejuízo acumulado inicial', () {
+      /// Mês de corte aberto: 10/2026 marcado, com 100 PETR4 levadas e uma
+      /// venda de 100 a 20 (resultado ≈ 999,40 pelo custo médio).
+      void gravarCorteAberto() {
+        final out = Mes(
+          mes: '2026-10',
+          lotes: [
+            compra(
+              'C1',
+              ticker: 'AAPL34',
+              tipo: 'BDR',
+              origem: 'L1',
+              data: '2026-09-01',
+              vendas: [
+                Venda(id: 'V1', data: '2026-10-10', qtd: 100, preco: 20),
+              ],
+            ),
+          ],
+        );
+        marcarCustoMedio(out);
+        repo.salvar(out);
+      }
+
+      test('sem corte (antes da migração) não há mês nem edição', () async {
+        gravarMes('2026-10', [compra('L1')]);
+        final p = await servicos.prejuizoInicial();
+        expect(p.mesCorte, isNull);
+        expect(p.editavel, isFalse);
+        expect((p.comum, p.dayTrade), (0.0, 0.0));
+        await espera(
+          servicos.definirPrejuizoInicial(10, 0),
+          'O cálculo por custo médio ainda não foi ativado.',
+        );
+      });
+
+      test('edita enquanto o mês de corte está aberto e recalcula', () async {
+        gravarCorteAberto();
+        var p = await servicos.prejuizoInicial();
+        expect(p.mesCorte, '2026-10');
+        expect(p.editavel, isTrue);
+        expect((p.comum, p.dayTrade), (0.0, 0.0));
+        final semPrejuizo = (await servicos.carregarMes('2026-10'))
+            .apuracao
+            .impSt;
+        expect(semPrejuizo, greaterThan(0));
+        final mod = repo.carregar('2026-10').mod;
+        ambiente = Ambiente.fixo(agora: 1790000000.5);
+        await servicos.definirPrejuizoInicial(500.5, 20);
+        p = await servicos.prejuizoInicial();
+        expect((p.comum, p.dayTrade), (500.5, 20.0));
+        final gravado = repo.carregar('2026-10');
+        expect(gravado.prejuizoAnterior!.comum, 500.5);
+        expect(gravado.prejuizoAnterior!.dayTrade, 20.0);
+        // edição do usuário carimba o mod, para sincronizar
+        expect(gravado.mod, greaterThan(mod));
+        final v = await servicos.carregarMes('2026-10');
+        expect(v.apuracao.impSt, lessThan(semPrejuizo));
+        expect(v.apuracao.prejuizoComumFinal, 0.0);
+        expect(await agendamentos(), 1);
+      });
+
+      test('fica só leitura depois do fechamento', () async {
+        gravarCorteAberto();
+        final d = repo.carregar('2026-10')..fechado = true;
+        repo.salvar(d);
+        final antes = disco.ler('2026-10.json');
+        final p = await servicos.prejuizoInicial();
+        expect(p.mesCorte, '2026-10');
+        expect(p.editavel, isFalse);
+        await espera(
+          servicos.definirPrejuizoInicial(10, 0),
+          'O mês de corte já foi fechado; o prejuízo inicial não pode mais '
+          'ser alterado.',
+        );
+        expect(disco.ler('2026-10.json'), antes);
+      });
+
+      test('valores negativos ou inválidos são recusados', () async {
+        gravarCorteAberto();
+        final antes = disco.ler('2026-10.json');
+        await espera(
+          servicos.definirPrejuizoInicial(-1, 0),
+          'O prejuízo inicial não pode ser negativo.',
+        );
+        await espera(
+          servicos.definirPrejuizoInicial(0, -0.01),
+          'O prejuízo inicial não pode ser negativo.',
+        );
+        await espera(
+          servicos.definirPrejuizoInicial(double.nan, 0),
+          'Informe um valor válido.',
+        );
+        expect(disco.ler('2026-10.json'), antes);
+      });
+    });
+
     test('sem mês de corte nada é marcado nem gravado', () async {
       gravarMes('2026-10', [compra('L1')]);
       final antes = disco.ler('2026-10.json');

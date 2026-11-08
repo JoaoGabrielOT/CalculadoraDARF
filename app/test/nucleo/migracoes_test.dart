@@ -272,6 +272,23 @@ void main() {
       expect(reaplicarCorteCustoMedio(repo), isNull);
     });
 
+    test('com um mês aberto retroativo antes de um fechado, marca o primeiro '
+        'aberto depois do último fechado', () async {
+      await _migrar();
+      for (final m in ['2026-04', '2026-05']) {
+        final d = repo.carregar(m)
+          ..metodo = null
+          ..posicaoInicial = null
+          ..prejuizoAnterior = null;
+        if (m == '2026-05') d.fechado = true;
+        repo.salvar(d, carimbar: false);
+      }
+      repo.salvar(Mes(mes: '2026-06'), carimbar: false);
+      expect(reaplicarCorteCustoMedio(repo), '2026-06');
+      expect(repo.carregar('2026-06').metodo, metodoCustoMedio);
+      expect(repo.carregar('2026-04').metodo, isNull);
+    });
+
     test('sem a migração registrada, nada muda', () {
       expect(reaplicarCorteCustoMedio(repo), isNull);
       expect(repo.carregar('2026-04').metodo, isNull);

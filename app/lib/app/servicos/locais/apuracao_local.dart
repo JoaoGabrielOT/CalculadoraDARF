@@ -70,7 +70,9 @@ class ApuracaoLocal {
   /// (sem arquivo, só em memória; numa mutação, a gravação dela leva o
   /// marcador). Um mês anterior ilegível não decide o corte. Sem nenhum mês
   /// marcado, com a migração já registrada, o corte é reaplicado
-  /// ([reaplicarCorteCustoMedio]).
+  /// ([reaplicarCorteCustoMedio]); se o mês nem arquivo tem e vem depois de
+  /// todos os fechados, ele próprio é o corte, em memória
+  /// ([mesEhCorteImplicito]).
   Mes _marcado(Mes d, {bool gravar = true}) {
     if (d.fechado || d.metodo != null) return d;
     String? corte;
@@ -93,6 +95,7 @@ class ApuracaoLocal {
         if (compararTexto(reaplicado, d.mes) < 0) corte = reaplicado;
       }
     }
+    if (corte == null && mesEhCorteImplicito(repo, d.mes)) corte = d.mes;
     if (!usaCustoMedio(d, corte)) return d;
     final ant = _mesAnterior(d.mes);
     Mes? anterior;
@@ -578,6 +581,53 @@ class ApuracaoLocal {
       visao: _visaoDe(mes, d),
       mensagem: mensagemFechamento(r, prox),
     );
+  }
+
+  // --- prejuízo acumulado inicial (D4)
+
+  /// Mês de corte: o primeiro com o marcador; os valores são o
+  /// `prejuizoAnterior` dele e só se editam com ele aberto.
+  Future<PrejuizoInicial> prejuizoInicial() async {
+    final meses = _carregarTodos();
+    final corte = mesDeCorte(meses.values);
+    if (corte == null) return const PrejuizoInicial();
+    final d = meses[corte]!;
+    final p = d.prejuizoAnterior ?? PrejuizoAcumulado();
+    return PrejuizoInicial(
+      mesCorte: corte,
+      comum: p.comum,
+      dayTrade: p.dayTrade,
+      editavel: !d.fechado,
+    );
+  }
+
+  Future<void> definirPrejuizoInicial(double comum, double dayTrade) async {
+    if (comum.isNaN ||
+        comum.isInfinite ||
+        dayTrade.isNaN ||
+        dayTrade.isInfinite) {
+      throw ErroValidacao('Informe um valor válido.');
+    }
+    if (comum < 0 || dayTrade < 0) {
+      throw ErroValidacao('O prejuízo inicial não pode ser negativo.');
+    }
+    final corte = mesDeCorte(_carregarTodos().values);
+    if (corte == null) {
+      throw ErroValidacao('O cálculo por custo médio ainda não foi ativado.');
+    }
+    final d = _lerMes(corte);
+    if (d.fechado) {
+      throw ErroValidacao(
+        'O mês de corte já foi fechado; o prejuízo inicial não pode mais ser '
+        'alterado.',
+      );
+    }
+    d.prejuizoAnterior = PrejuizoAcumulado(
+      comum: arredondar(comum, 2),
+      dayTrade: arredondar(dayTrade, 2),
+    );
+    repo.salvar(d);
+    _gravou();
   }
 
   // --- caixa

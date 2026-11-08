@@ -303,6 +303,99 @@ void main() {
     });
   });
 
+  group('Prejuízo acumulado inicial', () {
+    const titulo =
+        'Prejuízo acumulado antes de 10/2026 (para compensar no imposto)';
+
+    testWidgets('sem corte (antes da migração) o campo não aparece', (t) async {
+      await _abrirConta(t, _servicos(), tamanho: _celular);
+      expect(find.textContaining('Prejuízo acumulado antes'), findsNothing);
+      expect(find.byKey(const Key('prejuizo-comum')), findsNothing);
+    });
+
+    testWidgets('edita enquanto o mês de corte está aberto', (t) async {
+      final s = _servicos()
+        ..prejuizo = const PrejuizoInicial(
+          mesCorte: '2026-10',
+          comum: 1500,
+          dayTrade: 0,
+          editavel: true,
+        );
+      await _abrirConta(t, s, tamanho: _celular);
+      expect(find.text(titulo), findsOneWidget);
+      expect(find.text('Operações comuns'), findsOneWidget);
+      expect(find.text('Day trade'), findsOneWidget);
+      final comum = find.byKey(const Key('prejuizo-comum'));
+      final dt = find.byKey(const Key('prejuizo-dt'));
+      expect(t.widget<TextField>(comum).controller!.text, '1500,00');
+      expect(t.widget<TextField>(dt).controller!.text, '0,00');
+      await t.enterText(comum, '2.000,50');
+      await t.enterText(dt, '30');
+      await t.tap(find.byKey(const Key('prejuizo-salvar')));
+      await t.pumpAndSettle();
+      expect(s.chamadas, contains('definirPrejuizoInicial(2000.5, 30.0)'));
+      expect(s.prejuizo.comum, 2000.5);
+      expect(find.text('Prejuízo inicial salvo.'), findsOneWidget);
+    });
+
+    testWidgets('erro do serviço aparece sob o botão', (t) async {
+      final s = _servicos()
+        ..prejuizo = const PrejuizoInicial(mesCorte: '2026-10', editavel: true)
+        ..erros['definirPrejuizoInicial'] = ErroValidacao(
+          'O prejuízo inicial não pode ser negativo.',
+        );
+      await _abrirConta(t, s, tamanho: _celular);
+      await t.enterText(find.byKey(const Key('prejuizo-comum')), '-5');
+      await t.tap(find.byKey(const Key('prejuizo-salvar')));
+      await t.pumpAndSettle();
+      expect(
+        find.text('O prejuízo inicial não pode ser negativo.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('texto inválido não chama o serviço', (t) async {
+      final s = _servicos()
+        ..prejuizo = const PrejuizoInicial(mesCorte: '2026-10', editavel: true);
+      await _abrirConta(t, s, tamanho: _celular);
+      await t.enterText(find.byKey(const Key('prejuizo-comum')), 'abc');
+      await t.tap(find.byKey(const Key('prejuizo-salvar')));
+      await t.pumpAndSettle();
+      expect(find.text('Valor inválido.'), findsOneWidget);
+      expect(
+        s.chamadas.where((c) => c.startsWith('definirPrejuizoInicial')),
+        isEmpty,
+      );
+    });
+
+    testWidgets('fica só leitura depois do fechamento', (t) async {
+      final s = _servicos()
+        ..prejuizo = const PrejuizoInicial(
+          mesCorte: '2026-10',
+          comum: 1500,
+          dayTrade: 20,
+        );
+      await _abrirConta(t, s, tamanho: _celular);
+      expect(find.text(titulo), findsOneWidget);
+      expect(
+        t.widget<TextField>(find.byKey(const Key('prejuizo-comum'))).enabled,
+        isFalse,
+      );
+      expect(
+        t.widget<TextField>(find.byKey(const Key('prejuizo-dt'))).enabled,
+        isFalse,
+      );
+      expect(find.byKey(const Key('prejuizo-salvar')), findsNothing);
+      expect(
+        find.text(
+          'O mês de corte já foi fechado; o prejuízo inicial não pode mais '
+          'ser alterado.',
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('Sobre', () {
     testWidgets('mostra o nome e a versão', (t) async {
       await _abrirConta(t, _servicos(), tamanho: _celular);

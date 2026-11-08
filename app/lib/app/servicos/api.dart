@@ -45,6 +45,10 @@ abstract interface class ServicosApp {
   Future<VisaoCaixa> caixa({String? amigo});
   Future<VisaoCaixa> alterarSaldo(ModoSaldo modo, double valor);
 
+  // prejuízo acumulado antes do mês de corte do custo médio (Configurações)
+  Future<PrejuizoInicial> prejuizoInicial();
+  Future<void> definirPrejuizoInicial(double comum, double dayTrade);
+
   // conta, sincronização e amigos
   Future<EstadoConta> conta();
   Future<void> conectar();
@@ -237,6 +241,23 @@ class Fechamento {
 }
 
 enum ModoSaldo { definir, aporte, retirada }
+
+/// Prejuízo acumulado informado para o mês de corte do custo médio. Sem corte
+/// ([mesCorte] nulo) ainda não há onde gravá-lo; [editavel] só com o mês de
+/// corte aberto.
+class PrejuizoInicial {
+  const PrejuizoInicial({
+    this.mesCorte,
+    this.comum = 0,
+    this.dayTrade = 0,
+    this.editavel = false,
+  });
+
+  final String? mesCorte;
+  final double comum;
+  final double dayTrade;
+  final bool editavel;
+}
 
 class VisaoCaixa {
   const VisaoCaixa({

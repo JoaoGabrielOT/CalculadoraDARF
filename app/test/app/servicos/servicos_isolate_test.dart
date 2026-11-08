@@ -108,6 +108,8 @@ void main() {
 
     expect((await s.caixa(amigo: 'x')).resumo.saldoBase, 123);
     expect((await s.alterarSaldo(ModoSaldo.aporte, 10)).resumo.saldoBase, 11);
+    expect((await s.prejuizoInicial()).mesCorte, 'eco');
+    await s.definirPrejuizoInicial(1, 2);
 
     expect((await s.conta()).email, 'eco@exemplo.com');
     await s.cancelarLogin();
