@@ -680,6 +680,21 @@ void main() {
       );
     });
 
+    test(
+      'previaVenda de um grupo existente libera a quantidade dele',
+      () async {
+        await servicos.registrarVendaQtd('2026-10', venda(200));
+        // sem liberar, 200 de 200 já vendidas: não haveria saldo para a prévia
+        final p = await servicos.previaVenda('2026-10', venda(200));
+        expect(p.linhas.map((l) => l.item.qtd), [100, 100]);
+        final outra = venda(10, grupo: 'h');
+        await expectLater(
+          servicos.previaVenda('2026-10', outra),
+          throwsA(isA<ErroValidacao>()),
+        );
+      },
+    );
+
     test('registrarVendaQtd devolve a visão e dispara um evento', () async {
       final r = await servicos.registrarVendaQtd('2026-10', venda(150));
       expect(r.aviso, isNull);

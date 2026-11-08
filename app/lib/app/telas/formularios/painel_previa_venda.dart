@@ -52,11 +52,11 @@ class PainelPreviaVenda extends StatelessWidget {
             Text(erro, style: TextStyle(color: c.queda, fontSize: 12)),
           if (p != null) ...[
             Text(
-              textoResultadoGerencial(p.gerencial),
+              _nb(textoResultadoGerencial(p.gerencial)),
               style: forte(p.gerencial < 0 ? c.queda : c.alta),
             ),
             Text(
-              textoResultadoFiscal(p.fiscal, custoMedio: custoMedio),
+              _nb(textoResultadoFiscal(p.fiscal, custoMedio: custoMedio)),
               style: forte(p.fiscal < 0 ? c.queda : c.alta),
             ),
             Text(
@@ -86,3 +86,6 @@ class PainelPreviaVenda extends StatelessWidget {
     );
   }
 }
+
+/// Espaço sem quebra depois de "R$": o valor não se separa do símbolo.
+String _nb(String t) => t.replaceAll('R\$ ', 'R\$ ');

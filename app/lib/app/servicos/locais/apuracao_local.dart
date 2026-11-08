@@ -454,7 +454,8 @@ class ApuracaoLocal {
   ) async => nc.comprasElegiveis(_lerMes(mes), ticker, data);
 
   Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) async {
-    final d = _lerMes(mes);
+    // ao editar um grupo, a quantidade dele conta como livre na prévia
+    final d = semGrupo(_lerMes(mes), v.grupo);
     final itens = alocarPedido(d, mes, v);
     final p = previa(d, itens, v.preco, v.data);
     final aviso = avisoMetasReservadas(

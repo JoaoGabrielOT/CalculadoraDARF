@@ -327,7 +327,7 @@ void main() {
       find.text(
         'Quantidade indisponível: só há 200 ações de VALE3 nessa data.',
       ),
-      findsOneWidget,
+      findsWidgets,
     );
     await t.enterText(_campoData, '');
     await t.enterText(campo('qtd'), '10');
@@ -749,12 +749,12 @@ void main() {
       await t.pump(meio);
       expect(
         find.text(
-          'Resultado pelas compras escolhidas (gerencial): R\$ 1.234,50',
+          'Resultado pelas compras escolhidas (gerencial): R\$ 1.234,50',
         ),
         findsOneWidget,
       );
       expect(
-        find.text('Resultado fiscal da operação (custo médio): R\$ 1.100,00'),
+        find.text('Resultado fiscal da operação (por compra): R\$ 1.100,00'),
         findsOneWidget,
       );
       expect(find.text('Day trade: 0 ações; comum: 150 ações'), findsOneWidget);
@@ -769,6 +769,9 @@ void main() {
       );
       expect(s.ultimaPrevia?.qtd, 150);
       expect(s.ultimaPrevia?.selecao, isNull);
+      // resumo da ordem somado por compra: 150 x R\$ 35,00
+      expect(find.text('R\$ 5.250,00'), findsOneWidget);
+      expect(find.textContaining('Swing trade'), findsOneWidget);
 
       final antes = chamadasDe(s, 'previaVenda');
       await t.enterText(campo('qtd'), '10');
@@ -813,6 +816,21 @@ void main() {
       expect(salvar(t), isNotNull);
     });
 
+    testWidgets('automático acima do disponível explica na área da prévia', (
+      t,
+    ) async {
+      final s = servicos([b1, b2]);
+      await _abrir(t, s, ticker: 'BBAS3');
+      await t.enterText(campo('qtd'), '300');
+      await t.pump(meio);
+      expect(
+        find.text(
+          'Quantidade indisponível: só há 200 ações de BBAS3 nessa data.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('retroativa e mês fechado seguem com uma compra', (t) async {
       final antigo = compra('R1', '2026-07-10', 100, 50);
       final s = servicos([antigo]);
@@ -847,6 +865,10 @@ void main() {
       final s = servicos([g1, g2]);
       final r = await _abrir(t, s, editar: (g1, g1.vendas.first));
       expect(find.text('Editar venda'), findsOneWidget);
+      // a prévia vale na edição, com o id do próprio grupo
+      await t.pump(meio);
+      expect(s.ultimaPrevia?.grupo, 'G');
+      expect(s.ultimaPrevia?.selecao, [('B1', 30), ('B2', 20)]);
       expect(modo(t), ModoVenda.manual);
       expect(campoTexto(t, 'ticker').enabled, isFalse);
       expect(campoTexto(t, 'qtd').controller!.text, '50');

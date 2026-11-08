@@ -201,6 +201,40 @@ Validacao<NovaVendaQtd> validarVendaQtd({
   );
 }
 
+/// Resumo financeiro da venda em várias compras: soma de `resumoOrdem` por
+/// linha da prévia (preço de compra e day trade de cada compra), como o Caixa
+/// soma por linha. Nulo sem linhas.
+ResumoOrdem? resumoVendaPrevia(PreviaVenda p, double preco, String data) {
+  if (p.linhas.isEmpty) return null;
+  var bruto = 0.0, taxas = 0.0, irrf = 0.0, liquido = 0.0;
+  var dayTrade = false;
+  String? liquidacao;
+  for (final l in p.linhas) {
+    final r = resumoOrdem(
+      'venda',
+      l.item.qtd,
+      preco,
+      data,
+      precoCompra: l.item.lote.preco,
+      dayTrade: l.item.travado,
+    );
+    bruto += r.bruto;
+    taxas += r.taxas;
+    irrf += r.irrf;
+    liquido += r.liquido;
+    dayTrade = dayTrade || r.dayTrade;
+    liquidacao ??= r.liquidacao;
+  }
+  return ResumoOrdem(
+    bruto: bruto,
+    taxas: taxas,
+    irrf: irrf,
+    liquido: liquido,
+    dayTrade: dayTrade,
+    liquidacao: liquidacao!,
+  );
+}
+
 /// Regra do modo automático (spec 6.2).
 const textoRegraAutomatico =
     'Primeiro as compras de hoje (day trade, regra da Receita). Depois as de '

@@ -238,6 +238,19 @@ List<(Lote, Venda)> _vendasDoGrupo(Mes d, String grupo) => [
       if (grupoDe(v.id) == grupo) (l, v),
 ];
 
+/// Cópia de [d] sem as vendas do grupo [grupo] (a quantidade delas volta a
+/// ficar disponível). Sem o grupo no mês, é só uma cópia.
+Mes semGrupo(Mes d, String grupo) {
+  final copia = Mes.fromJson(d.toJson());
+  for (final l in copia.lotes) {
+    l.vendas = [
+      for (final v in l.vendas)
+        if (grupoDe(v.id) != grupo) v,
+    ];
+  }
+  return copia;
+}
+
 /// Valida o pedido contra [d] (data, quantidade, preço, seleção) e devolve a
 /// alocação. Não altera [d].
 List<ItemAlocacao> alocarPedido(Mes d, String mes, NovaVendaQtd v) {

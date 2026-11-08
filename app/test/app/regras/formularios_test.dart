@@ -513,6 +513,40 @@ void main() {
       );
     });
 
+    test('resumoVendaPrevia soma o resumo de cada compra', () {
+      final p = PreviaVenda(
+        linhas: [
+          LinhaPrevia(ItemAlocacao(b, 100), 20, 0),
+          LinhaPrevia(ItemAlocacao(a, 50), 30, 0),
+        ],
+        gerencial: 0,
+        fiscal: 0,
+        qtdDt: 0,
+        qtdComum: 150,
+      );
+      final r = resumoVendaPrevia(p, 35, '2026-10-28')!;
+      final r1 = resumoOrdem('venda', 100, 35, '2026-10-28', precoCompra: 20);
+      final r2 = resumoOrdem('venda', 50, 35, '2026-10-28', precoCompra: 30);
+      expect(r.bruto, 5250);
+      expect(r.taxas, r1.taxas + r2.taxas);
+      expect(r.liquido, r1.liquido + r2.liquido);
+      expect(r.liquidacao, r1.liquidacao);
+      expect(
+        resumoVendaPrevia(
+          const PreviaVenda(
+            linhas: [],
+            gerencial: 0,
+            fiscal: 0,
+            qtdDt: 0,
+            qtdComum: 0,
+          ),
+          35,
+          '2026-10-28',
+        ),
+        isNull,
+      );
+    });
+
     test('textos fixos do painel', () {
       expect(textoSelecionado(120, 150), 'Selecionado 120 de 150');
       expect(

@@ -150,13 +150,7 @@ class _FormVendaState extends State<FormVenda>
     _grupoEdicao = linhas.length > 1 ? grupo : null;
     if (_editandoGrupo) {
       // as vendas do grupo saem: a quantidade delas volta a ficar disponível
-      _dados = Mes.fromJson(widget.visao.dados.toJson());
-      for (final l in _dados.lotes) {
-        l.vendas = [
-          for (final v in l.vendas)
-            if (grupoDe(v.id) != grupo) v,
-        ];
-      }
+      _dados = semGrupo(widget.visao.dados, grupo!);
     } else {
       _dados = widget.visao.dados;
     }
@@ -553,8 +547,7 @@ class _FormVendaState extends State<FormVenda>
   void _agendarPrevia() {
     _timerPrevia?.cancel();
     _seqPrevia++;
-    // o serviço não libera a quantidade do grupo editado: sem prévia lá
-    if (_legado || _editandoGrupo) {
+    if (_legado) {
       _previa = null;
       _erroPrevia = '';
       return;
@@ -563,7 +556,8 @@ class _FormVendaState extends State<FormVenda>
   }
 
   Future<void> _calcularPrevia() async {
-    final v = _pedidoVenda('previa');
+    // ao editar, o grupo é o próprio: o serviço libera a quantidade dele
+    final v = _pedidoVenda(_grupoEdicao ?? 'previa');
     if (v is! Valido<NovaVendaQtd>) {
       if (_previa != null || _erroPrevia.isNotEmpty) {
         setState(() {
@@ -680,6 +674,39 @@ class _FormVendaState extends State<FormVenda>
     onSelectionChanged: salvando ? null : (s) => _mudouModo(s.first),
   );
 
+  /// Automático com quantidade acima do disponível: a mensagem do núcleo.
+  String _erroAutomatico() {
+    final q = _qtdValida;
+    final el = _elegiveis;
+    if (_modo != ModoVenda.automatico || q == null || el.isEmpty) return '';
+    try {
+      alocarAutomatico(el, q, _data!);
+    } on ErroValidacao catch (e) {
+      return e.mensagem;
+    }
+    return '';
+  }
+
+  /// Resumo financeiro da ordem somado por compra da prévia.
+  Widget _resumoNovo() {
+    final p = _previa;
+    ResumoOrdem? r;
+    var nota = '';
+    if (p != null && _data != null) {
+      try {
+        r = resumoVendaPrevia(p, parseNum(_preco.text), _data!);
+      } on FormatException {
+        r = null;
+      }
+      if (r != null && p.qtdDt > 0 && p.qtdComum == 0) {
+        nota = notaResumoVenda(true);
+      } else if (r != null && p.qtdDt == 0) {
+        nota = notaResumoVenda(false);
+      }
+    }
+    return PainelResumoOrdem(resumo: r, nota: nota);
+  }
+
   /// Compras escolhidas pelo serviço, com custo e resultado gerencial.
   Widget _linhasAutomatico(CoresApp c) {
     final p = _previa;
@@ -691,12 +718,23 @@ class _FormVendaState extends State<FormVenda>
         Text(textoRegraAutomatico, style: suave),
         if (p != null)
           for (final l in p.linhas)
-            Text(
-              '${fmtData(l.item.lote.dataCompra)}  ·  ${l.item.qtd} ações  ·  '
-              'custo ${brl(l.custoEfetivo)}  ·  resultado '
-              '${brl(l.resultadoGerencial)}'
-              '${l.item.travado ? '  ·  day trade' : ''}',
-              style: TextStyle(color: c.texto, fontSize: 12),
+            Row(
+              spacing: 8,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${fmtData(l.item.lote.dataCompra)}  ·  ${l.item.qtd} ações'
+                    '  ·  custo ${brl(l.custoEfetivo).replaceAll('R\$ ', 'R\$ ')}'
+                    '${l.item.travado ? '  ·  day trade' : ''}',
+                    style: TextStyle(color: c.texto, fontSize: 12),
+                  ),
+                ),
+                Text(
+                  'resultado ${brl(l.resultadoGerencial).replaceAll('R\$ ', 'R\$ ')}',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(color: c.texto, fontSize: 12),
+                ),
+              ],
             ),
       ],
     );
@@ -915,7 +953,14 @@ class _FormVendaState extends State<FormVenda>
             _linhasAutomatico(c)
           else
             _listaManual(c),
-          PainelPreviaVenda(previa: _previa, erro: _erroPrevia),
+          PainelPreviaVenda(
+            previa: _previa,
+            erro: _erroPrevia.isNotEmpty ? _erroPrevia : _erroAutomatico(),
+            // TODO(Tarefa 12): trocar por `custoMedio` do marcador de método
+            // do mês; até lá o fiscal da prévia sai de `apurar` por compra.
+            custoMedio: false,
+          ),
+          _resumoNovo(),
         ],
       ],
     );
