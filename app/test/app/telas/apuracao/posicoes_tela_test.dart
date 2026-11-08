@@ -278,7 +278,7 @@ void main() {
       'Ponto de equilíbrio (R\$)',
       'Resultado realizado no mês (método por compra, R\$)',
       'Resultado realizado acumulado desde 09/2026 (método por compra, R\$)',
-      'Rentabilidade realizada no mês (%)',
+      'Rentabilidade realizada no mês (método por compra, %)',
     ]) {
       expect(
         find.descendant(of: painel, matching: find.text(r)),

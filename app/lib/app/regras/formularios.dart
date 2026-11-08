@@ -260,6 +260,13 @@ const textoEscolhaDasCompras =
     'o resultado desta venda e reduz o das próximas; o resultado da posição '
     'inteira não muda.';
 
+/// Aviso do painel fiscal x gerencial em mês ainda apurado por compra.
+const textoEscolhaDasComprasPorCompra =
+    'A escolha das compras organiza o seu controle. Este mês ainda é apurado '
+    'por compra: o resultado fiscal acompanha as compras escolhidas. A partir '
+    'do mês de corte, a Receita usa o custo médio e a escolha não muda o '
+    'imposto.';
+
 /// Contador do modo manual.
 String textoSelecionado(int escolhido, int total) =>
     'Selecionado $escolhido de $total';

@@ -136,6 +136,7 @@ class PreviaVenda {
     required this.qtdDt,
     required this.qtdComum,
     this.aviso,
+    this.custoMedio = false,
   });
 
   final List<LinhaPrevia> linhas;
@@ -147,6 +148,10 @@ class PreviaVenda {
   /// Aviso (sem bloquear) quando a venda usa quantidade reservada por metas
   /// ativas; preenchido pelo serviço, nulo se não há.
   final String? aviso;
+
+  /// O mês tem o marcador de custo médio: [fiscal] não depende da alocação.
+  /// Falso nos meses por compra.
+  final bool custoMedio;
 }
 
 PreviaVenda previa(
@@ -184,6 +189,7 @@ PreviaVenda previa(
     fiscal: fiscal,
     qtdDt: qtdDt,
     qtdComum: qtdComum,
+    custoMedio: d.metodo == metodoCustoMedio,
   );
 }
 

@@ -1,6 +1,7 @@
 // Regras de compra e venda e apuração do mês (nucleo.py:259-375, 444-452,
 // 459-485, 520-524). A ordem das operações aritméticas é a do Python.
 
+import 'apuracao_medio.dart';
 import 'compat/numeros.dart';
 import 'compat/ordenacao.dart';
 import 'constantes.dart';
@@ -230,7 +231,11 @@ class Apuracao {
   };
 }
 
-Apuracao apurar(Mes d) {
+/// Apuração pelo método do mês: custo médio com o marcador, senão por compra.
+Apuracao apurar(Mes d) =>
+    d.metodo == metodoCustoMedio ? apurarCustoMedio(d) : apurarPorCompra(d);
+
+Apuracao apurarPorCompra(Mes d) {
   final ops = <Operacao>[];
   for (final l in d.lotes) {
     for (final v in l.vendas) {

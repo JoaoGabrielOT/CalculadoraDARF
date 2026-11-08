@@ -27,6 +27,7 @@ class IndicadoresAtivo {
     required this.qtdAberta,
     required this.custoRemanescente,
     required this.custoPorCompra,
+    required this.metodoResultado,
     required this.precoMedioCompras,
     required this.precoMedioVendasMes,
     required this.resultadoMes,
@@ -51,6 +52,10 @@ class IndicadoresAtivo {
 
   /// O custo é gerencial (Σ restante × preço), não o da posição fiscal.
   final bool custoPorCompra;
+
+  /// Método da apuração do mês consultado (`metodoCustoMedio` ou nulo = por
+  /// compra): vale para o resultado e a rentabilidade, mesmo sem saldo.
+  final String? metodoResultado;
 
   /// Custo remanescente / quantidade em aberto.
   final double? precoMedioCompras;
@@ -99,6 +104,7 @@ class IndicadoresAtivo {
     qtdAberta: qtdAberta,
     custoRemanescente: custoRemanescente,
     custoPorCompra: custoPorCompra,
+    metodoResultado: metodoResultado,
     precoMedioCompras: precoMedioCompras,
     precoMedioVendasMes: precoMedioVendasMes,
     resultadoMes: resultadoMes,
@@ -166,11 +172,13 @@ List<IndicadoresAtivo> indicadoresPorAtivo({
 
   final ops = <String, List<Operacao>>{};
   final acumulado = <String, double>{};
+  String? metodo;
   for (final n in ate) {
     final r = apurar(meses[n]!);
+    if (n == mes) metodo = r.metodo;
     for (final o in r.ops) {
-      // TODO(Tarefa 11): `o.resultadoFiscal ?? o.liquido`
-      acumulado[o.ticker] = (acumulado[o.ticker] ?? 0.0) + o.liquido;
+      acumulado[o.ticker] =
+          (acumulado[o.ticker] ?? 0.0) + (o.resultadoFiscal ?? o.liquido);
       if (n == mes) (ops[o.ticker] ??= []).add(o);
     }
   }
@@ -182,9 +190,12 @@ List<IndicadoresAtivo> indicadoresPorAtivo({
     final p = porTicker[t];
     final linhas = ops[t] ?? const <Operacao>[];
     final qtdVendida = linhas.fold(0, (s, o) => s + o.qtd);
-    final resultado = somaPython(linhas.map((o) => o.liquido));
-    // TODO(Tarefa 11): `o.custoFiscal ?? o.compra`
-    final custoVendido = somaPython(linhas.map((o) => o.compra));
+    final resultado = somaPython(
+      linhas.map((o) => o.resultadoFiscal ?? o.liquido),
+    );
+    final custoVendido = somaPython(
+      linhas.map((o) => o.custoFiscal ?? o.compra),
+    );
     final qtd = p?.qtd ?? 0;
     final custo = p == null || qtd == 0
         ? null
@@ -195,6 +206,7 @@ List<IndicadoresAtivo> indicadoresPorAtivo({
         qtdAberta: qtd,
         custoRemanescente: custo,
         custoPorCompra: p?.custoPorCompra ?? true,
+        metodoResultado: metodo,
         precoMedioCompras: custo == null ? null : custo / qtd,
         precoMedioVendasMes: qtdVendida == 0
             ? null

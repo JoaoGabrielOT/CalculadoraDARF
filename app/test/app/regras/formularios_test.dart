@@ -628,6 +628,13 @@ void main() {
         'baratas aumenta o resultado desta venda e reduz o das próximas; o '
         'resultado da posição inteira não muda.',
       );
+      expect(
+        textoEscolhaDasComprasPorCompra,
+        'A escolha das compras organiza o seu controle. Este mês ainda é '
+        'apurado por compra: o resultado fiscal acompanha as compras '
+        'escolhidas. A partir do mês de corte, a Receita usa o custo médio e '
+        'a escolha não muda o imposto.',
+      );
     });
   });
 }

@@ -1,6 +1,7 @@
 import 'package:calculadoradarf/nucleo/alocacao.dart';
 import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/apuracao.dart';
+import 'package:calculadoradarf/nucleo/apuracao_medio.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/erros.dart';
@@ -317,6 +318,91 @@ void main() {
               40 * 15.0 * taxaB3Daytrade,
           1e-9,
         ),
+      );
+    });
+  });
+
+  group('prévia no custo médio', () {
+    // Mês marcado: cópias A (100 @ 12) e B (100 @ 10) levadas de janeiro e a
+    // compra C (50 @ 12) de 02-10. Posição inicial derivada:
+    // 1.200,36 + 1.000,30 = {200, 2.200,66}.
+    Mes mes() {
+      final d = Mes(
+        mes: '2026-02',
+        lotes: [
+          Lote.fromJson({
+            ..._lote('A', '2026-01-05', 100, 12.0).toJson(),
+            'origem': 'a',
+          }),
+          Lote.fromJson({
+            ..._lote('B', '2026-01-10', 100, 10.0).toJson(),
+            'origem': 'b',
+          }),
+          _lote('C', '2026-02-10', 50, 12.0),
+        ],
+      );
+      marcarCustoMedio(d);
+      return d;
+    }
+
+    test('fiscal igual para alocações diferentes da mesma venda', () {
+      final d = mes();
+      final pa = previa(d, [ItemAlocacao(d.lotes[0], 100)], 15.0, '2026-02-20');
+      final pb = previa(d, [ItemAlocacao(d.lotes[1], 100)], 15.0, '2026-02-20');
+      expect(pb.gerencial, greaterThan(pa.gerencial + 1));
+      expect(pa.fiscal, closeTo(pb.fiscal, 1e-9));
+      expect(pa.custoMedio, isTrue);
+      // C entra em 02-10: + round(50 × 12 × 1,0003, 2) = 600,18 → {250,
+      // 2.800,84}. 100 em 02-20: round(100 × 2.800,84 / 250, 2) = 1.120,34
+      // baixados; 1.500 − 1.120,34 − 0,45 = 379,21 (1.500 ≤ 20.000, isento).
+      expect(pa.fiscal, closeTo(379.21, 1e-9));
+    });
+
+    test('seleção manual não muda a classificação de day trade', () {
+      final d = mes();
+      // Venda de 60 em 02-10, dia da compra C de 50: 50 são day trade
+      // qualquer que seja a compra consumida.
+      final travada = [
+        ItemAlocacao(d.lotes[2], 50, travado: true),
+        ItemAlocacao(d.lotes[0], 10),
+      ];
+      final antigas = [ItemAlocacao(d.lotes[0], 60)];
+      expect(
+        validarManual(
+          comprasElegiveis(d, 'PETR4', '2026-02-10'),
+          antigas,
+          60,
+          '2026-02-10',
+        ),
+        isNotNull,
+      );
+      Apuracao com(List<ItemAlocacao> sel) {
+        final c = Mes.fromJson(d.toJson());
+        final vs = montarVendas(sel, 'g', '2026-02-10', 15.0, 0);
+        for (final (k, i) in sel.indexed) {
+          c.lotes.firstWhere((l) => l.id == i.lote.id).vendas.add(vs[k]);
+        }
+        return apurar(c);
+      }
+
+      final r1 = com(travada);
+      final r2 = com(antigas);
+      expect(r1.ops.fold(0, (s, o) => s + o.qtdDt!), 50);
+      expect(r2.ops.fold(0, (s, o) => s + o.qtdDt!), 50);
+      expect(r1.impDt, closeTo(r2.impDt, 1e-9));
+      expect(r1.impSt, closeTo(r2.impSt, 1e-9));
+      expect(r1.lucroLiquido, closeTo(r2.lucroLiquido, 1e-9));
+      expect(
+        previa(d, travada, 15.0, '2026-02-10').fiscal,
+        closeTo(previa(d, antigas, 15.0, '2026-02-10').fiscal, 1e-9),
+      );
+    });
+
+    test('mês sem marcador avisa que o fiscal é por compra', () {
+      final d = Mes(mes: '2026-02', lotes: [_lote('A', '2026-02-05', 10, 1)]);
+      expect(
+        previa(d, [ItemAlocacao(d.lotes[0], 5)], 2.0, '2026-02-20').custoMedio,
+        isFalse,
       );
     });
   });

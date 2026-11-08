@@ -472,6 +472,7 @@ class ApuracaoLocal {
       qtdDt: p.qtdDt,
       qtdComum: p.qtdComum,
       aviso: aviso,
+      custoMedio: p.custoMedio,
     );
   }
 

@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:calculadoradarf/app/componentes/campo_data.dart';
+import 'package:calculadoradarf/app/regras/formularios.dart'
+    show textoEscolhaDasCompras, textoEscolhaDasComprasPorCompra;
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/formularios/abrir_formulario.dart';
 import 'package:calculadoradarf/app/telas/formularios/form_venda.dart'
@@ -730,6 +732,30 @@ void main() {
       expect(r.valor, isNotNull);
     });
 
+    testWidgets('mês por custo médio: rótulo e aviso do custo médio', (
+      t,
+    ) async {
+      final s = servicos([b1, b2]);
+      s.previaResp = const PreviaVenda(
+        linhas: [],
+        gerencial: 10,
+        fiscal: 7.5,
+        qtdDt: 0,
+        qtdComum: 150,
+        custoMedio: true,
+      );
+      await _abrir(t, s, ticker: 'BBAS3');
+      await t.enterText(campo('qtd'), '150');
+      await t.enterText(campo('preco'), '35');
+      await t.pump(meio);
+      expect(
+        find.textContaining('Resultado fiscal da operação (custo médio): '),
+        findsOneWidget,
+      );
+      expect(find.text(textoEscolhaDasCompras), findsOneWidget);
+      expect(find.text(textoEscolhaDasComprasPorCompra), findsNothing);
+    });
+
     testWidgets('painel fiscal x gerencial e prévia 300 ms depois da última '
         'tecla', (t) async {
       final s = servicos([b1, b2]);
@@ -758,10 +784,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Day trade: 0 ações; comum: 150 ações'), findsOneWidget);
-      expect(
-        find.textContaining('A escolha das compras organiza o seu controle'),
-        findsOneWidget,
-      );
+      expect(find.text(textoEscolhaDasComprasPorCompra), findsOneWidget);
       // automático lista as compras escolhidas pelo serviço
       expect(
         find.textContaining('05/10/2026  ·  100 ações  ·  custo '),

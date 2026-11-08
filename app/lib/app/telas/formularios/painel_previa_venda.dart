@@ -1,6 +1,7 @@
 // Painel "Fiscal x gerencial" da venda por quantidade: o resultado pelas
-// compras escolhidas, o resultado fiscal (custo médio), a parte de day trade e
-// o aviso de que a escolha das compras não muda o imposto. Só mostra o que o
+// compras escolhidas, o resultado fiscal (pelo método do mês), a parte de day
+// trade e o aviso de que, no custo médio, a escolha das compras não muda o
+// imposto. Só mostra o que o
 // serviço calculou (`previaVenda`); nada é recalculado aqui.
 
 import 'package:flutter/material.dart';
@@ -23,6 +24,8 @@ class PainelPreviaVenda extends StatelessWidget {
 
   /// Erro do serviço ao calcular a prévia (vazio quando não há).
   final String erro;
+
+  /// Método do mês ([PreviaVenda.custoMedio]): rótulo do fiscal e aviso.
   final bool custoMedio;
 
   @override
@@ -80,7 +83,12 @@ class PainelPreviaVenda extends StatelessWidget {
               ),
           ],
           const SizedBox(height: 4),
-          Text(textoEscolhaDasCompras, style: suave(11)),
+          Text(
+            custoMedio
+                ? textoEscolhaDasCompras
+                : textoEscolhaDasComprasPorCompra,
+            style: suave(11),
+          ),
         ],
       ),
     );

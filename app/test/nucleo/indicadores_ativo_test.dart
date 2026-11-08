@@ -210,4 +210,48 @@ void main() {
     final l = _calc(meses);
     expect(l.map((i) => i.ticker), ['PETR4']);
   });
+
+  test('ativo vendido por inteiro em mês de custo médio: resultado fiscal', () {
+    // PETR4 {100, 1.000,30} levada; venda das 100 @ 12,00 em 11-10:
+    //   baixado 1.000,30; resultado = 1.200 − 1.000,30 − 0,36 = 199,34.
+    //   rentabilidade = 199,34 / 1.000,30.
+    final d = Mes(
+      mes: '2026-11',
+      lotes: [
+        Lote(
+          id: 'P0',
+          ticker: 'PETR4',
+          tipo: 'Ação',
+          dataCompra: '2026-10-05',
+          qtd: 100,
+          preco: 10.0,
+          origem: 'P',
+          vendas: [_venda('V', 100, 12.0)],
+        ),
+      ],
+      metodo: metodoCustoMedio,
+      posicaoInicial: {'PETR4': PosicaoFiscal(qtd: 100, custo: 1000.30)},
+      prejuizoAnterior: PrejuizoAcumulado(),
+    );
+    final i = _de(_calc({'2026-11': d}), 'PETR4');
+    expect(i.qtdAberta, 0);
+    // sem saldo o custo continua "por compra", mas o resultado é fiscal
+    expect(i.custoPorCompra, isTrue);
+    expect(i.metodoResultado, metodoCustoMedio);
+    expect(i.resultadoMes, closeTo(199.34, 1e-9));
+    expect(i.resultadoAcumulado, closeTo(199.34, 1e-9));
+    expect(i.rentabilidadeRealizada, closeTo(199.34 / 1000.30, 1e-9));
+  });
+
+  test('mês por compra não tem método fiscal no resultado', () {
+    final i = _de(
+      _calc(
+        _aberto([
+          _lote('A', 'PETR4', 100, 10.0, vendas: [_venda('V1', 50, 12.0)]),
+        ]),
+      ),
+      'PETR4',
+    );
+    expect(i.metodoResultado, isNull);
+  });
 }

@@ -956,9 +956,9 @@ class _FormVendaState extends State<FormVenda>
           PainelPreviaVenda(
             previa: _previa,
             erro: _erroPrevia.isNotEmpty ? _erroPrevia : _erroAutomatico(),
-            // TODO(Tarefa 12): trocar por `custoMedio` do marcador de método
-            // do mês; até lá o fiscal da prévia sai de `apurar` por compra.
-            custoMedio: false,
+            // método do mês que calculou o fiscal; sem prévia, o do mês aberto
+            custoMedio:
+                _previa?.custoMedio ?? _dados.metodo == metodoCustoMedio,
           ),
           _resumoNovo(),
         ],

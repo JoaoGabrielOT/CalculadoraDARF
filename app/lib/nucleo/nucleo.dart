@@ -3,6 +3,7 @@
 export 'ambiente.dart';
 export 'alocacao.dart';
 export 'apuracao.dart';
+export 'apuracao_medio.dart';
 export 'armazenamento.dart';
 export 'armazenamento_arquivos.dart';
 export 'caixa.dart';

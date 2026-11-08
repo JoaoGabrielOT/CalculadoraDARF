@@ -41,6 +41,7 @@ ServicosFalsos _servicos() {
     fiscal: 1650.4,
     qtdDt: 0,
     qtdComum: 150,
+    custoMedio: true,
   );
   return s;
 }
