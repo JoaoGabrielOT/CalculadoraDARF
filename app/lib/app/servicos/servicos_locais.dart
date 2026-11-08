@@ -27,6 +27,7 @@ class ServicosLocais implements ServicosApp {
     Duration atrasoAgendamento = const Duration(milliseconds: 1500),
     NoticiasLocal Function(void Function(EventoServico))? noticias,
     AtualizadorLocal Function(void Function(EventoServico))? atualizador,
+    this._fazerBackup,
   }) {
     // Quem não usa notícias nem atualização (testes de apuração) não monta.
     _noticiasLocal = noticias?.call(_emitir);
@@ -54,6 +55,10 @@ class ServicosLocais implements ServicosApp {
   }
 
   final Repositorio _repo;
+
+  /// Backup da pasta de dados (`plataforma/backup.dart`). Sem ele (testes) a
+  /// migração dos dados não roda.
+  final String Function()? _fazerBackup;
   final StreamController<EventoServico> _eventos =
       StreamController<EventoServico>.broadcast();
   late final ContaLocal _conta;
@@ -136,6 +141,20 @@ class ServicosLocais implements ServicosApp {
       cfg.pendente = true;
       _repo.gravarConfig(cfg);
       _conta.agendar();
+    }
+
+    // Migração dos dados (§11), depois da correção dos tipos e só com a
+    // config legível (o id aplicado é gravado nela).
+    final backup = _fazerBackup;
+    if (backup != null && cfg != null) {
+      final r = await migrarCustoMedio(
+        _repo,
+        fazerBackup: backup,
+        sincronizar: _conta.sincronizarAgora,
+      );
+      if (r.erro != null) _emitir(const EventoMigracao(textoBackupFalhou));
+      // a coluna 14 do Resumo sobe na próxima sincronização
+      if (r.aplicada) _conta.agendar();
     }
 
     if (erroConfig != null) _emitir(EventoConfigIlegivel(erroConfig));

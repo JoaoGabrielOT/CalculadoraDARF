@@ -104,6 +104,90 @@ void main() {
       },
     );
 
+    group('migração 2.1-custo-medio', () {
+      ServicosLocais criar(String Function() backup) => ServicosLocais(
+        repo: repo,
+        yahoo: yahooSemRede(),
+        conta: ContaFalsa(),
+        abrirUrl: (_) async {},
+        atrasoAgendamento: const Duration(hours: 1),
+        fazerBackup: backup,
+      );
+
+      test('iniciar faz o backup, marca o mês aberto e registra', () async {
+        gravarMes('2026-09', [compra('L0', data: '2026-09-01')], fechado: true);
+        gravarMes('2026-10', [compra('L1', origem: 'L0', data: '2026-09-01')]);
+        final antes = disco.ler('2026-09.json');
+        var backups = 0;
+        final s = criar(() {
+          backups++;
+          return 'backup/pre';
+        });
+        final ev = <EventoServico>[];
+        s.eventos.listen(ev.add);
+        final e = await s.iniciar();
+        expect(backups, 1);
+        expect(e.mesInicial, '2026-10');
+        expect(repo.carregar('2026-10').metodo, metodoCustoMedio);
+        expect(repo.carregar('2026-10').posicaoInicial!['PETR4']!.qtd, 100);
+        expect(disco.ler('2026-09.json'), antes);
+        expect(repo.lerConfig().migracoes, [idMigracaoCustoMedio]);
+        // a coluna 14 sobe na próxima sincronização
+        expect(repo.lerConfig().pendente, isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(ev.whereType<EventoMigracao>(), isEmpty);
+        await s.iniciar();
+        expect(backups, 1);
+        await s.encerrar();
+      });
+
+      test(
+        'backup que falha: nada marcado e EventoMigracao com o aviso',
+        () async {
+          gravarMes('2026-10', [compra('L1')]);
+          final antes = disco.ler('2026-10.json');
+          final s = criar(() => throw Exception('arquivo em uso'));
+          final ev = <EventoServico>[];
+          s.eventos.listen(ev.add);
+          await s.iniciar();
+          await Future<void>.delayed(Duration.zero);
+          expect(disco.ler('2026-10.json'), antes);
+          expect(repo.lerConfig().migracoes, isEmpty);
+          expect(
+            ev.whereType<EventoMigracao>().single.texto,
+            textoBackupFalhou,
+          );
+          expect(
+            textoBackupFalhou,
+            'Não foi possível fazer o backup dos dados; o cálculo por custo '
+            'médio não foi ativado. Feche outros programas que usem a pasta de '
+            'dados e abra o app de novo.',
+          );
+          await s.encerrar();
+        },
+      );
+
+      test('config ilegível: a migração não roda', () async {
+        disco.gravar('config.json', '{');
+        gravarMes('2026-10', [compra('L1')]);
+        var backups = 0;
+        final s = criar(() {
+          backups++;
+          return 'backup/pre';
+        });
+        await s.iniciar();
+        expect(backups, 0);
+        expect(repo.carregar('2026-10').metodo, isNull);
+        await s.encerrar();
+      });
+    });
+
+    test('sem fazerBackup (testes) a migração não roda', () async {
+      gravarMes('2026-10', [compra('L1')]);
+      await servicos.iniciar();
+      expect(repo.carregar('2026-10').metodo, isNull);
+    });
+
     test('iniciar sem correção não marca pendente', () async {
       gravarMes('2026-10', [compra('L1')]);
       await servicos.iniciar();

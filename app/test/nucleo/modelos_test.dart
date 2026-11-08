@@ -130,6 +130,64 @@ void main() {
       expect(jsonEncode(mes.toJson()), jsonEncode(json));
     });
 
+    test('marcador com posição ou prejuízo de tipo errado é inválido', () {
+      Map<String, Object?> json(Map<String, Object?> extra) => {
+        'mes': '2026-12',
+        'lotes': <Object?>[],
+        'metodo': 'custo_medio',
+        ...extra,
+      };
+      for (final extra in <Map<String, Object?>>[
+        {'posicao_inicial': 'x'},
+        {'posicao_inicial': null},
+        {'posicao_inicial': <Object?>[]},
+        {
+          'posicao_inicial': {'PETR4': 5},
+        },
+        {
+          'posicao_inicial': {
+            'PETR4': {'qtd': '100', 'custo': 1.0},
+          },
+        },
+        {
+          'posicao_inicial': {
+            'PETR4': {'qtd': 100, 'custo': '1'},
+          },
+        },
+        {
+          'posicao_inicial': {
+            'PETR4': {'custo': 1.0},
+          },
+        },
+        {
+          'posicao_inicial': {
+            'PETR4': {'qtd': 100, 'custo': double.nan},
+          },
+        },
+        {'prejuizo_anterior': 'x'},
+        {
+          'prejuizo_anterior': {'comum': 1.0},
+        },
+        {
+          'prejuizo_anterior': {'comum': 1.0, 'day_trade': true},
+        },
+      ]) {
+        expect(
+          () => Mes.fromJson(json(extra)),
+          throwsFormatException,
+          reason: '$extra',
+        );
+      }
+      // marcador sem posição nem prejuízo continua válido
+      final so = Mes.fromJson(json({}));
+      expect(so.metodo, metodoCustoMedio);
+      expect(so.posicaoInicial, isNull);
+      // sem o marcador os campos seguem como antes (sem validação nova)
+      final antigo = Mes.fromJson({'mes': '2026-12', 'posicao_inicial': 'x'});
+      expect(antigo.metodo, isNull);
+      expect(antigo.posicaoInicial, isNull);
+    });
+
     test('Apuracao do método antigo tem os campos novos nulos', () {
       final mes = Mes.fromJson({
         'mes': '2026-05',

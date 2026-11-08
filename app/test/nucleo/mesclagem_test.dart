@@ -217,6 +217,28 @@ void main() {
       expect(campos(r)['prejuizo_anterior'], {'comum': 0.0, 'day_trade': 7.5});
     });
 
+    test('dois marcadores: o lado sem posição não vence o que tem', () {
+      final semPosicao = marcado('2026-11', mod: 30)..posicaoInicial = null;
+      expect(campos(mesclarMes(marcado('2026-11'), semPosicao)!), esperado);
+      expect(campos(mesclarMes(semPosicao, marcado('2026-11'))!), esperado);
+    });
+
+    test('remoto com marcador corrompido não apaga a posição local', () {
+      // a coluna 14 traz o mês certo e um mod maior, mas a posição é texto:
+      // o marcador inteiro é ignorado e o local fica
+      final linha = montarLinhas([
+        semMarcador('2026-11', mod: 30),
+      ], Config())['Resumo']!.single;
+      linha[13] =
+          '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":"x"}';
+      final remoto = reconstruir({
+        'Resumo': [linha],
+      }).meses['2026-11']!;
+      expect(remoto.metodo, isNull);
+      final r = mesclarMes(marcado('2026-11'), remoto)!;
+      expect(campos(r), esperado);
+    });
+
     test('sem marcador nos dois lados: nenhum campo novo', () {
       final r = mesclarMes(semMarcador('2026-11'), semMarcador('2026-11'))!;
       expect(campos(r), isEmpty);

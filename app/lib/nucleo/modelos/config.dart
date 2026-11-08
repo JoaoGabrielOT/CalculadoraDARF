@@ -135,6 +135,19 @@ class Config {
   List<Meta> metas;
   Map<String, Object?> extras;
 
+  /// Ids das migrações de dados aplicadas neste aparelho (`migracoes.dart`),
+  /// guardados nas [extras] (não vão para a planilha).
+  List<String> get migracoes {
+    final v = extras['migracoes'];
+    return [
+      if (v is List)
+        for (final x in v)
+          if (x is String) x,
+    ];
+  }
+
+  set migracoes(List<String> ids) => extras['migracoes'] = [...ids];
+
   List<String>? _ordem;
 
   Map<String, Object?> toJson() => emOrdem({

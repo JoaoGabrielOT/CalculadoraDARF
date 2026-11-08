@@ -115,8 +115,37 @@ class Mes implements ComMod {
   }) : lotes = lotes ?? [],
        excluidos = excluidos ?? {};
 
-  /// Como `carregar`: `excluidos` ausente vira `{}`.
-  factory Mes.fromJson(Map<String, Object?> json) => Mes(
+  /// Como `carregar`: `excluidos` ausente vira `{}`. Marcador de custo médio
+  /// com posição ou prejuízo de tipo errado é dado corrompido
+  /// (`FormatException`, como uma `qtd` 1.5).
+  factory Mes.fromJson(Map<String, Object?> json) {
+    _validarMarcador(json);
+    return _mesDe(json);
+  }
+
+  static void _validarMarcador(Map<String, Object?> json) {
+    if (json['metodo'] != metodoCustoMedio) return;
+    bool numero(Object? v) => v is num && v.isFinite;
+    bool inteiro(Object? v) =>
+        v is int || (v is double && v.isFinite && v == v.truncate());
+    if (json.containsKey('posicao_inicial')) {
+      final p = json['posicao_inicial'];
+      if (p is! Map ||
+          p.values.any(
+            (x) => x is! Map || !inteiro(x['qtd']) || !numero(x['custo']),
+          )) {
+        throw const FormatException('posicao_inicial inválida');
+      }
+    }
+    if (json.containsKey('prejuizo_anterior')) {
+      final p = json['prejuizo_anterior'];
+      if (p is! Map || !numero(p['comum']) || !numero(p['day_trade'])) {
+        throw const FormatException('prejuizo_anterior inválido');
+      }
+    }
+  }
+
+  static Mes _mesDe(Map<String, Object?> json) => Mes(
     mes: lerTexto(json['mes']),
     fechado: lerBool(json['fechado']),
     darfAnterior: lerDouble(json['darf_anterior']),

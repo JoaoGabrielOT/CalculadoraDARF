@@ -27,6 +27,7 @@ export 'metas/descricao.dart';
 export 'metas/deteccao.dart';
 export 'metas/preco_alvo.dart';
 export 'metas/verificacao.dart';
+export 'migracoes.dart';
 export 'modelos/barras.dart';
 export 'modelos/com_mod.dart';
 export 'modelos/config.dart';

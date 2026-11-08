@@ -483,6 +483,8 @@ class EstadoApp extends ChangeNotifier {
         unawaited(_atualizarMetas());
       case EventoAviso():
         avisar(e.titulo, semPrefixoException(e.texto));
+      case EventoMigracao():
+        avisar(tituloBackupFalhou, e.texto);
       case EventoConfigIlegivel():
         erroConfig = e.mensagem;
         notifyListeners();

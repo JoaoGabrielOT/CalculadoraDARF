@@ -171,12 +171,32 @@ void main() {
         '{"mes":"2026-11","metodo":"custo_medio",'
             '"posicao_inicial":{"PETR4":{"qtd":1.5,"custo":1.0}}}',
         12,
+        // marcador com posição ou prejuízo de tipo errado: inválido inteiro
+        // (não pode vencer a mesclagem e apagar a posição local)
+        '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":"x"}',
+        '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":null}',
+        '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":[1]}',
+        '{"mes":"2026-11","metodo":"custo_medio",'
+            '"posicao_inicial":{"PETR4":5}}',
+        '{"mes":"2026-11","metodo":"custo_medio",'
+            '"posicao_inicial":{"PETR4":{"qtd":"100","custo":1.0}}}',
+        '{"mes":"2026-11","metodo":"custo_medio",'
+            '"posicao_inicial":{"PETR4":{"qtd":100,"custo":"1"}}}',
+        '{"mes":"2026-11","metodo":"custo_medio",'
+            '"posicao_inicial":{"PETR4":{"qtd":100}}}',
+        '{"mes":"2026-11","metodo":"custo_medio","prejuizo_anterior":7}',
+        '{"mes":"2026-11","metodo":"custo_medio",'
+            '"prejuizo_anterior":{"comum":"1","day_trade":0.0}}',
+        '{"mes":"2026-11","metodo":"custo_medio",'
+            '"posicao_inicial":{"PETR4":{"qtd":100,"custo":1.0}},'
+            '"prejuizo_anterior":{"comum":1.0}}',
       ]) {
         final d = reconstruir({
           'Resumo': [resumo('11/2026', v)],
         }).meses['2026-11']!;
         expect(d.metodo, isNull, reason: '$v');
         expect(d.posicaoInicial, isNull, reason: '$v');
+        expect(d.prejuizoAnterior, isNull, reason: '$v');
       }
     });
   });

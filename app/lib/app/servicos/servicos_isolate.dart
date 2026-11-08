@@ -17,6 +17,7 @@ import 'package:http/http.dart' as http;
 
 import '../../integracoes/integracoes.dart';
 import '../../nucleo/nucleo.dart';
+import '../plataforma/backup.dart';
 import 'api.dart';
 import 'eventos.dart';
 import 'locais/atualizador_local.dart';
@@ -116,6 +117,7 @@ class _ServicosReais extends ServicosLocais {
     required super.abrirUrl,
     required super.noticias,
     required super.atualizador,
+    required super.fazerBackup,
     required this.cliente,
   });
 
@@ -170,6 +172,7 @@ ServicosApp criarServicosLocais(
       windows: p.windows,
       emitir: emitirLocal,
     ),
+    fazerBackup: () => fazerBackup(p.pastaDados, DateTime.now()),
     cliente: c,
   );
   s.eventos.listen(emitir);

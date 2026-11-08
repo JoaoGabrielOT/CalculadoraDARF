@@ -104,6 +104,14 @@ void main() {
       expect(e.erroConfig, 'ilegível');
     });
 
+    test('backup da migração que falhou vira aviso', () async {
+      final (e, s, _) = await _criar();
+      s.eventosFalsos.add(const EventoMigracao(textoBackupFalhou));
+      await _soltar();
+      expect(e.avisos.single.titulo, tituloBackupFalhou);
+      expect(e.avisos.single.texto, textoBackupFalhou);
+    });
+
     test('trocarTema muda na hora e chama salvarPreferencias', () async {
       final (e, s, _) = await _criar();
       final pronto = e.trocarTema(TemaVisual.terminal);
