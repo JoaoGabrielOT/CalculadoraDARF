@@ -1,6 +1,7 @@
 // Reconstrução das posições em aberto numa data de corte (entrega 2.1, §7.1).
 // Função pura: não grava nada e não gera movimentação, resultado ou imposto.
 
+import 'apuracao_medio.dart';
 import 'compat/ordenacao.dart';
 import 'datas.dart';
 import 'modelos/lote.dart';
@@ -141,6 +142,16 @@ List<PosicaoAtivo> posicoesEm(Map<String, Mes> meses, String dataCorte) {
       somar(l, raiz.$1, l.qtd, l.qtd - vendidas);
     });
   }
+  final mesFiscal =
+      abertos.isNotEmpty &&
+          compararTexto(dataCorte.substring(0, 7), abertos.first) >= 0
+      ? abertos.first
+      : dataCorte.substring(0, 7);
+  final fiscal = _fiscalEm(
+    meses[mesFiscal],
+    mesDeCorte(meses.values),
+    dataCorte,
+  );
   final tickers = ordenadoCom(porTicker.keys, compararTexto);
   return [
     for (final t in tickers)
@@ -156,8 +167,40 @@ List<PosicaoAtivo> posicoesEm(Map<String, Mes> meses, String dataCorte) {
           final c = compararTexto(a.dataCompra, b.dataCompra);
           return c != 0 ? c : compararTexto(a.loteId, b.loteId);
         }),
-      ),
+      )..custoFiscal = _custoSeBate(fiscal?[t], porTicker[t]!),
   ];
+}
+
+/// Custo fiscal só quando a quantidade fiscal bate com a dos lotes; senão o
+/// saldo está inconsistente e o custo fica "por compra".
+double? _custoSeBate(PosicaoFiscal? f, List<CompraNaPosicao> compras) =>
+    f != null && f.qtd == compras.fold(0, (s, c) => s + c.restante)
+    ? f.custo
+    : null;
+
+/// Posição fiscal em [dataCorte] pelo mês [m] quando ele usa o custo médio: a
+/// posição inicial do mês (derivada dos lotes levados, se ainda sem marcador)
+/// mais as compras e vendas até a data, pela mesma apuração do mês.
+Map<String, PosicaoFiscal>? _fiscalEm(Mes? m, String? corte, String dataCorte) {
+  if (m == null || !usaCustoMedio(m, corte)) return null;
+  final ate = Mes(
+    mes: m.mes,
+    metodo: metodoCustoMedio,
+    posicaoInicial: m.posicaoInicial ?? posicaoInicialDerivada(m),
+    prejuizoAnterior: m.prejuizoAnterior,
+    lotes: [
+      for (final l in m.lotes)
+        if (compararTexto(l.dataCompra, dataCorte) <= 0)
+          Lote.fromJson({
+            ...l.toJson(),
+            'vendas': [
+              for (final v in l.vendas)
+                if (compararTexto(v.data, dataCorte) <= 0) v.toJson(),
+            ],
+          }),
+    ],
+  );
+  return apurarCustoMedio(ate).posicaoFinal;
 }
 
 /// Cadeia sem lote raiz (dados parciais): a compra mais antiga que não vem de

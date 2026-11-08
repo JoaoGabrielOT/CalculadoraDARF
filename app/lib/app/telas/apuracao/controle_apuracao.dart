@@ -651,10 +651,21 @@ class ControleApuracao extends ChangeNotifier {
   }
 
   /// Antes de fechar, verifica as metas do mês: uma meta já atingida é
-  /// registrada e uma consulta que falhou bloqueia o fechamento.
+  /// registrada e uma consulta que falhou bloqueia o fechamento. Saldo
+  /// inconsistente no custo médio bloqueia antes de tudo (o serviço também
+  /// recusa).
   Future<void> fecharMes(BuildContext c) async {
     final atual = visao;
     if (atual == null || !atual.editavel || fechando) return;
+    final inconsistentes = atual.apuracao.inconsistentes;
+    if (inconsistentes.isNotEmpty) {
+      await avisar(
+        c,
+        'Não foi possível fechar o mês',
+        bloqueioSaldoInconsistente(inconsistentes),
+      );
+      return;
+    }
     final mes = atual.mes;
     fechando = true;
     notifyListeners();

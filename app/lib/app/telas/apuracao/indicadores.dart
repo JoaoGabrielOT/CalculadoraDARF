@@ -96,8 +96,7 @@ class CartoesRegime extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = apuracao;
-    final dt = r.ops.where((o) => o.dt).length;
-    final st = r.ops.length - dt;
+    final (st, dt) = vendasPorRegime(r);
     String vendas(int n) => '$n venda${n != 1 ? 's' : ''}';
     return IntrinsicHeight(
       child: Row(

@@ -5,6 +5,7 @@ import 'dart:async';
 
 import '../ambiente.dart';
 import '../apuracao.dart';
+import '../apuracao_medio.dart';
 import '../compat/ordenacao.dart';
 import '../datas.dart';
 import '../erros.dart';
@@ -12,6 +13,7 @@ import '../formatacao.dart';
 import '../modelos/barras.dart';
 import '../modelos/config.dart';
 import '../modelos/lote.dart';
+import '../modelos/mes.dart';
 import '../modelos/meta.dart';
 import '../planilha/mesclagem.dart';
 import '../repositorio.dart';
@@ -570,8 +572,9 @@ Future<RelatorioMetas?> verificar(
 
 /// Roda a verificação antes de fechar o mês, para que um alvo já atingido nele
 /// seja registrado antes de a meta virar inválida. Bloqueia (não fecha)
-/// quando a consulta falhou para alguma meta ativa daquele mês ou quando outra
-/// verificação está em andamento.
+/// quando a consulta falhou para alguma meta ativa daquele mês, quando outra
+/// verificação está em andamento ou quando o mês pelo custo médio tem saldo
+/// inconsistente (antes de consultar qualquer coisa).
 Future<PreparoFechamento> prepararFechamento(
   Repositorio repo,
   Config cfg,
@@ -582,6 +585,14 @@ Future<PreparoFechamento> prepararFechamento(
   Config Function()? releitura,
 }) async {
   final meses = repo.carregarMeses();
+  final d = meses[mes];
+  if (d != null && d.metodo == metodoCustoMedio) {
+    final inconsistentes = apurar(d).inconsistentes;
+    if (inconsistentes.isNotEmpty) {
+      return PreparoFechamento()
+        ..bloqueio = bloqueioSaldoInconsistente(inconsistentes);
+    }
+  }
   final doMes = [
     for (final m in metasAtivas(cfg))
       if (cadeia(meses, m.loteId).any((c) => c.mes == mes)) m,

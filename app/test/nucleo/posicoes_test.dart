@@ -289,4 +289,101 @@ void main() {
     expect(dataCorteDoMes('2026-12', '2026-11-07'), '2026-12-31');
     expect(dataCorteDoMes('2026-11', '2026-11-07'), '2026-11-07');
   });
+
+  group('custo fiscal', () {
+    /// 03/2026 aberto pelo custo médio: 100 levadas a R$ 1.000,30; compra X
+    /// de 100 a 11,00 em 05/03 e venda de 50 de X a 12,00 em 20/03.
+    Map<String, Mes> meses() => {
+      '2026-02': _mes('2026-02', [
+        Lote(
+          id: 'P',
+          ticker: 'PETR4',
+          tipo: 'Ação',
+          dataCompra: '2026-02-10',
+          qtd: 100,
+          preco: 10.0,
+        ),
+      ]),
+      '2026-03': Mes(
+        mes: '2026-03',
+        metodo: metodoCustoMedio,
+        posicaoInicial: {'PETR4': PosicaoFiscal(qtd: 100, custo: 1000.30)},
+        prejuizoAnterior: PrejuizoAcumulado(),
+        lotes: [
+          Lote(
+            id: 'P~2026-03',
+            origem: 'P',
+            ticker: 'PETR4',
+            tipo: 'Ação',
+            dataCompra: '2026-02-10',
+            qtd: 100,
+            preco: 10.0,
+          ),
+          Lote(
+            id: 'X',
+            ticker: 'PETR4',
+            tipo: 'Ação',
+            dataCompra: '2026-03-05',
+            qtd: 100,
+            preco: 11.0,
+            vendas: [_venda('V1', '2026-03-20', 50)],
+          ),
+        ],
+      ),
+    };
+
+    test('posição fiscal na data de corte', () {
+      // compra: 1000,30 + arredondar(100 × 11 × 1,0003) = 2100,63 (200)
+      // venda: baixa arredondar(50 × 2100,63 / 200) = 525,16 → 1575,47 (150)
+      final fim = posicoesEm(meses(), '2026-03-31').single;
+      expect(fim.qtd, 150);
+      expect(fim.custoPorCompra, isFalse);
+      expect(fim.custoFiscal, closeTo(1575.47, 1e-9));
+      expect(fim.precoMedio, closeTo(1575.47 / 150, 1e-12));
+      expect(fim.custoGerencial, 1550.0);
+      final antes = posicoesEm(meses(), '2026-03-10').single;
+      expect(antes.qtd, 200);
+      expect(antes.custoFiscal, closeTo(2100.63, 1e-9));
+      final inicio = posicoesEm(meses(), '2026-03-01').single;
+      expect(inicio.qtd, 100);
+      expect(inicio.custoFiscal, closeTo(1000.30, 1e-9));
+    });
+
+    test('mês por compra continua sem custo fiscal', () {
+      final fev = posicoesEm(meses(), '2026-02-28').single;
+      expect(fev.custoPorCompra, isTrue);
+      expect(fev.custoFiscal, isNull);
+    });
+
+    test('mês aberto depois do corte sem marcador usa a posição derivada', () {
+      final m = {
+        '2026-03': Mes(mes: '2026-03', fechado: true, metodo: metodoCustoMedio),
+        '2026-04': Mes(
+          mes: '2026-04',
+          lotes: [
+            Lote(
+              id: 'P~2026-04',
+              origem: 'P',
+              ticker: 'PETR4',
+              tipo: 'Ação',
+              dataCompra: '2026-02-10',
+              qtd: 100,
+              preco: 10.0,
+            ),
+          ],
+        ),
+      };
+      // derivada: arredondar(100 × 10 × 1,0003) = 1000,30
+      final p = posicoesEm(m, '2026-04-30').single;
+      expect(p.custoFiscal, closeTo(1000.30, 1e-9));
+    });
+
+    test('quantidade fiscal diferente não inventa custo', () {
+      final m = meses();
+      m['2026-03']!.posicaoInicial = {
+        'PETR4': PosicaoFiscal(qtd: 80, custo: 800.0),
+      };
+      expect(posicoesEm(m, '2026-03-31').single.custoFiscal, isNull);
+    });
+  });
 }

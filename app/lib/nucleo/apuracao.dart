@@ -24,9 +24,32 @@ Lote semVenda(Lote l, String vendaId) => Lote.fromJson({
   ],
 });
 
+/// Compra com data anterior ao mês [d] pelo custo médio ficaria fora da
+/// posição inicial e deixaria o saldo inconsistente. Devolve a mensagem ou
+/// nulo.
+String? erroCompraForaDoMes(Mes d, String dataCompra) {
+  final inicio = '${d.mes}-01';
+  if (d.metodo != metodoCustoMedio || compararTexto(dataCompra, inicio) >= 0) {
+    return null;
+  }
+  return 'Em meses pelo custo médio, a compra precisa ter data dentro do '
+      'mês, a partir de ${fmtData(inicio)}.';
+}
+
 /// Valida a edição de uma compra que já pode ter vendas. Devolve a mensagem de
-/// erro ou nulo.
-String? erroEdicaoLote(Lote lote, Lote novo) {
+/// erro ou nulo. Em [mes] pelo custo médio, a cópia levada de um mês anterior
+/// não muda quantidade nem preço, e a compra do mês não sai do mês.
+String? erroEdicaoLote(Lote lote, Lote novo, {Mes? mes}) {
+  if (mes != null && mes.metodo == metodoCustoMedio) {
+    if (lote.origem != null && lote.origem!.isNotEmpty) {
+      if (novo.qtd != lote.qtd || novo.preco != lote.preco) {
+        return textoCopiaLevadaTravada;
+      }
+    } else {
+      final msg = erroCompraForaDoMes(mes, novo.dataCompra);
+      if (msg != null) return msg;
+    }
+  }
   final ja = vendido(lote);
   if (novo.qtd < ja) {
     return 'A quantidade não pode ser menor que a já vendida ($ja).';
@@ -184,6 +207,8 @@ class Apuracao {
     this.prejuizoDtFinal,
     this.posicaoFinal,
     this.inconsistentes = const [],
+    this.irrfSwingPorDia,
+    this.resultadoDtPorDia,
   });
 
   final List<Operacao> ops;
@@ -208,6 +233,11 @@ class Apuracao {
   final double? prejuizoDtFinal;
   final Map<String, PosicaoFiscal>? posicaoFinal;
   final List<String> inconsistentes;
+
+  /// Custo médio: IRRF das vendas comuns e resultado do day trade por dia,
+  /// antes do corte de R$ 1 (o caixa lança o IRRF a partir deles).
+  final Map<String, double>? irrfSwingPorDia;
+  final Map<String, double>? resultadoDtPorDia;
 
   /// O que o mês fechado grava em `resumo` (sem `ops`).
   ResumoApuracao get resumo => ResumoApuracao(
@@ -344,7 +374,14 @@ String mensagemFechamento(Apuracao r, String prox) {
   } else {
     msg = 'Não há DARF a pagar neste mês.';
   }
-  return '$msg\n\nAtivos não vendidos foram levados para ${fmtMes(prox)}.';
+  final comum = r.prejuizoComumFinal ?? 0.0;
+  final dt = r.prejuizoDtFinal ?? 0.0;
+  final prejuizo = comum > 0 || dt > 0
+      ? '\n\nPrejuízo levado para o próximo mês: comum ${brl(comum)}; '
+            'day trade ${brl(dt)}'
+      : '';
+  return '$msg$prejuizo\n\nAtivos não vendidos foram levados para '
+      '${fmtMes(prox)}.';
 }
 
 /// Ação ou BDR pelo código de negociação da B3: BDRs terminam em 31, 32, 33,

@@ -121,6 +121,78 @@ void main() {
     );
   });
 
+  group('custo médio', () {
+    VisaoMes visao({List<String> inconsistentes = const []}) => VisaoMes(
+      mes: '2026-10',
+      dados: mesAbertoExemplo()..metodo = metodoCustoMedio,
+      apuracao: Apuracao(
+        ops: [],
+        vendasAcoesSt: 0,
+        isento: true,
+        bruto: 0,
+        custos: 12.34,
+        impSt: 0,
+        impDt: 0,
+        impostoTotal: 0,
+        irrf: 0,
+        lucroLiquido: 0,
+        darfMes: 0,
+        darfAnterior: 0,
+        darf: 0,
+        metodo: metodoCustoMedio,
+        inconsistentes: inconsistentes,
+      ),
+    );
+
+    testWidgets('inconsistência bloqueia o fechamento e aparece na tela', (
+      t,
+    ) async {
+      final s = ServicosFalsos();
+      s.visoes['2026-10'] = visao(inconsistentes: ['PETR4', 'VALE3']);
+      await _montar(t, servicos: s);
+      expect(
+        find.text(
+          'Saldo inconsistente em PETR4: confira as vendas\n'
+          'Saldo inconsistente em VALE3: confira as vendas',
+        ),
+        findsOneWidget,
+      );
+      await t.tap(_botaoFechar);
+      await t.pumpAndSettle();
+      expect(find.text('Não foi possível fechar o mês'), findsOneWidget);
+      expect(
+        _noDialogo(
+          'O mês não pode ser fechado com saldo inconsistente.\n\n'
+          'Saldo inconsistente em PETR4: confira as vendas\n'
+          'Saldo inconsistente em VALE3: confira as vendas',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Fechar 10/2026'), findsNothing);
+      expect(_chamadasA(s, 'prepararFechamento'), 0);
+      expect(_chamadasA(s, 'fecharMes'), 0);
+    });
+
+    testWidgets('rótulo das taxas sem as compras da posição', (t) async {
+      final s = ServicosFalsos();
+      s.visoes['2026-10'] = visao();
+      await _montar(t, servicos: s);
+      expect(find.text('Taxas B3 + corretagem'), findsNothing);
+      expect(
+        find.text('Taxas B3 + corretagem (vendas e day trade)'),
+        findsOneWidget,
+      );
+      expect(
+        find.byTooltip(
+          'No custo médio, as taxas e a corretagem das compras que ficam na '
+          'posição entram no custo médio.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Saldo inconsistente'), findsNothing);
+    });
+  });
+
   testWidgets('acima do limite e sem IRRF: textos de aviso e R\$ 0,00', (
     t,
   ) async {

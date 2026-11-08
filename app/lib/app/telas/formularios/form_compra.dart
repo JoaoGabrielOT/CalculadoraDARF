@@ -132,6 +132,7 @@ class _FormCompraState extends State<FormCompra>
       preco: _preco.text,
       hoje: ambiente.hoje(),
       editando: widget.editar,
+      mes: widget.visao.dados,
     );
     switch (v) {
       case Invalido(:final mensagem):

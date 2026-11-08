@@ -210,7 +210,8 @@ class LancamentoCaixa {
 /// Compra (parte que não virou day trade): -(valor + taxas B3). Venda swing:
 /// +(valor - taxas B3). Day trade: só o resultado do dia. IRRF retido entra
 /// como débito no dia. Compras levadas de um mês para o outro (origem) não
-/// geram novo débito.
+/// geram novo débito. No mês pelo custo médio, o IRRF é o da apuração (day
+/// trade por ativo no dia), não o de cada compra vendida.
 List<LancamentoCaixa> lancamentosCaixa(Map<String, Mes> meses) {
   final itens = <LancamentoCaixa>[];
   final irrfStDia = <String, double>{};
@@ -270,7 +271,18 @@ List<LancamentoCaixa> lancamentosCaixa(Map<String, Mes> meses) {
   }
 
   for (final chave in ordenadoPor(meses.keys, (m) => [m])) {
-    for (final l in meses[chave]!.lotes) {
+    final mes = meses[chave]!;
+    final custoMedio = mes.metodo == metodoCustoMedio;
+    if (custoMedio) {
+      final r = apurar(mes);
+      r.irrfSwingPorDia!.forEach(
+        (data, v) => irrfStDia[data] = (irrfStDia[data] ?? 0.0) + v,
+      );
+      r.resultadoDtPorDia!.forEach(
+        (data, v) => resDtDia[data] = (resDtDia[data] ?? 0.0) + v,
+      );
+    }
+    for (final l in mes.lotes) {
       if (l.origem == null || l.origem!.isEmpty) {
         final q =
             l.qtd -
@@ -291,11 +303,17 @@ List<LancamentoCaixa> lancamentosCaixa(Map<String, Mes> meses) {
       }
       for (final v in l.vendas) {
         final c = calcularVenda(l, v);
+        // o dinheiro segue a compra vendida; o IRRF do custo médio já entrou
         if (c.dt) {
-          resDtDia[v.data] = (resDtDia[v.data] ?? 0.0) + c.liquido;
+          if (!custoMedio) {
+            resDtDia[v.data] = (resDtDia[v.data] ?? 0.0) + c.liquido;
+          }
           adicionarVenda(v, l.ticker, 'Day trade', c.liquido);
         } else {
-          irrfStDia[v.data] = (irrfStDia[v.data] ?? 0.0) + c.venda * irrfSwing;
+          if (!custoMedio) {
+            irrfStDia[v.data] =
+                (irrfStDia[v.data] ?? 0.0) + c.venda * irrfSwing;
+          }
           adicionarVenda(v, l.ticker, 'Venda', c.venda - c.venda * taxaB3Swing);
         }
       }

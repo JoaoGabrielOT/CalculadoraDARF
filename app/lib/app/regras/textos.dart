@@ -120,6 +120,20 @@ String textoVendasNoMes(Apuracao r) {
   return '$n venda${n != 1 ? 's' : ''} no mês';
 }
 
+/// Vendas (linhas) com parte comum e com parte day trade: (swing, day trade).
+/// No custo médio vale a quantidade day trade da linha; a venda mista conta
+/// nos dois.
+(int, int) vendasPorRegime(Apuracao r) {
+  var st = 0;
+  var dt = 0;
+  for (final o in r.ops) {
+    final qDt = o.qtdDt ?? (o.dt ? o.qtd : 0);
+    if (qDt > 0) dt++;
+    if (qDt < o.qtd) st++;
+  }
+  return (st, dt);
+}
+
 /// Subtexto do cartão do imposto (py:1586).
 String textoIrrfRetido(Apuracao r) => 'IRRF já retido: ${brl(r.irrf)}';
 

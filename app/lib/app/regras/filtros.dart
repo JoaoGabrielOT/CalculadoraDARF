@@ -161,13 +161,14 @@ double _atual(Lote l, double? Function(String) preco) {
 }
 
 /// Vendas filtradas e ordenadas (android/main.py:942-955). Ordem desconhecida
-/// usa a data. A lista recebida não é alterada.
+/// usa a data. A lista recebida não é alterada. A venda "Misto" do custo médio
+/// tem parte swing e parte day trade e aparece nos dois filtros.
 List<Operacao> filtrarVendas(List<Operacao> ops, FiltroVendas f) {
   var itens = ops.toList();
   if (f.operacao != 'Todas') {
     itens = [
       for (final o in itens)
-        if (o.regime.startsWith(f.operacao)) o,
+        if (o.regime.startsWith(f.operacao) || o.regime == 'Misto') o,
     ];
   }
   if (f.tipo != 'Todos') {

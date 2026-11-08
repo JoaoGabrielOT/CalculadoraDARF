@@ -129,6 +129,48 @@ void main() {
       expect(erro(compra(data: '2026-03-15')), isNull);
     });
 
+    test('custo médio: data anterior ao mês e cópia levada', () {
+      final mes = Mes(
+        mes: '2026-03',
+        metodo: metodoCustoMedio,
+        posicaoInicial: {'PETR4': PosicaoFiscal(qtd: 100, custo: 1000.3)},
+      );
+      Validacao<NovaCompra> v(
+        String data, {
+        Lote? editando,
+        String qtd = '100',
+      }) => validarCompra(
+        ticker: 'petr4',
+        data: data,
+        qtd: qtd,
+        preco: '10,00',
+        hoje: '2026-03-15',
+        editando: editando,
+        mes: mes,
+      );
+      expect(
+        erro(v('2026-02-27')),
+        'Em meses pelo custo médio, a compra precisa ter data dentro do mês, '
+        'a partir de 01/03/2026.',
+      );
+      expect(erro(v('2026-03-01')), isNull);
+      final copia = Lote(
+        id: 'C1',
+        origem: 'L1',
+        ticker: 'PETR4',
+        tipo: 'Ação',
+        dataCompra: '2026-02-10',
+        qtd: 100,
+        preco: 10,
+      );
+      expect(
+        erro(v('2026-02-10', editando: copia, qtd: '90')),
+        'Compra levada de um mês anterior: quantidade e preço fazem parte da '
+        'posição inicial e não podem ser editados.',
+      );
+      expect(erro(v('2026-02-10', editando: copia)), isNull);
+    });
+
     test('quantidade inválida: vazia, texto, zero e fração', () {
       for (final q in ['', 'abc', '0', '1,5', '-3']) {
         expect(erro(compra(qtd: q)), 'Quantidade inválida.', reason: q);

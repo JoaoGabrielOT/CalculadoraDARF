@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:calculadoradarf/nucleo/ambiente.dart';
+import 'package:calculadoradarf/nucleo/apuracao.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/caixa.dart';
 import 'package:calculadoradarf/nucleo/compat/ordenacao.dart';
@@ -283,6 +284,50 @@ void main() {
     // venda simples continua igual
     expect(vendas.last.qtd, 10);
     expect(vendas.last.valor, closeTo(350 * (1 - taxaB3Swing), 1e-9));
+  });
+
+  test('IRRF do mês pelo custo médio é o da apuração', () {
+    // 100 levadas vendidas a 13,00 no dia da compra X de 100 a 11,00: o day
+    // trade é do ativo no dia (min(100, 100)), não da compra vendida.
+    // resultado 1300 − 1100 − 2400 × 0,00023 = 199,448; IRRF 1% = 1,99448
+    final marco = Mes(
+      mes: '2026-03',
+      metodo: metodoCustoMedio,
+      posicaoInicial: {'PETR4': PosicaoFiscal(qtd: 100, custo: 1000.30)},
+      prejuizoAnterior: PrejuizoAcumulado(),
+      lotes: [
+        Lote(
+          id: 'P0',
+          origem: 'P',
+          ticker: 'PETR4',
+          tipo: 'Ação',
+          dataCompra: '2026-02-10',
+          qtd: 100,
+          preco: 10,
+          vendas: [Venda(id: 'V1', data: '2026-03-10', qtd: 100, preco: 13)],
+        ),
+        Lote(
+          id: 'X',
+          ticker: 'PETR4',
+          tipo: 'Ação',
+          dataCompra: '2026-03-10',
+          qtd: 100,
+          preco: 11,
+        ),
+      ],
+    );
+    final irrf = lancamentosCaixa({'2026-03': marco})
+        .where((i) => i.ticker == 'IRRF')
+        .toList();
+    expect(irrf.map((i) => i.id), ['irrf:dt:2026-03-10']);
+    expect(irrf.single.valor, closeTo(-1.99448, 1e-9));
+    expect(-irrf.single.valor, closeTo(apurar(marco).irrf, 1e-12));
+    // sem o marcador, a venda da compra antiga é swing e não retém nada
+    marco.metodo = null;
+    expect(
+      lancamentosCaixa({'2026-03': marco}).where((i) => i.ticker == 'IRRF'),
+      isEmpty,
+    );
   });
 
   test('diasSemana', () {

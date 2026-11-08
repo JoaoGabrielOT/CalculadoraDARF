@@ -3,6 +3,7 @@
 
 import 'ambiente.dart';
 import 'apuracao.dart';
+import 'apuracao_medio.dart';
 import 'compat/numeros.dart';
 import 'compat/ordenacao.dart';
 import 'constantes.dart';
@@ -14,9 +15,14 @@ import 'repositorio.dart';
 
 /// Fecha o mês, leva os ativos não vendidos para o mês seguinte e devolve
 /// (apuração, próximo mês). O id da cópia é `'<id>~<prox>'`: dois aparelhos
-/// que fecham o mesmo mês geram o mesmo id.
+/// que fecham o mesmo mês geram o mesmo id. No custo médio, o mês seguinte
+/// (se aberto) herda o método, a posição fiscal e o prejuízo a compensar; com
+/// saldo inconsistente, nada é gravado.
 (Apuracao, String) fecharMes(Repositorio repo, Mes d) {
   final r = apurar(d);
+  if (r.inconsistentes.isNotEmpty) {
+    throw ErroValidacao(bloqueioSaldoInconsistente(r.inconsistentes));
+  }
   d.fechado = true;
   d.resumo = r.resumo;
   repo.salvar(d);
@@ -40,16 +46,40 @@ import 'repositorio.dart';
       }
     }
     nd.darfAnterior = r.darf < darfMinimo ? r.darf : 0.0;
+    if (r.metodo == metodoCustoMedio) {
+      nd.metodo = metodoCustoMedio;
+      nd.posicaoInicial = r.posicaoFinal;
+      nd.prejuizoAnterior = PrejuizoAcumulado(
+        comum: r.prejuizoComumFinal!,
+        dayTrade: r.prejuizoDtFinal!,
+      );
+    }
     repo.salvar(nd);
   }
   return (r, prox);
 }
 
+const textoRetroativaCustoMedio =
+    'Meses apurados por custo médio não aceitam venda retroativa.';
+
+/// [mes] está no corte ou depois dele: tem o marcador ou, sem arquivo, algum
+/// mês anterior tem (o marcador passa de um mês para o seguinte).
+bool mesPorCustoMedio(Repositorio repo, String mes) {
+  if (repo.existeMes(mes)) return repo.carregar(mes).metodo == metodoCustoMedio;
+  for (final m in repo.listarMeses()) {
+    if (compararTexto(m, mes) >= 0) break;
+    if (repo.carregar(m).metodo == metodoCustoMedio) return true;
+  }
+  return false;
+}
+
 /// Venda de um mês anterior ao aberto: só em mês sem arquivo ou fechado sem
 /// nenhuma compra em aberto (caso dos meses criados por venda retroativa; a
-/// marcação "retroativo" não vai para a planilha).
+/// marcação "retroativo" não vai para a planilha), e nunca a partir do corte
+/// do custo médio.
 bool mesAceitaVendaRetroativa(Repositorio repo, String mes, String mesAtual) {
   if (compararTexto(mes, mesAtual) >= 0) return false;
+  if (mesPorCustoMedio(repo, mes)) return false;
   if (!repo.existeMes(mes)) return true;
   final d = repo.carregar(mes);
   return d.retroativo || (d.fechado && d.lotes.every((l) => restante(l) == 0));
@@ -57,8 +87,9 @@ bool mesAceitaVendaRetroativa(Repositorio repo, String mes, String mesAtual) {
 
 /// Grava a venda no mês em que ela ocorreu (fechado, com a apuração própria)
 /// e tira a quantidade vendida da compra do mês atual [d]. DARF abaixo do
-/// mínimo do mês da venda passa para o `darfAnterior` de [d]. Devolve o mês
-/// da venda.
+/// mínimo do mês da venda passa para o `darfAnterior` de [d]. Com [d] pelo
+/// custo médio, a venda sai também da posição inicial dele (quantidade e
+/// custo proporcional). Devolve o mês da venda.
 String registrarVendaRetroativa(
   Repositorio repo,
   Mes d,
@@ -73,6 +104,14 @@ String registrarVendaRetroativa(
     throw ErroValidacao(
       'Essa compra já tem venda neste mês. '
       'Registre a venda antiga antes das vendas do mês.',
+    );
+  }
+  final custoMedio = d.metodo == metodoCustoMedio;
+  final pos = custoMedio ? (d.posicaoInicial?[lote.ticker]) : null;
+  if (custoMedio && (pos == null || pos.qtd < venda.qtd)) {
+    throw ErroValidacao(
+      'Não há posição de ${lote.ticker} no início de ${fmtMes(d.mes)} '
+      'para essa venda.',
     );
   }
   final dm = repo.carregar(mes);
@@ -106,6 +145,15 @@ String registrarVendaRetroativa(
   repo.salvar(dm);
   final levada = r.darf < darfMinimo ? r.darf : 0.0;
   d.darfAnterior = maxPython(d.darfAnterior - levadaAnt + levada, 0.0);
+  if (pos != null) {
+    final baixado = venda.qtd == pos.qtd
+        ? pos.custo
+        : arredondar(venda.qtd * pos.custo / pos.qtd, 2);
+    pos
+      ..custo = arredondar(pos.custo - baixado, 2)
+      ..qtd -= venda.qtd;
+    if (pos.qtd == 0) d.posicaoInicial!.remove(lote.ticker);
+  }
   lote.qtd -= venda.qtd;
   if (lote.qtd <= 0) {
     d.lotes = [

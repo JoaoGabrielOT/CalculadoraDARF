@@ -1,4 +1,5 @@
 import 'package:calculadoradarf/app/regras/filtros.dart';
+import 'package:calculadoradarf/app/regras/textos.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -295,6 +296,69 @@ void main() {
     test('operação: Swing inclui "Swing (isento)"; Day trade', () {
       expect(idsV(FiltroVendas(operacao: 'Swing')), ['e', 'b', 'a', 'd']);
       expect(idsV(FiltroVendas(operacao: 'Day trade')), ['c']);
+    });
+
+    test('custo médio: "Misto" aparece em Swing e em Day trade', () {
+      final misto = op(
+        'm',
+        'ITUB4',
+        '2026-03-15',
+        100,
+        30,
+        dt: false,
+        bruto: 10,
+        liquido: 9,
+        imposto: 1,
+        taxas: 1,
+      )..regime = 'Misto';
+      List<String> so(String operacao) => [
+        for (final o in filtrarVendas([
+          ...ops,
+          misto,
+        ], FiltroVendas(operacao: operacao)))
+          o.vendaId,
+      ];
+      expect(so('Swing'), ['e', 'm', 'b', 'a', 'd']);
+      expect(so('Day trade'), ['m', 'c']);
+    });
+
+    test('vendasPorRegime conta a venda mista nos dois regimes', () {
+      Apuracao com(List<Operacao> ops) => Apuracao(
+        ops: ops,
+        vendasAcoesSt: 0,
+        isento: true,
+        bruto: 0,
+        custos: 0,
+        impSt: 0,
+        impDt: 0,
+        impostoTotal: 0,
+        irrf: 0,
+        lucroLiquido: 0,
+        darfMes: 0,
+        darfAnterior: 0,
+        darf: 0,
+      );
+      // método por compra: pela marcação dt da venda
+      expect(vendasPorRegime(com(ops)), (4, 1));
+      Operacao fiscal(String id, int qtdDt) => op(
+        id,
+        'PETR4',
+        '2026-03-10',
+        100,
+        12,
+        dt: qtdDt == 100,
+        bruto: 0,
+        liquido: 0,
+        imposto: 0,
+        taxas: 0,
+      )..qtdDt = qtdDt;
+      // custo médio: pela quantidade day trade da linha
+      expect(
+        vendasPorRegime(
+          com([fiscal('a', 0), fiscal('b', 40), fiscal('c', 100)]),
+        ),
+        (2, 2),
+      );
     });
 
     test('tipo e busca', () {

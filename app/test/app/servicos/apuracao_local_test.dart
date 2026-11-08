@@ -1101,6 +1101,159 @@ void main() {
       );
     });
   });
+
+  group('custo médio', () {
+    /// 09/2026 fechado pelo custo médio; 10/2026 aberto com a cópia de 100.
+    void gravarCorte({bool marcarOutubro = true}) {
+      repo.salvar(Mes(mes: '2026-09', fechado: true, metodo: metodoCustoMedio));
+      final out = Mes(
+        mes: '2026-10',
+        lotes: [compra('C1', origem: 'L1', data: '2026-09-01')],
+      );
+      if (marcarOutubro) marcarCustoMedio(out);
+      repo.salvar(out);
+    }
+
+    test('mês aberto posterior ao corte é marcado ao carregar', () async {
+      gravarCorte(marcarOutubro: false);
+      final v = await servicos.carregarMes('2026-10');
+      expect(v.dados.metodo, metodoCustoMedio);
+      expect(v.apuracao.metodo, metodoCustoMedio);
+      final gravado = repo.carregar('2026-10');
+      expect(gravado.metodo, metodoCustoMedio);
+      // derivada: arredondar(100 × 10 × 1,0003) = 1000,30
+      expect(gravado.posicaoInicial!['PETR4']!.qtd, 100);
+      expect(gravado.posicaoInicial!['PETR4']!.custo, closeTo(1000.30, 1e-9));
+      expect(await agendamentos(), 1);
+      // já marcado: carregar de novo não grava
+      final antes = disco.ler('2026-10.json');
+      await servicos.carregarMes('2026-10');
+      expect(disco.ler('2026-10.json'), antes);
+    });
+
+    test('sem mês de corte nada é marcado nem gravado', () async {
+      gravarMes('2026-10', [compra('L1')]);
+      final antes = disco.ler('2026-10.json');
+      final v = await servicos.carregarMes('2026-10');
+      expect(v.dados.metodo, isNull);
+      expect(disco.ler('2026-10.json'), antes);
+      expect(await agendamentos(), 0);
+    });
+
+    test('mês sem arquivo depois do corte é marcado só em memória', () async {
+      gravarCorte();
+      final v = await servicos.carregarMes('2026-12');
+      expect(v.dados.metodo, metodoCustoMedio);
+      expect(repo.existeMes('2026-12'), isFalse);
+    });
+
+    test('dados de amigo são marcados só em memória', () async {
+      final setembro = Mes(
+        mes: '2026-09',
+        lotes: [compra('C1', origem: 'L1', data: '2026-08-01')],
+      );
+      servicos.usarAmigo(
+        'ana@x.com',
+        DadosPlanilha(
+          meses: {
+            '2026-08': Mes(
+              mes: '2026-08',
+              fechado: true,
+              metodo: metodoCustoMedio,
+            ),
+            '2026-09': setembro,
+          },
+          amigos: [],
+          radar: [],
+          excluidos: {},
+          caixa: null,
+        ),
+      );
+      final v = await servicos.carregarMes('2026-09', amigo: 'ana@x.com');
+      expect(v.apuracao.metodo, metodoCustoMedio);
+      expect(setembro.metodo, isNull);
+      expect(repo.listarMeses(), isEmpty);
+    });
+
+    test('compra com data anterior ao mês é recusada', () async {
+      gravarCorte();
+      final antes = disco.ler('2026-10.json');
+      await espera(
+        servicos.registrarCompra(
+          '2026-10',
+          const NovaCompra(
+            ticker: 'VALE3',
+            dataCompra: '2026-09-30',
+            qtd: 10,
+            preco: 50,
+          ),
+        ),
+        'Em meses pelo custo médio, a compra precisa ter data dentro do mês, '
+        'a partir de 01/10/2026.',
+      );
+      expect(disco.ler('2026-10.json'), antes);
+      final v = await servicos.registrarCompra(
+        '2026-10',
+        const NovaCompra(
+          ticker: 'VALE3',
+          dataCompra: '2026-10-01',
+          qtd: 10,
+          preco: 50,
+        ),
+      );
+      expect(v.dados.lotes, hasLength(2));
+      expect(v.apuracao.inconsistentes, isEmpty);
+    });
+
+    test('cópia levada não edita qtd nem preço', () async {
+      gravarCorte();
+      await espera(
+        servicos.editarCompra(
+          '2026-10',
+          'C1',
+          const NovaCompra(
+            ticker: 'PETR4',
+            dataCompra: '2026-09-01',
+            qtd: 120,
+            preco: 10,
+          ),
+        ),
+        'Compra levada de um mês anterior: quantidade e preço fazem parte da '
+        'posição inicial e não podem ser editados.',
+      );
+    });
+
+    test('retroativa a partir do corte é recusada', () async {
+      gravarCorte();
+      final antes = disco.ler('2026-10.json');
+      await espera(
+        servicos.registrarVenda(
+          '2026-10',
+          const NovaVenda(loteId: 'C1', data: '2026-09-15', qtd: 10, preco: 11),
+        ),
+        'Meses apurados por custo médio não aceitam venda retroativa.',
+      );
+      expect(disco.ler('2026-10.json'), antes);
+      expect(await servicos.mesesSemVendaRetroativa('2026-10'), {'2026-09'});
+    });
+
+    test('inconsistência bloqueia o fechamento', () async {
+      gravarCorte();
+      final out = repo.carregar('2026-10');
+      out.posicaoInicial = {'PETR4': PosicaoFiscal(qtd: 80, custo: 800)};
+      repo.salvar(out);
+      final antes = disco.ler('2026-10.json');
+      final v = await servicos.carregarMes('2026-10');
+      expect(v.apuracao.inconsistentes, ['PETR4']);
+      await espera(
+        servicos.fecharMes('2026-10'),
+        'O mês não pode ser fechado com saldo inconsistente.\n\n'
+        'Saldo inconsistente em PETR4: confira as vendas',
+      );
+      expect(disco.ler('2026-10.json'), antes);
+      expect(repo.existeMes('2026-11'), isFalse);
+    });
+  });
 }
 
 const baseMeta = <String, Object?>{

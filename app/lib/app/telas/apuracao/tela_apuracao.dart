@@ -248,7 +248,8 @@ class _Progresso extends StatelessWidget {
   );
 }
 
-/// Erro de leitura do mês ou da carga, com o seletor de mês ainda à mão.
+/// Erro de leitura do mês ou da carga, com o seletor de mês ainda à mão; sem
+/// erro, o aviso de saldo inconsistente do custo médio.
 class _Avisos extends StatelessWidget {
   const _Avisos(this.controle);
 
@@ -269,7 +270,13 @@ class _Avisos extends StatelessWidget {
         ),
       );
     }
-    final texto = controle.erro ?? controle.visao?.erroLeitura;
+    final inconsistentes = controle.visao?.apuracao.inconsistentes ?? const [];
+    final texto =
+        controle.erro ??
+        controle.visao?.erroLeitura ??
+        (inconsistentes.isEmpty
+            ? null
+            : avisosSaldoInconsistente(inconsistentes));
     if (texto == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),

@@ -16,6 +16,19 @@ import 'modelos/mes.dart';
 String avisoSaldoInconsistente(String ticker) =>
     'Saldo inconsistente em $ticker: confira as vendas';
 
+/// Os avisos de [tickers], um por linha.
+String avisosSaldoInconsistente(List<String> tickers) =>
+    tickers.map(avisoSaldoInconsistente).join('\n');
+
+/// Por que o mês com saldo inconsistente não pode ser fechado (§5.6).
+String bloqueioSaldoInconsistente(List<String> tickers) =>
+    'O mês não pode ser fechado com saldo inconsistente.\n\n'
+    '${avisosSaldoInconsistente(tickers)}';
+
+const textoCopiaLevadaTravada =
+    'Compra levada de um mês anterior: quantidade e preço fazem parte da '
+    'posição inicial e não podem ser editados.';
+
 /// Cópia levada ou compra de mês anterior: já está na posição inicial.
 bool _estoqueAnterior(Lote l, String mes) =>
     (l.origem != null && l.origem!.isNotEmpty) ||
@@ -337,5 +350,7 @@ Apuracao apurarCustoMedio(Mes d) {
         if (posicao[t]!.qtd > 0) t: posicao[t]!,
     },
     inconsistentes: ordenadoCom(inconsistentes, compararTexto),
+    irrfSwingPorDia: irrfStDia,
+    resultadoDtPorDia: resDtDia,
   );
 }

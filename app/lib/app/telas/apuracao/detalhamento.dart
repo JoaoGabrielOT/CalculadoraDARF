@@ -21,6 +21,13 @@ const _rodape =
     'Vencimento: último dia útil do mês seguinte\n'
     'Taxas B3: 0,030% swing · 0,023% day trade';
 
+/// No custo médio, as despesas das compras que ficam na posição vão para o
+/// custo; a linha das taxas mostra só as das vendas e as do day trade.
+const rotuloTaxasCustoMedio = 'Taxas B3 + corretagem (vendas e day trade)';
+const textoTaxasCustoMedio =
+    'No custo médio, as taxas e a corretagem das compras que ficam na '
+    'posição entram no custo médio.';
+
 /// Lateral de 340 px no expandido; no celular um cartão recolhido por padrão.
 class Detalhamento extends StatelessWidget {
   const Detalhamento({
@@ -134,7 +141,13 @@ class _Corpo extends StatelessWidget {
           ),
         ),
         Divider(height: 24, color: c.linha),
-        _Linha('Taxas B3 + corretagem', brl(r.custos)),
+        if (r.metodo == metodoCustoMedio)
+          Tooltip(
+            message: textoTaxasCustoMedio,
+            child: _Linha(rotuloTaxasCustoMedio, brl(r.custos)),
+          )
+        else
+          _Linha('Taxas B3 + corretagem', brl(r.custos)),
         _Linha('Imposto swing trade (15%)', brl(r.impSt)),
         _Linha('Imposto day trade (20%)', brl(r.impDt)),
         _Linha('Imposto devido', brl(r.impostoTotal)),

@@ -22,7 +22,8 @@ class Invalido extends Validacao<Never> {
 }
 
 /// Compra digitada (calculadora_darf.py:288-311). [data] e [hoje] em ISO;
-/// [editando] é a compra que está sendo editada, quando houver.
+/// [editando] é a compra que está sendo editada, quando houver; [mes] é o mês
+/// aberto (regras do custo médio).
 Validacao<NovaCompra> validarCompra({
   required String ticker,
   required String? data,
@@ -30,6 +31,7 @@ Validacao<NovaCompra> validarCompra({
   required String preco,
   required String hoje,
   Lote? editando,
+  Mes? mes,
 }) {
   final t = ticker.trim().toUpperCase();
   if (t.isEmpty) return const Invalido('Informe o ticker.');
@@ -62,7 +64,11 @@ Validacao<NovaCompra> validarCompra({
         qtd: q,
         preco: p,
       ),
+      mes: mes,
     );
+    if (msg != null) return Invalido(msg);
+  } else if (mes != null) {
+    final msg = erroCompraForaDoMes(mes, data);
     if (msg != null) return Invalido(msg);
   }
   return Valido(NovaCompra(ticker: t, dataCompra: data, qtd: q, preco: p));

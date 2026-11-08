@@ -65,6 +65,43 @@ class ApuracaoLocal {
     for (final m in repo.listarMeses()) m: _lerMes(m),
   };
 
+  /// Mês aberto a partir do corte do custo médio ainda sem o marcador (§5.3):
+  /// marca com a posição inicial derivada dos lotes levados e grava, se o mês
+  /// já tem arquivo (sem arquivo, só em memória). Um mês anterior ilegível
+  /// não decide o corte.
+  Mes _marcado(Mes d) {
+    if (d.fechado || d.metodo != null) return d;
+    String? corte;
+    for (final m in repo.listarMeses()) {
+      if (compararTexto(m, d.mes) >= 0) break;
+      try {
+        if (repo.carregar(m).metodo == metodoCustoMedio) {
+          corte = m;
+          break;
+        }
+      } catch (e) {
+        if (!_erroDeLeitura(e)) rethrow;
+      }
+    }
+    if (!usaCustoMedio(d, corte)) return d;
+    marcarCustoMedio(d);
+    if (repo.existeMes(d.mes)) {
+      repo.salvar(d);
+      _gravou();
+    }
+    return d;
+  }
+
+  /// Dados de amigo: a mesma marcação, numa cópia, sem gravar nada.
+  Mes _marcadoAmigo(Mes d, Map<String, Mes> meses) {
+    if (d.metodo != null || !usaCustoMedio(d, mesDeCorte(meses.values))) {
+      return d;
+    }
+    final copia = Mes.fromJson(d.toJson());
+    marcarCustoMedio(copia);
+    return copia;
+  }
+
   DadosPlanilha _dadosAmigo(String email) {
     final a = amigoAtual?.call();
     if (a == null || a.email != email) {
@@ -150,11 +187,12 @@ class ApuracaoLocal {
 
   Future<VisaoMes> carregarMes(String mes, {String? amigo}) async {
     if (amigo != null) {
-      final d = _dadosAmigo(amigo).meses[mes] ?? mesVazio(mes);
+      final meses = _dadosAmigo(amigo).meses;
+      final d = _marcadoAmigo(meses[mes] ?? mesVazio(mes), meses);
       return _visaoDe(mes, d, amigo: amigo);
     }
     try {
-      return _visaoDe(mes, _lerMes(mes));
+      return _visaoDe(mes, _marcado(_lerMes(mes)));
     } on ErroValidacao catch (e) {
       return _visaoComErro(mes, e.mensagem);
     }
@@ -204,7 +242,7 @@ class ApuracaoLocal {
   Mes _mesEditavel(String mes) {
     final d = _lerMes(mes);
     if (d.fechado) throw ErroValidacao(_mesFechado);
-    return d;
+    return _marcado(d);
   }
 
   void _gravou() {
@@ -244,7 +282,10 @@ class ApuracaoLocal {
 
   Future<VisaoMes> registrarCompra(String mes, NovaCompra c) async {
     final d = _mesEditavel(mes);
-    d.lotes.add(_novaCompra(ambiente.novoId(), c));
+    final lote = _novaCompra(ambiente.novoId(), c);
+    final msg = erroCompraForaDoMes(d, lote.dataCompra);
+    if (msg != null) throw ErroValidacao(msg);
+    d.lotes.add(lote);
     repo.salvar(d);
     _gravou();
     return _visaoDe(mes, d);
@@ -255,7 +296,7 @@ class ApuracaoLocal {
     final lote = _acharLote(d, loteId);
     final novo = _novaCompra(lote.id, c);
     novo.vendas = lote.vendas;
-    final msg = erroEdicaoLote(lote, novo);
+    final msg = erroEdicaoLote(lote, novo, mes: d);
     if (msg != null) throw ErroValidacao(msg);
     lote
       ..ticker = novo.ticker
@@ -298,12 +339,15 @@ class ApuracaoLocal {
         compararTexto(mesVenda, mes) <= 0 &&
         data.compareTo(lote.dataCompra) >= 0;
     if (permitida && compararTexto(mesVenda, mes) < 0) {
+      var porMedio = false;
       try {
+        porMedio = !edicao && mesPorCustoMedio(repo, mesVenda);
         permitida = !edicao && mesAceitaVendaRetroativa(repo, mesVenda, mes);
       } catch (e) {
         if (!_erroDeLeitura(e)) rethrow;
         throw ErroValidacao(_mensagemMes(mesVenda));
       }
+      if (porMedio) throw ErroValidacao(textoRetroativaCustoMedio);
     }
     if (!permitida) throw ErroValidacao(_dataVendaInvalida);
     if (v.qtd <= 0) throw ErroValidacao('Quantidade inválida.');
@@ -477,7 +521,7 @@ class ApuracaoLocal {
   }
 
   Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v) async {
-    _lerMes(mes);
+    _marcado(_lerMes(mes));
     final r = confirmarVenda(repo, mes, v);
     if (r.duplicada) {
       return VendaRegistrada(
@@ -494,7 +538,7 @@ class ApuracaoLocal {
     String grupo,
     NovaVendaQtd v,
   ) async {
-    _lerMes(mes);
+    _marcado(_lerMes(mes));
     final d = editarGrupo(repo, mes, grupo, v);
     _gravou();
     return _visaoDe(mes, d);
