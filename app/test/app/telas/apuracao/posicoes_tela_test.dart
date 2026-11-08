@@ -264,7 +264,7 @@ void main() {
     expect(find.text('BBAS3'), findsWidgets);
   });
   testWidgets('posição de mês passado: indicadores sem mercado, com os '
-      'rótulos de mês, acumulado e fiscal', (t) async {
+      'rótulos de mês, acumulado e método', (t) async {
     await _montar(t, mes: '2026-09');
     expect(find.byKey(const Key('indicadores-PETR4')), findsNothing);
     await t.tap(find.byKey(const Key('ativo-PETR4')));
@@ -276,8 +276,8 @@ void main() {
       'Custo remanescente (por compra)',
       'Preço médio das compras (saldo)',
       'Ponto de equilíbrio (R\$)',
-      'Resultado realizado no mês (fiscal, R\$)',
-      'Resultado realizado acumulado desde 09/2026 (fiscal, R\$)',
+      'Resultado realizado no mês (método por compra, R\$)',
+      'Resultado realizado acumulado desde 09/2026 (método por compra, R\$)',
       'Rentabilidade realizada no mês (%)',
     ]) {
       expect(
@@ -380,5 +380,27 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byKey(const Key('indicadores-PETR4')), findsOneWidget);
     expect(t.takeException(), isNull);
+  });
+  testWidgets('carteira atual: a cotação dos ativos da posição de hoje também '
+      'é buscada', (t) async {
+    final s = _falsos();
+    s.posicoesPorMes['2026-10'] = VisaoPosicoes(
+      dataCorte: hojeExemplo,
+      corrente: true,
+      posicoes: [
+        PosicaoAtivo(
+          ticker: 'ZZZZ3',
+          tipo: 'Ação',
+          qtd: 10,
+          custoGerencial: 100,
+          compras: const [],
+        ),
+      ],
+    );
+    await _montar(t, servicos: s);
+    expect(
+      s.chamadas.where((c) => c.startsWith('cotacoesAtuais(')).join(' '),
+      contains('ZZZZ3'),
+    );
   });
 }

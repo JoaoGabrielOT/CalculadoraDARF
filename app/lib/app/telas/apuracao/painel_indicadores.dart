@@ -1,5 +1,7 @@
 // Indicadores de um ativo (entrega 2.1, §8): rótulos que separam mês e
-// acumulado, realizado e não realizado, gerencial e fiscal, R$ e %. "—" é dado
+// acumulado, realizado e não realizado, gerencial e fiscal, R$ e %.
+// TODO(Tarefa 11): enquanto o resultado vem de `liquido`/`compra` (método por
+// compra) o rótulo diz "por compra"; com o custo médio passa a "fiscal". "—" é dado
 // indisponível ou divisão por zero, nunca zero. Só formata o que o núcleo
 // calculou.
 
@@ -33,6 +35,7 @@ class PainelIndicadores extends StatelessWidget {
     final i = indicadores;
     final chegou = cotacoes.containsKey(i.ticker);
     String brlOu(double? v) => v == null ? '—' : brl(v);
+    final metodo = i.custoPorCompra ? 'método por compra' : 'fiscal';
     final custoRotulo = i.custoPorCompra ? 'por compra' : 'fiscal';
     final linhas = <(String, String, String)>[
       (
@@ -65,13 +68,13 @@ class PainelIndicadores extends StatelessWidget {
             'Sem vendas no mês: "—".',
       ),
       (
-        'Resultado realizado no mês (fiscal, R\$)',
+        'Resultado realizado no mês ($metodo, R\$)',
         brl(i.resultadoMes),
         'Soma do resultado das vendas do ativo no mês, depois das taxas e '
             'antes do imposto.',
       ),
       (
-        'Resultado realizado acumulado desde ${i.desde} (fiscal, R\$)',
+        'Resultado realizado acumulado desde ${i.desde} ($metodo, R\$)',
         brl(i.resultadoAcumulado),
         'Soma do resultado realizado de cada mês até o consultado, cada mês '
             'pelo seu método, desde o primeiro mês com dados.',
@@ -94,8 +97,8 @@ class PainelIndicadores extends StatelessWidget {
       (
         'Taxas e corretagem das vendas no mês (R\$)',
         brl(i.taxasMes),
-        'Soma das taxas B3 e da corretagem das vendas do mês; as taxas de '
-            'compra já estão no custo.',
+        'Soma das taxas B3 da compra e da venda das unidades vendidas no mês '
+            'e da corretagem, descontadas do resultado no método atual.',
       ),
       if (corrente) ...[
         (

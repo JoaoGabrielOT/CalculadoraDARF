@@ -169,7 +169,7 @@ List<IndicadoresAtivo> indicadoresPorAtivo({
   for (final n in ate) {
     final r = apurar(meses[n]!);
     for (final o in r.ops) {
-      // Tarefa 11: `o.resultadoFiscal ?? o.liquido`
+      // TODO(Tarefa 11): `o.resultadoFiscal ?? o.liquido`
       acumulado[o.ticker] = (acumulado[o.ticker] ?? 0.0) + o.liquido;
       if (n == mes) (ops[o.ticker] ??= []).add(o);
     }
@@ -183,7 +183,7 @@ List<IndicadoresAtivo> indicadoresPorAtivo({
     final linhas = ops[t] ?? const <Operacao>[];
     final qtdVendida = linhas.fold(0, (s, o) => s + o.qtd);
     final resultado = somaPython(linhas.map((o) => o.liquido));
-    // Tarefa 11: `o.custoFiscal ?? o.compra`
+    // TODO(Tarefa 11): `o.custoFiscal ?? o.compra`
     final custoVendido = somaPython(linhas.map((o) => o.compra));
     final qtd = p?.qtd ?? 0;
     final custo = p == null || qtd == 0

@@ -274,10 +274,20 @@ class ControleApuracao extends ChangeNotifier {
     final p = posicoes;
     if (p == null) return const [];
     if (!p.corrente) return p.indicadores;
-    return comCotacoes(p.indicadores, {
-      for (final e in cotacoes.entries) e.key: e.value?.preco,
-    });
+    if (!identical(p, _indicadoresDe) ||
+        !identical(cotacoes, _indicadoresCotacoes)) {
+      _indicadoresDe = p;
+      _indicadoresCotacoes = cotacoes;
+      _indicadoresCache = comCotacoes(p.indicadores, {
+        for (final e in cotacoes.entries) e.key: e.value?.preco,
+      });
+    }
+    return _indicadoresCache;
   }
+
+  VisaoPosicoes? _indicadoresDe;
+  Map<String, CotacaoAtual?>? _indicadoresCotacoes;
+  List<IndicadoresAtivo> _indicadoresCache = const [];
 
   /// Tickers cuja cotação atual a lista à vista mostra: os da posição de hoje
   /// ou os da carteira atual; vazio numa posição de mês passado.
@@ -287,9 +297,13 @@ class ControleApuracao extends ChangeNotifier {
       if (p == null || !p.corrente) return const {};
       return {for (final a in p.posicoes) a.ticker};
     }
+    final p = posicoes;
     return {
       for (final l in visaoLotes?.dados.lotes ?? const <Lote>[])
         if (restante(l) > 0) l.ticker,
+      // a posição de hoje alimenta os indicadores do detalhamento
+      if (p != null && p.corrente)
+        for (final a in p.posicoes) a.ticker,
     };
   }
 
