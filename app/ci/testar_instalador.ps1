@@ -75,7 +75,7 @@ foreach ($f in $hashesOrigem.Keys) {
 }
 if (@(Get-ChildItem $origem -Recurse -File).Count -ne $hashesOrigem.Count) { Falhar 'origem ganhou ou perdeu arquivos' }
 Aviso 'pasta dados\ antiga intacta'
-# 4a. migração 2.1-custo-medio: backup pre-2.4.0-* com os mesmos arquivos e id no config.json
+# 4a. migração 2.1-custo-medio: backup pre-<versaoApp>-* com os mesmos arquivos e id no config.json
 $cfgDestino = Join-Path $suporte 'dados\config.json'
 $limite = (Get-Date).AddSeconds(90)
 $migrou = $false
@@ -89,8 +89,10 @@ if (-not $migrou) {
   Get-Process calculadoradarf -ErrorAction SilentlyContinue | Stop-Process -Force
   Falhar 'config.json do destino sem 2.1-custo-medio em migracoes (90 s)'
 }
-$backups = @(Get-ChildItem (Join-Path $suporte 'dados\backup') -Directory -Filter 'pre-2.4.0-*' -ErrorAction SilentlyContinue)
-if ($backups.Count -ne 1) { Falhar "esperada 1 pasta backup\pre-2.4.0-*, achadas $($backups.Count)" }
+$versaoApp = [regex]::Match([IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\lib\versao.dart')), "versaoApp = '([^']+)'").Groups[1].Value
+if (-not $versaoApp) { Falhar 'versaoApp não encontrada em lib\versao.dart' }
+$backups = @(Get-ChildItem (Join-Path $suporte 'dados\backup') -Directory -Filter "pre-$versaoApp-*" -ErrorAction SilentlyContinue)
+if ($backups.Count -ne 1) { Falhar "esperada 1 pasta backup\pre-$versaoApp-*, achadas $($backups.Count)" }
 $jsonOrigem = @(Get-ChildItem $origem -File -Filter '*.json')
 $jsonBackup = @(Get-ChildItem $backups[0].FullName -File)
 foreach ($f in $jsonOrigem) {
