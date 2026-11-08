@@ -225,6 +225,34 @@ void main() {
     });
   });
 
+  group('carimbo do marcador de método', () {
+    test('salvar carimba mod quando o marcador muda', () {
+      final repo = Repositorio(ArmazenamentoMemoria());
+      ambiente = Ambiente.fixo(agora: 10.0);
+      repo.salvar(mesVazio('2026-12'));
+      ambiente = Ambiente.fixo(agora: 20.0);
+      final d = repo.carregar('2026-12');
+      repo.salvar(d);
+      expect(d.mod, 10.0, reason: 'nada mudou');
+      ambiente = Ambiente.fixo(agora: 30.0);
+      d.metodo = metodoCustoMedio;
+      repo.salvar(d);
+      expect(d.mod, 30.0);
+      ambiente = Ambiente.fixo(agora: 40.0);
+      d.posicaoInicial = {'PETR4': PosicaoFiscal(qtd: 5, custo: 100)};
+      repo.salvar(d);
+      expect(d.mod, 40.0);
+      ambiente = Ambiente.fixo(agora: 50.0);
+      repo.salvar(repo.carregar('2026-12'));
+      expect(repo.carregar('2026-12').mod, 40.0, reason: 'igual: sem carimbo');
+      final e = repo.carregar('2026-12');
+      ambiente = Ambiente.fixo(agora: 60.0);
+      e.prejuizoAnterior = PrejuizoAcumulado(comum: 1, dayTrade: 2);
+      repo.salvar(e);
+      expect(e.mod, 60.0);
+    });
+  });
+
   group('ArmazenamentoArquivos', () {
     late Directory pasta;
     setUp(() => pasta = Directory.systemTemp.createTempSync('repo_test_'));

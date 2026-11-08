@@ -1,3 +1,5 @@
+import 'package:collection/collection.dart';
+
 import 'ambiente.dart';
 import 'armazenamento.dart';
 import 'compat/json_python.dart';
@@ -55,7 +57,15 @@ class Repositorio {
       final antigo = bruto == null ? null : Mes.fromJson(bruto);
       if (bruto == null ||
           bruto['fechado'] != d.fechado ||
-          bruto['darf_anterior'] != d.darfAnterior) {
+          bruto['darf_anterior'] != d.darfAnterior ||
+          !const DeepCollectionEquality().equals(
+            [antigo!.metodo, antigo.toJson()['posicao_inicial']],
+            [d.metodo, d.toJson()['posicao_inicial']],
+          ) ||
+          !const DeepCollectionEquality().equals(
+            antigo.toJson()['prejuizo_anterior'],
+            d.toJson()['prejuizo_anterior'],
+          )) {
         d.mod = t;
       }
       final lotesAnt = {for (final l in antigo?.lotes ?? <Lote>[]) l.id: l};

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:calculadoradarf/nucleo/ambiente.dart';
+import 'package:calculadoradarf/nucleo/apuracao.dart';
 import 'package:calculadoradarf/nucleo/compat/numeros.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/datas.dart';
@@ -84,6 +87,79 @@ void main() {
       expect(config.extras['radar_ordem_lista'], ['PETR4', 'ITUB4', 'WEGE3']);
       expect(config.toJson()['noticias_notificar'], true);
       expect(config.toJson()['radar_ordem_lista'], ['PETR4', 'ITUB4', 'WEGE3']);
+    });
+  });
+
+  group('marcador de método', () {
+    test('mês antigo faz ida e volta idêntica', () {
+      final json = <String, Object?>{
+        'mes': '2026-05',
+        'fechado': false,
+        'darf_anterior': 0.0,
+        'lotes': <Object?>[],
+        'excluidos': <String, Object?>{},
+        'mod': 1.5,
+      };
+      final mes = Mes.fromJson(json);
+      expect(mes.metodo, isNull);
+      expect(mes.posicaoInicial, isNull);
+      expect(mes.prejuizoAnterior, isNull);
+      expect(jsonEncode(mes.toJson()), jsonEncode(json));
+    });
+
+    test('campos novos fazem ida e volta', () {
+      final json = <String, Object?>{
+        'mes': '2026-12',
+        'fechado': false,
+        'darf_anterior': 0.0,
+        'lotes': <Object?>[],
+        'excluidos': <String, Object?>{},
+        'mod': 2.0,
+        'metodo': 'custo_medio',
+        'posicao_inicial': {
+          'PETR4': {'qtd': 100, 'custo': 3050.5},
+        },
+        'prejuizo_anterior': {'comum': 10.25, 'day_trade': 3.0},
+      };
+      final mes = Mes.fromJson(json);
+      expect(mes.metodo, metodoCustoMedio);
+      expect(mes.posicaoInicial!['PETR4']!.qtd, 100);
+      expect(mes.posicaoInicial!['PETR4']!.custo, 3050.5);
+      expect(mes.prejuizoAnterior!.comum, 10.25);
+      expect(mes.prejuizoAnterior!.dayTrade, 3.0);
+      expect(jsonEncode(mes.toJson()), jsonEncode(json));
+    });
+
+    test('Apuracao do método antigo tem os campos novos nulos', () {
+      final mes = Mes.fromJson({
+        'mes': '2026-05',
+        'lotes': [
+          {
+            'id': 'l1',
+            'ticker': 'PETR4',
+            'tipo': 'Ação',
+            'data_compra': '2026-05-02',
+            'qtd': 10,
+            'preco': 10.0,
+            'vendas': [
+              {'id': 'v1', 'data': '2026-05-10', 'qtd': 10, 'preco': 12.0},
+            ],
+          },
+        ],
+      });
+      final r = apurar(mes);
+      expect(r.metodo, isNull);
+      expect(r.compensadoComum, isNull);
+      expect(r.compensadoDt, isNull);
+      expect(r.prejuizoComumFinal, isNull);
+      expect(r.prejuizoDtFinal, isNull);
+      expect(r.posicaoFinal, isNull);
+      expect(r.inconsistentes, isEmpty);
+      final o = r.ops.single;
+      expect(o.qtdDt, isNull);
+      expect(o.custoFiscal, isNull);
+      expect(o.resultadoFiscal, isNull);
+      expect(o.regime, 'Swing (isento)');
     });
   });
 

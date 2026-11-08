@@ -139,6 +139,12 @@ class Operacao extends ResultadoVenda {
   String regime = '';
   double imposto = 0.0;
 
+  /// Custo médio: quantidade day trade da venda, custo e resultado fiscais
+  /// (nulos no método por compra).
+  int? qtdDt;
+  double? custoFiscal;
+  double? resultadoFiscal;
+
   @override
   Map<String, Object?> toJson() => {
     ...super.toJson(),
@@ -170,6 +176,13 @@ class Apuracao {
     required this.darfMes,
     required this.darfAnterior,
     required this.darf,
+    this.metodo,
+    this.compensadoComum,
+    this.compensadoDt,
+    this.prejuizoComumFinal,
+    this.prejuizoDtFinal,
+    this.posicaoFinal,
+    this.inconsistentes = const [],
   });
 
   final List<Operacao> ops;
@@ -185,6 +198,15 @@ class Apuracao {
   final double darfMes;
   final double darfAnterior;
   final double darf;
+
+  /// Campos do custo médio; nulos no método por compra.
+  final String? metodo;
+  final double? compensadoComum;
+  final double? compensadoDt;
+  final double? prejuizoComumFinal;
+  final double? prejuizoDtFinal;
+  final Map<String, PosicaoFiscal>? posicaoFinal;
+  final List<String> inconsistentes;
 
   /// O que o mês fechado grava em `resumo` (sem `ops`).
   ResumoApuracao get resumo => ResumoApuracao(

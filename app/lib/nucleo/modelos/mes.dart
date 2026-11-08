@@ -62,6 +62,39 @@ class ResumoApuracao {
   };
 }
 
+/// Marcador do mês apurado pelas regras da Receita (custo médio por ticker e
+/// day trade por ativo no dia). Mês sem marcador usa o método por compra.
+const metodoCustoMedio = 'custo_medio';
+
+/// Posição de um ticker no custo médio: quantidade e custo total.
+class PosicaoFiscal {
+  PosicaoFiscal({required this.qtd, required this.custo});
+
+  factory PosicaoFiscal.fromJson(Map<String, Object?> json) =>
+      PosicaoFiscal(qtd: lerInt(json['qtd']), custo: lerDouble(json['custo']));
+
+  int qtd;
+  double custo;
+
+  Map<String, Object?> toJson() => {'qtd': qtd, 'custo': custo};
+}
+
+/// Prejuízo a compensar trazido dos meses anteriores.
+class PrejuizoAcumulado {
+  PrejuizoAcumulado({this.comum = 0, this.dayTrade = 0});
+
+  factory PrejuizoAcumulado.fromJson(Map<String, Object?> json) =>
+      PrejuizoAcumulado(
+        comum: lerDouble(json['comum']),
+        dayTrade: lerDouble(json['day_trade']),
+      );
+
+  double comum;
+  double dayTrade;
+
+  Map<String, Object?> toJson() => {'comum': comum, 'day_trade': dayTrade};
+}
+
 /// Um arquivo `AAAA-MM.json`.
 class Mes implements ComMod {
   Mes({
@@ -73,6 +106,9 @@ class Mes implements ComMod {
     this.mod = 0,
     this.resumo,
     this.retroativo = false,
+    this.metodo,
+    this.posicaoInicial,
+    this.prejuizoAnterior,
   }) : lotes = lotes ?? [],
        excluidos = excluidos ?? {};
 
@@ -88,6 +124,16 @@ class Mes implements ComMod {
         ? ResumoApuracao.fromJson(lerMapa(json['resumo']))
         : null,
     retroativo: lerBool(json['retroativo']),
+    metodo: json['metodo'] is String ? json['metodo']! as String : null,
+    posicaoInicial: json['posicao_inicial'] is Map
+        ? {
+            for (final e in lerMapa(json['posicao_inicial']).entries)
+              e.key: PosicaoFiscal.fromJson(lerMapa(e.value)),
+          }
+        : null,
+    prejuizoAnterior: json['prejuizo_anterior'] is Map
+        ? PrejuizoAcumulado.fromJson(lerMapa(json['prejuizo_anterior']))
+        : null,
   ).._ordem = json.keys.toList();
 
   String mes;
@@ -104,6 +150,15 @@ class Mes implements ComMod {
   /// Mês criado por venda retroativa; só vai para o JSON quando verdadeiro.
   bool retroativo;
 
+  /// Método de apuração do mês (`metodoCustoMedio`); nulo = por compra.
+  String? metodo;
+
+  /// Posição fiscal por ticker herdada do mês anterior (só no custo médio).
+  Map<String, PosicaoFiscal>? posicaoInicial;
+
+  /// Prejuízo a compensar herdado do mês anterior (só no custo médio).
+  PrejuizoAcumulado? prejuizoAnterior;
+
   List<String>? _ordem;
 
   Map<String, Object?> toJson() => emOrdem({
@@ -115,6 +170,13 @@ class Mes implements ComMod {
     if (retroativo) 'retroativo': true,
     'mod': mod,
     if (resumo != null) 'resumo': resumo!.toJson(),
+    if (metodo != null) 'metodo': metodo,
+    if (posicaoInicial != null)
+      'posicao_inicial': {
+        for (final e in posicaoInicial!.entries) e.key: e.value.toJson(),
+      },
+    if (prejuizoAnterior != null)
+      'prejuizo_anterior': prejuizoAnterior!.toJson(),
   }, _ordem);
 }
 
