@@ -43,3 +43,4 @@ export 'repositorio.dart';
 export 'sugestoes/patrimonio.dart';
 export 'sugestoes/sugestoes.dart';
 export 'sugestoes/textos.dart';
+export 'tick.dart';
