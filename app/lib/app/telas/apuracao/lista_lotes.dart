@@ -82,6 +82,70 @@ ButtonStyle estiloPerigo(BuildContext context) {
   );
 }
 
+/// Posição no fim do mês ou carteira atual (lotes do mês aberto). Na carteira
+/// de outro mês que o da tela, diz de qual mês vêm os lotes.
+class SeletorLista extends StatelessWidget {
+  const SeletorLista({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final controle = context.watch<ControleApuracao>();
+    final c = CoresApp.de(context);
+    final aberto = controle.mesAberto;
+    final modo = controle.modoLista;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 6,
+      children: [
+        BotaoSegmentado<ModoLista>(
+          key: const Key('seletor-posicao'),
+          opcoes: [
+            (ModoLista.posicao, 'Posição em ${fmtData(controle.dataCorte)}'),
+            (ModoLista.carteira, 'Carteira atual'),
+          ],
+          valor: modo,
+          aoMudar: controle.escolherModo,
+        ),
+        if (modo == ModoLista.carteira &&
+            aberto != null &&
+            aberto != controle.mes)
+          Text(
+            'Lotes do mês aberto (${fmtMes(aberto)})',
+            style: TextStyle(color: c.textoSuave, fontSize: 11),
+          ),
+      ],
+    );
+  }
+}
+
+/// A carteira atual de outro mês ainda não chegou (ou falhou).
+class _CarteiraPendente extends StatelessWidget {
+  const _CarteiraPendente({required this.controle});
+
+  final ControleApuracao controle;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 12,
+      children: [
+        const CabecalhoLista(
+          titulo: 'Ativos comprados',
+          contagemKey: Key('contagem-lotes'),
+          contagem: '…',
+        ),
+        const SeletorLista(),
+        Text(
+          controle.erroCarteira ?? 'Carregando a carteira atual…',
+          style: TextStyle(color: c.textoSuave),
+        ),
+      ],
+    );
+  }
+}
+
 /// Ativos comprados. [sliver] (celular) devolve um sliver com os cartões
 /// montados sob demanda; sem ele, o cartão com tabela do layout expandido.
 class ListaLotes extends StatelessWidget {
@@ -92,11 +156,17 @@ class ListaLotes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controle = context.watch<ControleApuracao>();
-    final visao = controle.visao;
+    final visao = controle.visaoLotes;
     if (visao == null) {
+      if (controle.visao == null) {
+        return sliver
+            ? const SliverToBoxAdapter(child: SizedBox.shrink())
+            : const SizedBox.shrink();
+      }
+      final pendente = _CarteiraPendente(controle: controle);
       return sliver
-          ? const SliverToBoxAdapter(child: SizedBox.shrink())
-          : const SizedBox.shrink();
+          ? SliverToBoxAdapter(child: pendente)
+          : Cartao(child: pendente);
     }
     final todos = visao.dados.lotes;
     final f = controle.filtroLotes;
@@ -169,7 +239,7 @@ class _Expandido extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    final editavel = controle.visao?.editavel ?? false;
+    final editavel = controle.visaoLotes?.editavel ?? false;
     final livre = editavel && !controle.gravando;
     final precos = controle.precos;
     Color? mudo(BuildContext ctx, Lote l) =>
@@ -305,6 +375,7 @@ class _Expandido extends StatelessWidget {
               ),
             ],
           ),
+          const SeletorLista(),
           ?barra,
           Text(
             'Clique nos títulos das colunas para ordenar',
@@ -356,7 +427,7 @@ class _Compacto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    final editavel = controle.visao?.editavel ?? false;
+    final editavel = controle.visaoLotes?.editavel ?? false;
     final cabecalho = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 12,
@@ -380,6 +451,7 @@ class _Compacto extends StatelessWidget {
               ),
           ],
         ),
+        const SeletorLista(),
         ?barra,
       ],
     );

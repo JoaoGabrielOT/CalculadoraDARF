@@ -494,6 +494,10 @@ class ServicosIsolate implements ServicosApp {
       _chamar((s) => s.carregarMes(mes, amigo: amigo));
 
   @override
+  Future<VisaoPosicoes> posicoes(String mes, {String? amigo}) =>
+      _chamar((s) => s.posicoes(mes, amigo: amigo));
+
+  @override
   Future<SugestoesTicker> sugestoesTicker(
     String mes, {
     bool soCustodia = false,
@@ -616,6 +620,10 @@ class ServicosIsolate implements ServicosApp {
   @override
   Future<Map<String, double?>> precosCarteira(Set<String> tickers) =>
       _chamar((s) => s.precosCarteira(tickers));
+
+  @override
+  Future<Map<String, CotacaoAtual?>> cotacoesAtuais(Set<String> tickers) =>
+      _chamar((s) => s.cotacoesAtuais(tickers));
 
   @override
   Future<(double, String)> precoVenda(String ticker, String dia) =>

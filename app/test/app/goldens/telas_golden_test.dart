@@ -278,12 +278,100 @@ Future<void> _decodificarImagens(WidgetTester t) async {
   }
 }
 
+/// Setembro fechado com PETR4 ainda em carteira no último dia do mês.
+ServicosFalsos _servicosComPosicao() {
+  final s = _servicos();
+  s.visoes['2026-09'] = visaoExemplo(
+    Mes(
+      mes: '2026-09',
+      fechado: true,
+      lotes: [
+        ...mesFechadoExemplo().lotes,
+        Lote(
+          id: 'F2',
+          ticker: 'PETR4',
+          tipo: 'Ação',
+          dataCompra: '2026-09-10',
+          qtd: 100,
+          preco: 31.5,
+        ),
+        Lote(
+          id: 'F3',
+          ticker: 'VALE3',
+          tipo: 'Ação',
+          dataCompra: '2026-09-15',
+          qtd: 50,
+          preco: 59.8,
+        ),
+      ],
+    ),
+  );
+  return s;
+}
+
 void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: hojeExemplo, agora: _agora));
   tearDown(() => ambiente = Ambiente.sistema());
 
   // Sem a fonte dos símbolos o grupo é pulado com o motivo (Linux, CI).
   group('telas', skip: motivoParaPularGoldens() ?? false, () {
+    // Apuração de um mês fechado: a posição no último dia (padrão) e a
+    // carteira atual (lotes do mês aberto) escolhida no seletor.
+    for (final carteira in [false, true]) {
+      for (final tema in _temas.entries) {
+        for (final tamanho in _tamanhos.entries) {
+          final nome =
+              'apuracao_${carteira ? 'carteira_atual' : 'posicao_historica'}_'
+              '${tema.key}_${tamanho.key}';
+          testWidgets(nome, (t) async {
+            debugDisableShadows = false;
+            try {
+              await montarApp(
+                t,
+                servicos: _servicosComPosicao(),
+                tema: tema.value,
+                tamanho: tamanho.value,
+              );
+              await t.pumpAndSettle();
+              final estado = Provider.of<EstadoApp>(
+                t.element(find.byType(Casca)),
+                listen: false,
+              );
+              estado.irPara(Aba.apuracao);
+              await t.pumpAndSettle();
+              estado.trocarMes('2026-09');
+              await t.pumpAndSettle();
+              final seletor = find.byKey(const Key('seletor-posicao'));
+              for (var i = 0; i < 30 && seletor.evaluate().isEmpty; i++) {
+                await t.drag(
+                  find.byType(CustomScrollView).first,
+                  const Offset(0, -300),
+                );
+                await t.pumpAndSettle();
+              }
+              await t.pumpAndSettle();
+              if (carteira) {
+                await t.tap(find.text('Carteira atual'));
+                await t.pumpAndSettle();
+              }
+              // no celular a lista fica abaixo dos indicadores
+              await Scrollable.ensureVisible(
+                t.element(seletor),
+                alignment: 0.2,
+              );
+              await _decodificarImagens(t);
+              await expectLater(
+                find.byKey(chaveCaptura),
+                matchesGoldenFile('arquivos/$nome.png'),
+              );
+            } finally {
+              debugDisableShadows = true;
+            }
+          });
+        }
+      }
+    }
+
     for (final aba in Aba.values) {
       for (final tema in _temas.entries) {
         for (final tamanho in _tamanhos.entries) {

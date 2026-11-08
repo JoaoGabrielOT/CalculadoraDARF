@@ -20,6 +20,7 @@ abstract interface class ServicosApp {
   Future<List<String>> mesesComDados({String? amigo});
   Future<String> mesInicial({String? amigo});
   Future<VisaoMes> carregarMes(String mes, {String? amigo});
+  Future<VisaoPosicoes> posicoes(String mes, {String? amigo});
   Future<SugestoesTicker> sugestoesTicker(
     String mes, {
     bool soCustodia = false,
@@ -61,6 +62,7 @@ abstract interface class ServicosApp {
   Future<CotacaoRadar> cotacao(String ticker, {String nome = ''});
   Future<Grafico> grafico(String ticker, String periodo);
   Future<Map<String, double?>> precosCarteira(Set<String> tickers);
+  Future<Map<String, CotacaoAtual?>> cotacoesAtuais(Set<String> tickers);
   Future<(double, String)> precoVenda(String ticker, String dia);
   Future<VisaoMetas> metas();
   Future<VisaoSugestoes> sugestoesMetas();
@@ -152,6 +154,26 @@ class VisaoMes {
 
   bool get somenteLeitura => amigo != null;
   bool get editavel => amigo == null && !dados.fechado && erroLeitura == null;
+}
+
+/// Posições em aberto numa data de corte. Só leitura: não grava nada.
+class VisaoPosicoes {
+  const VisaoPosicoes({
+    required this.dataCorte,
+    required this.corrente,
+    required this.posicoes,
+    required this.carteira,
+  });
+
+  /// `AAAA-MM-DD`: o último dia do mês, ou hoje no mês de hoje.
+  final String dataCorte;
+
+  /// O corte é hoje: só então vale mostrar a cotação atual.
+  final bool corrente;
+  final List<PosicaoAtivo> posicoes;
+
+  /// Posições de hoje (a carteira atual), em qualquer mês escolhido.
+  final List<PosicaoAtivo> carteira;
 }
 
 class NovaCompra {
@@ -272,6 +294,23 @@ class VisaoRadar {
   final Set<String> custodia;
   final Set<String> meus;
   final String? amigo;
+}
+
+/// Cotação de agora, com a fonte e a hora: nunca é uma cotação histórica.
+class CotacaoAtual {
+  const CotacaoAtual({
+    required this.preco,
+    required this.hora,
+    required this.fonte,
+  });
+
+  final double preco;
+
+  /// Hora da consulta, no fuso de Brasília.
+  final DataHora hora;
+
+  /// `'Yahoo'`.
+  final String fonte;
 }
 
 sealed class CotacaoRadar {

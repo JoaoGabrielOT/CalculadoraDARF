@@ -119,6 +119,13 @@ void main() {
       'DEFG': 4.0,
       'nulo': null,
     });
+    final ca = await s.cotacoesAtuais({'ABC'});
+    expect(ca['ABC']!.preco, 3.0);
+    expect(ca['ABC']!.fonte, 'Yahoo');
+    expect(ca['ABC']!.hora.horaMinuto, '19:40');
+    expect(ca['nulo'], isNull);
+    final pos = await s.posicoes('2026-10');
+    expect((pos.dataCorte, pos.corrente), ('2026-10-28', true));
     expect(await s.precoVenda('PETR4', '2026-10-01'), (
       1.5,
       'PETR4@2026-10-01',

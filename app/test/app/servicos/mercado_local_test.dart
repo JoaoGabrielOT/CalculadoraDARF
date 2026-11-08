@@ -379,6 +379,17 @@ void main() {
       },
     );
 
+    test('cotacoesAtuais: preço, fonte e hora de Brasília; falha vira nulo '
+        'sem derrubar os outros', () async {
+      status['VALE3'] = 500;
+      final c = await servicos.cotacoesAtuais({'PETR4', 'VALE3'});
+      expect(c['VALE3'], isNull);
+      final p = c['PETR4']!;
+      expect((p.preco, p.fonte), (10.5, 'Yahoo'));
+      expect(p.hora.desvio, fusoBrasilia);
+      expect(p.hora.timestamp, closeTo(1761000000.123, 0.001));
+    });
+
     test('429 depois de um preço mantém o preço', () async {
       expect(await servicos.precosCarteira({'PETR4'}), {'PETR4': 10.5});
       ambiente = Ambiente.fixo(agora: 1761000000.123 + 120);

@@ -89,6 +89,18 @@ class ServicosFalsos implements ServicosApp {
   Map<String, double?> precos = {};
   Future<Map<String, double?>> Function(Set<String> tickers)? precosFn;
 
+  /// Resposta de `posicoes` por mês; sem ela, as posições saem dos meses de
+  /// [visoes] pelo núcleo (como o serviço real). [posicoesFn] tem
+  /// precedência (para deixar o `Future` pendente).
+  Map<String, VisaoPosicoes> posicoesPorMes = {};
+  Future<VisaoPosicoes> Function(String mes, String? amigo)? posicoesFn;
+
+  /// Resposta de `cotacoesAtuais`: ticker ausente = sem cotação (nulo).
+  /// [cotacoesAtuaisFn] tem precedência.
+  Map<String, CotacaoAtual?> cotacoesAtuaisResp = {};
+  Future<Map<String, CotacaoAtual?>> Function(Set<String> tickers)?
+  cotacoesAtuaisFn;
+
   // caixa
   VisaoCaixa? visaoCaixa;
 
@@ -152,6 +164,41 @@ class ServicosFalsos implements ServicosApp {
         erroLeitura: v.erroLeitura,
       );
     });
+  }
+
+  @override
+  Future<VisaoPosicoes> posicoes(String mes, {String? amigo}) {
+    final fn = posicoesFn;
+    if (fn != null) {
+      chamadas.add('posicoes($mes, $amigo)');
+      return fn(mes, amigo);
+    }
+    return _chamar('posicoes', [mes, amigo], () {
+      final pronta = posicoesPorMes[mes];
+      if (pronta != null) return pronta;
+      final hoje = ambiente.hoje();
+      final corte = dataCorteDoMes(mes, hoje);
+      final dados = {for (final e in visoes.entries) e.key: e.value.dados};
+      return VisaoPosicoes(
+        dataCorte: corte,
+        corrente: corte == hoje,
+        posicoes: posicoesEm(dados, corte),
+        carteira: posicoesEm(dados, hoje),
+      );
+    });
+  }
+
+  @override
+  Future<Map<String, CotacaoAtual?>> cotacoesAtuais(Set<String> tickers) {
+    final lista = tickers.toList()..sort();
+    final fn = cotacoesAtuaisFn;
+    if (fn != null) {
+      chamadas.add('cotacoesAtuais(${lista.join(',')})');
+      return fn(tickers);
+    }
+    return _chamar('cotacoesAtuais', [
+      lista.join(','),
+    ], () => {for (final t in tickers) t: cotacoesAtuaisResp[t]});
   }
 
   @override

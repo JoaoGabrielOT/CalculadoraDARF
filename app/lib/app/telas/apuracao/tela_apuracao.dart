@@ -17,7 +17,7 @@ import '../../tema/layout.dart';
 import 'controle_apuracao.dart';
 import 'detalhamento.dart';
 import 'indicadores.dart';
-import 'lista_lotes.dart';
+import 'lista_posicoes.dart';
 import 'lista_vendas.dart';
 import 'seletor_visao.dart';
 
@@ -447,7 +447,7 @@ class _CartaoLink extends StatelessWidget {
 const larguraMinimaListas = 1200.0;
 
 Widget listasApuracao(BuildContext c) {
-  const lotes = ListaLotes();
+  const lotes = ListaAtivos();
   const vendas = ListaVendas();
   return LayoutBuilder(
     builder: (context, caixa) {
@@ -469,7 +469,7 @@ Widget listasApuracao(BuildContext c) {
 
 /// Conteúdo do celular: cartões das compras e vendas, montados sob demanda.
 List<Widget> listasSliversApuracao(BuildContext c) => const [
-  ListaLotes(sliver: true),
+  ListaAtivos(sliver: true),
   SliverToBoxAdapter(child: SizedBox(height: 24)),
   ListaVendas(sliver: true),
 ];

@@ -129,6 +129,20 @@ class ApuracaoLocal {
     return _mesDeHoje();
   }
 
+  /// Posições em aberto no fim de [mes] (ou hoje, no mês de hoje). Só lê: um
+  /// mês sem arquivo não é criado.
+  Future<VisaoPosicoes> posicoes(String mes, {String? amigo}) async {
+    final meses = amigo != null ? _dadosAmigo(amigo).meses : _carregarTodos();
+    final hoje = ambiente.hoje();
+    final corte = dataCorteDoMes(mes, hoje);
+    return VisaoPosicoes(
+      dataCorte: corte,
+      corrente: corte == hoje,
+      posicoes: posicoesEm(meses, corte),
+      carteira: posicoesEm(meses, hoje),
+    );
+  }
+
   Future<VisaoMes> carregarMes(String mes, {String? amigo}) async {
     if (amigo != null) {
       final d = _dadosAmigo(amigo).meses[mes] ?? mesVazio(mes);

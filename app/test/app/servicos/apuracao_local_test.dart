@@ -822,6 +822,41 @@ void main() {
     });
   });
 
+  group('posições', () {
+    void gravarCadeia() {
+      gravarMes('2026-02', [
+        compra(
+          'A',
+          data: '2026-02-10',
+          vendas: [Venda(id: 'V1', data: '2026-02-20', qtd: 30, preco: 11)],
+        ),
+      ], fechado: true);
+      gravarMes('2026-04', [
+        compra('A2', origem: 'A', data: '2026-02-10', qtd: 70),
+      ]);
+    }
+
+    test('mês sem arquivo: devolve a posição do último dia e não cria o '
+        'arquivo', () async {
+      gravarCadeia();
+      final v = await servicos.posicoes('2026-03');
+      expect(v.dataCorte, '2026-03-31');
+      expect(v.corrente, isFalse);
+      final p = v.posicoes.single;
+      expect((p.ticker, p.qtd), ('PETR4', 70));
+      expect(disco.existe('2026-03.json'), isFalse);
+      expect(repo.listarMeses(), ['2026-02', '2026-04']);
+    });
+
+    test('mês de hoje: o corte é hoje e a carteira é a de hoje', () async {
+      gravarCadeia();
+      final v = await servicos.posicoes('2026-10');
+      expect((v.dataCorte, v.corrente), ('2026-10-28', true));
+      expect(v.carteira.single.qtd, 70);
+      expect(await agendamentos(), 0);
+    });
+  });
+
   group('caixa', () {
     test('caixa e alterarSaldo', () async {
       gravarMes('2026-10', [compra('L1', data: '2026-10-05')]);

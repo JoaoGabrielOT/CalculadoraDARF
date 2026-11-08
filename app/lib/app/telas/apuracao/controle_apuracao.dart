@@ -17,6 +17,10 @@ import '../../regras/textos.dart';
 import '../../servicos/api.dart';
 import '../formularios/abrir_formulario.dart';
 
+/// O que a seção "Ativos comprados" mostra: a posição no fim do mês
+/// escolhido (só leitura) ou os lotes do mês aberto (com as ações de hoje).
+enum ModoLista { posicao, carteira }
+
 class ControleApuracao extends ChangeNotifier {
   ControleApuracao(this._servicos, this._estado) {
     _mes = _estado.mes;
@@ -28,6 +32,7 @@ class ControleApuracao extends ChangeNotifier {
     _timer = Timer.periodic(intervaloCotacoes, (_) {
       if (_estado.aba == Aba.apuracao && _estado.amigo == null) {
         unawaited(_buscarPrecos());
+        unawaited(_buscarCotacoes());
       }
     });
     unawaited(recarregar());
@@ -45,6 +50,11 @@ class ControleApuracao extends ChangeNotifier {
   bool _descartado = false;
   Timer? _timer;
   int _geracaoPrecos = 0;
+  int _geracaoPosicoes = 0;
+  int _geracaoCotacoes = 0;
+  int _geracaoCarteira = 0;
+  ModoLista? _modoEscolhido;
+  VisaoMes? _visaoAberto;
 
   /// O mês na tela; null enquanto o primeiro carregamento (ou o de outro mês
   /// ou visão) não chega, ou quando ele falhou ([erro]).
@@ -65,6 +75,21 @@ class ControleApuracao extends ChangeNotifier {
   /// nulo = a cotação falhou ("—").
   Map<String, double?> precos = {};
 
+  /// Primeiro mês aberto (o de trabalho); nulo até chegar ou se falhou.
+  String? mesAberto;
+
+  /// Posições no fim do mês escolhido; nulo enquanto carrega ([erroPosicoes]
+  /// quando falhou).
+  VisaoPosicoes? posicoes;
+  String? erroPosicoes;
+
+  /// Cotação atual por ticker da posição de hoje: ausente = ainda não
+  /// chegou; nulo = a consulta falhou.
+  Map<String, CotacaoAtual?> cotacoes = {};
+
+  /// Erro ao ler o mês aberto quando a carteira atual vem de outro mês.
+  String? erroCarteira;
+
   FiltroLotes filtroLotes = FiltroLotes();
   FiltroVendas filtroVendas = FiltroVendas();
 
@@ -77,6 +102,44 @@ class ControleApuracao extends ChangeNotifier {
 
   /// O mês escolhido no estado do app (o seletor muda por lá).
   String get mes => _estado.mes;
+
+  /// Último dia do mês escolhido, ou hoje no mês de hoje.
+  String get dataCorte => dataCorteDoMes(mes, ambiente.hoje());
+
+  /// Padrão: a carteira atual no mês aberto, a posição nos demais.
+  ModoLista get modoLista =>
+      _modoEscolhido ??
+      (mesAberto == null || mesAberto == mes
+          ? ModoLista.carteira
+          : ModoLista.posicao);
+
+  /// Os lotes da lista de compras: os do mês na tela, ou os do mês aberto
+  /// quando a carteira atual é pedida de outro mês (nulo enquanto carrega).
+  VisaoMes? get visaoLotes {
+    final v = visao;
+    final aberto = mesAberto;
+    if (v == null ||
+        modoLista != ModoLista.carteira ||
+        aberto == null ||
+        v.mes == aberto) {
+      return v;
+    }
+    return _visaoAberto?.mes == aberto ? _visaoAberto : null;
+  }
+
+  /// A carteira atual é de outro mês que o da tela, e ainda não chegou.
+  bool get carregandoCarteira =>
+      visao != null &&
+      modoLista == ModoLista.carteira &&
+      visaoLotes == null &&
+      erroCarteira == null;
+
+  void escolherModo(ModoLista modo) {
+    if (modo == modoLista) return;
+    _modoEscolhido = modo;
+    notifyListeners();
+    _atualizarModo(recarregarCarteira: true);
+  }
 
   @override
   void notifyListeners() {
@@ -97,6 +160,7 @@ class ControleApuracao extends ChangeNotifier {
         _estado.versaoDados == _versao) {
       return;
     }
+    if (_estado.mes != _mes || _estado.amigo != _amigo) _modoEscolhido = null;
     _mes = _estado.mes;
     _amigo = _estado.amigo;
     _versao = _estado.versaoDados;
@@ -113,13 +177,26 @@ class ControleApuracao extends ChangeNotifier {
     final atual = visao;
     if (atual != null && (atual.mes != mes || atual.amigo != amigo)) {
       visao = null;
+      posicoes = null;
+      erroPosicoes = null;
+      cotacoes = {};
+      _visaoAberto = null;
+      erroCarteira = null;
+      _geracaoPosicoes++;
+      _geracaoCotacoes++;
+      _geracaoCarteira++;
       _podarSelecao();
     }
     carregando = true;
     notifyListeners();
+    final aberto = _servicos
+        .mesInicial(amigo: amigo)
+        .then<String?>((m) => m, onError: (_) => null);
     try {
       final nova = await _servicos.carregarMes(mes, amigo: amigo);
+      final inicial = await aberto;
       if (geracao != _geracao) return;
+      mesAberto = inicial ?? mesAberto;
       _definirVisao(nova);
       erro = null;
     } catch (e) {
@@ -130,7 +207,7 @@ class ControleApuracao extends ChangeNotifier {
     }
     carregando = false;
     notifyListeners();
-    unawaited(_buscarPrecos());
+    _atualizarModo(recarregarCarteira: true);
     if (amigo == null) unawaited(_carregarSaldo(geracao));
   }
 
@@ -148,17 +225,106 @@ class ControleApuracao extends ChangeNotifier {
       loteSelecionado = vendaSelecionada = null;
       return;
     }
-    final lotes = filtrarLotes(v.dados.lotes, filtroLotes, (t) => precos[t]);
+    final lotes = filtrarLotes(
+      (visaoLotes ?? v).dados.lotes,
+      filtroLotes,
+      (t) => precos[t],
+    );
     if (!lotes.any((l) => l.id == loteSelecionado)) loteSelecionado = null;
     final ops = filtrarVendas(v.apuracao.ops, filtroVendas);
     if (!ops.any((o) => o.vendaId == vendaSelecionada)) vendaSelecionada = null;
   }
 
+  /// Busca o que o modo da lista precisa: as posições e a cotação atual
+  /// delas, ou o mês aberto e os preços dos lotes.
+  void _atualizarModo({bool recarregarCarteira = false}) {
+    if (_descartado || visao == null) return;
+    if (modoLista == ModoLista.posicao) {
+      unawaited(_carregarPosicoes());
+    } else {
+      if (recarregarCarteira) unawaited(_carregarCarteira());
+      unawaited(_buscarPrecos());
+    }
+  }
+
+  /// Posições no fim do mês na tela (só leitura).
+  Future<void> _carregarPosicoes() async {
+    final geracao = ++_geracaoPosicoes;
+    final amigo = _estado.amigo;
+    try {
+      final r = await _servicos.posicoes(_estado.mes, amigo: amigo);
+      if (geracao != _geracaoPosicoes || _descartado) return;
+      posicoes = r;
+      erroPosicoes = null;
+    } catch (e) {
+      if (geracao != _geracaoPosicoes || _descartado || e is PedidoSuperado) {
+        return;
+      }
+      posicoes = null;
+      erroPosicoes = textoErro(e);
+    }
+    notifyListeners();
+    unawaited(_buscarCotacoes());
+  }
+
+  /// Cotação atual dos ativos da posição de hoje. Uma cotação que falha deixa
+  /// o ativo sem valor de mercado; a que já chegou fica com a hora dela.
+  Future<void> _buscarCotacoes() async {
+    final p = posicoes;
+    if (p == null ||
+        !p.corrente ||
+        _estado.amigo != null ||
+        modoLista != ModoLista.posicao ||
+        _descartado) {
+      return;
+    }
+    final tickers = {for (final a in p.posicoes) a.ticker};
+    if (tickers.isEmpty) return;
+    final geracao = ++_geracaoCotacoes;
+    var r = <String, CotacaoAtual?>{};
+    try {
+      r = await _servicos.cotacoesAtuais(tickers);
+    } catch (e) {
+      if (e is PedidoSuperado) return;
+    }
+    if (geracao != _geracaoCotacoes || _descartado) return;
+    cotacoes = {...cotacoes, for (final t in tickers) t: r[t] ?? cotacoes[t]};
+    notifyListeners();
+  }
+
+  /// Lotes do mês aberto quando a carteira atual é pedida de outro mês.
+  Future<void> _carregarCarteira() async {
+    final aberto = mesAberto;
+    final v = visao;
+    if (aberto == null || v == null || v.mes == aberto) return;
+    final geracao = ++_geracaoCarteira;
+    try {
+      final r = await _servicos.carregarMes(aberto, amigo: _estado.amigo);
+      if (geracao != _geracaoCarteira || _descartado) return;
+      _visaoAberto = r;
+      erroCarteira = null;
+    } catch (e) {
+      if (geracao != _geracaoCarteira || _descartado || e is PedidoSuperado) {
+        return;
+      }
+      _visaoAberto = null;
+      erroCarteira = textoErro(e);
+    }
+    _podarSelecao();
+    notifyListeners();
+    unawaited(_buscarPrecos());
+  }
+
   /// Cotações das compras em aberto, sem bloquear a tela: cada ticker mostra
   /// "…" até a resposta chegar. Se a busca falha, o que faltava vira "—".
   Future<void> _buscarPrecos() async {
-    final atual = visao;
-    if (atual == null || atual.erroLeitura != null || _descartado) return;
+    final atual = visaoLotes;
+    if (atual == null ||
+        atual.erroLeitura != null ||
+        modoLista != ModoLista.carteira ||
+        _descartado) {
+      return;
+    }
     final tickers = {
       for (final l in atual.dados.lotes)
         if (restante(l) > 0) l.ticker,
@@ -228,7 +394,7 @@ class ControleApuracao extends ChangeNotifier {
   Future<void> novaCompra(BuildContext c) => _unica(() => _novaCompra(c));
 
   Future<void> _novaCompra(BuildContext c) async {
-    final atual = visao;
+    final atual = visaoLotes;
     if (atual == null || !atual.editavel) return;
     final antes = {for (final l in atual.dados.lotes) l.id};
     final nova = await abrirFormCompra(c, atual);
@@ -251,10 +417,17 @@ class ControleApuracao extends ChangeNotifier {
 
   /// A visão que um formulário devolveu vale se ainda é a do mês aberto.
   void _aceitar(VisaoMes nova) {
-    if (nova.mes != _estado.mes || _estado.amigo != null) return;
-    _definirVisao(nova);
+    if (_estado.amigo != null) return;
+    if (nova.mes == _estado.mes) {
+      _definirVisao(nova);
+    } else if (nova.mes == mesAberto && _visaoAberto != null) {
+      _visaoAberto = nova;
+      _podarSelecao();
+    } else {
+      return;
+    }
     notifyListeners();
-    unawaited(_buscarPrecos());
+    _atualizarModo();
   }
 
   // --- filtros e seleção das listas
@@ -282,7 +455,7 @@ class ControleApuracao extends ChangeNotifier {
   }
 
   Lote? _lote(String? id) {
-    for (final l in visao?.dados.lotes ?? const <Lote>[]) {
+    for (final l in visaoLotes?.dados.lotes ?? const <Lote>[]) {
       if (l.id == id) return l;
     }
     return null;
@@ -318,7 +491,7 @@ class ControleApuracao extends ChangeNotifier {
       _unica(() => _registrarVenda(c, lote: lote));
 
   Future<void> _registrarVenda(BuildContext c, {Lote? lote}) async {
-    final atual = visao;
+    final atual = visaoLotes;
     if (atual == null || !atual.editavel) return;
     var alvo = lote ?? _lote(loteSelecionado);
     if (alvo != null && restante(alvo) == 0) alvo = null;
@@ -330,7 +503,7 @@ class ControleApuracao extends ChangeNotifier {
       _unica(() => _editarLote(c, id: id));
 
   Future<void> _editarLote(BuildContext c, {String? id}) async {
-    final atual = visao;
+    final atual = visaoLotes;
     if (atual == null || !atual.editavel) return;
     final lote = _lote(id ?? loteSelecionado);
     if (lote == null) {
@@ -364,7 +537,7 @@ class ControleApuracao extends ChangeNotifier {
       _unica(() => _excluirLote(c, id: id));
 
   Future<void> _excluirLote(BuildContext c, {String? id}) async {
-    final atual = visao;
+    final atual = visaoLotes;
     if (atual == null || !atual.editavel) return;
     final lote = _lote(id ?? loteSelecionado);
     if (lote == null) {
@@ -386,7 +559,7 @@ class ControleApuracao extends ChangeNotifier {
     if (!sim || !c.mounted) return;
     await _excluir(
       c,
-      atual.mes,
+      _estado.mes,
       () => _servicos.excluirCompra(atual.mes, lote.id),
     );
   }
@@ -526,6 +699,13 @@ class ControleApuracao extends ChangeNotifier {
         await avisar(c, 'Não foi possível fechar o mês', textoErro(e));
       }
       return;
+    }
+    // o mês de trabalho mudou: a lista de compras acompanha o novo
+    try {
+      mesAberto = await _servicos.mesInicial(amigo: _estado.amigo);
+      _visaoAberto = null;
+    } catch (_) {
+      // fica o último conhecido
     }
     _aceitar(fechamento.visao);
     if (c.mounted) await avisar(c, 'Mês fechado', fechamento.mensagem);

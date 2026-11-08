@@ -124,6 +124,28 @@ class ServicosEco implements ServicosApp {
       _visao(mes, amigo: amigo);
 
   @override
+  Future<VisaoPosicoes> posicoes(String mes, {String? amigo}) async =>
+      VisaoPosicoes(
+        dataCorte: '$mes-28',
+        corrente: amigo == null,
+        posicoes: const [],
+        carteira: const [],
+      );
+
+  @override
+  Future<Map<String, CotacaoAtual?>> cotacoesAtuais(
+    Set<String> tickers,
+  ) async => {
+    for (final t in tickers)
+      t: CotacaoAtual(
+        preco: t.length.toDouble(),
+        hora: DataHora.deTimestamp(1761000000, fusoBrasilia),
+        fonte: 'Yahoo',
+      ),
+    'nulo': null,
+  };
+
+  @override
   Future<SugestoesTicker> sugestoesTicker(
     String mes, {
     bool soCustodia = false,

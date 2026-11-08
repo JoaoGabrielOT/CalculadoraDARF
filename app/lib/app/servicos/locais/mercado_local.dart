@@ -188,6 +188,27 @@ class MercadoLocal {
     };
   }
 
+  /// Cotação de agora de cada ticker, com fonte e hora; nulo = a consulta
+  /// falhou ou veio sem preço. Um ticker que falha não derruba os outros.
+  Future<Map<String, CotacaoAtual?>> cotacoesAtuais(Set<String> tickers) async {
+    final lista = ordenadoPor(tickers, (t) => [t]);
+    final dados = await Future.wait([
+      for (final t in lista)
+        yahoo.dados(t).then<DadosAtivo?>((d) => d, onError: (_) => null),
+    ]);
+    return {
+      for (var i = 0; i < lista.length; i++)
+        lista[i]: switch (dados[i]) {
+          final d? when d.preco != null && d.preco! > 0 => CotacaoAtual(
+            preco: d.preco!,
+            hora: DataHora.deTimestamp(d.hora, fusoBrasilia),
+            fonte: 'Yahoo',
+          ),
+          _ => null,
+        },
+    };
+  }
+
   // --- metas
 
   Future<VisaoMetas> metas() async {
