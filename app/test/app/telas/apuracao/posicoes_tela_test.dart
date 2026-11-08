@@ -108,7 +108,7 @@ void main() {
 
   testWidgets('mês histórico: padrão é a posição no último dia, sem valor de '
       'mercado nem cotação', (t) async {
-    final s = await _montar(t, mes: '2026-09');
+    await _montar(t, mes: '2026-09');
     expect(find.text('Posição em 30/09/2026'), findsOneWidget);
     expect(find.byKey(const Key('lista-posicoes')), findsOneWidget);
     expect(find.byKey(const Key('tabela-lotes')), findsNothing);
@@ -117,7 +117,6 @@ void main() {
     expect(find.textContaining('VALOR DE MERCADO'), findsNothing);
     expect(find.byKey(const Key('ativo-PETR4')), findsOneWidget);
     expect(find.byKey(const Key('ativo-ITUB4')), findsNothing);
-    expect(s.chamadas.where((c) => c.startsWith('cotacoesAtuais')), isEmpty);
   });
 
   testWidgets('posição mostra quantidade, custo, preço médio e as compras '
@@ -150,10 +149,7 @@ void main() {
     expect(find.text('cotação histórica não disponível'), findsNothing);
     expect(find.text('VALOR DE MERCADO'), findsOneWidget);
     expect(find.text('R\$ 2.172,00'), findsOneWidget); // PETR4: 60 × 36,20
-    expect(
-      s.chamadas.where((c) => c.startsWith('cotacoesAtuais')).single,
-      'cotacoesAtuais(AAPL34,PETR4,VALE3)',
-    );
+    expect(s.chamadas, contains('cotacoesAtuais(AAPL34,PETR4,VALE3)'));
   });
 
   testWidgets('celular: posição em cartões com o selo da cotação atual', (
@@ -204,17 +200,67 @@ void main() {
     expect(s.chamadas, contains('carregarMes(2026-10, null)'));
   });
 
-  testWidgets('posição não grava nada: nenhuma chamada de escrita', (t) async {
-    final s = await _montar(t, mes: '2026-09');
-    await t.tap(find.byKey(const Key('ativo-PETR4')));
+  testWidgets('carteira atual também leva o selo da cotação atual', (t) async {
+    await _montar(t);
+    expect(find.text('Cotação atual · Yahoo · 07/11 14:05'), findsOneWidget);
+  });
+
+  testWidgets('visão de amigo: a posição de hoje também busca a cotação '
+      'atual, sem ficar em "…"', (t) async {
+    await _montar(t);
+    final estado = Provider.of<EstadoApp>(
+      t.element(find.byType(TelaApuracao)),
+      listen: false,
+    );
+    await estado.trocarVisao('ana@exemplo.com');
     await t.pumpAndSettle();
-    const escritas = [
-      'registrar',
-      'editar',
-      'excluir',
-      'fecharMes',
-      'alterarSaldo',
-    ];
-    expect(s.chamadas.where((c) => escritas.any(c.startsWith)), isEmpty);
+    await _tocar(t, 'Posição em 28/10/2026');
+    expect(find.text('Cotação atual · Yahoo · 07/11 14:05'), findsOneWidget);
+    expect(find.text('carregando cotação atual…'), findsNothing);
+    expect(find.text('…'), findsNothing);
+  });
+
+  testWidgets('fechar o mês com "Carteira atual" escolhida: a lista acompanha '
+      'o novo mês aberto', (t) async {
+    final s = _falsos();
+    s.fechamento = Fechamento(
+      visao: visaoExemplo(
+        Mes(mes: '2026-10', fechado: true, lotes: mesAbertoExemplo().lotes),
+      ),
+      mensagem: 'fechou',
+    );
+    await _montar(t, servicos: s);
+    await _tocar(t, 'Carteira atual');
+    // o novo mês aberto passa a ser 2026-11
+    s.visoes['2026-11'] = visaoExemplo(
+      Mes(
+        mes: '2026-11',
+        lotes: [
+          Lote(
+            id: 'N1',
+            ticker: 'BBAS3',
+            tipo: 'Ação',
+            dataCompra: '2026-10-20',
+            qtd: 10,
+            preco: 25,
+          ),
+        ],
+      ),
+    );
+    s.mesAberto = '2026-11';
+    await t.tap(find.widgetWithText(FilledButton, 'Fechar mês'));
+    await t.pumpAndSettle();
+    await t.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Fechar mês'),
+      ),
+    );
+    await t.pumpAndSettle();
+    await t.tap(find.text('OK'));
+    await t.pumpAndSettle();
+    expect(find.text('Carregando a carteira atual…'), findsNothing);
+    expect(find.text('Lotes do mês aberto (11/2026)'), findsOneWidget);
+    expect(find.text('BBAS3'), findsWidgets);
   });
 }

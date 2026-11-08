@@ -16,14 +16,6 @@ import 'lista_lotes.dart';
 const textoCotacaoHistorica = 'cotação histórica não disponível';
 const textoCustoPorCompra = 'custo por compra';
 
-/// "Cotação atual · Yahoo · dd/mm hh:mm", na hora de Brasília.
-String textoSeloCotacao(CotacaoAtual c) {
-  final h = c.hora.noFuso(fusoBrasilia);
-  final d = h.data;
-  return 'Cotação atual · ${c.fonte} · '
-      '${d.substring(8, 10)}/${d.substring(5, 7)} ${h.horaMinuto}';
-}
-
 /// A seção "Ativos comprados": a posição no fim do mês ou a carteira atual,
 /// conforme o seletor.
 class ListaAtivos extends StatelessWidget {
@@ -159,23 +151,7 @@ class _Cotacao extends StatelessWidget {
         style: TextStyle(color: c.textoSuave, fontSize: 12),
       );
     }
-    final chegadas = [
-      for (final t in {for (final a in p.posicoes) a.ticker})
-        if (controle.cotacoes[t] != null) controle.cotacoes[t]!,
-    ];
-    if (chegadas.isNotEmpty) {
-      // a mais antiga: o selo vale para todos os valores da lista
-      final antiga = ordenadoCom(chegadas, (a, b) => a.hora.compareTo(b.hora));
-      return Selo(texto: textoSeloCotacao(antiga.first));
-    }
-    if (p.posicoes.isEmpty) return const SizedBox.shrink();
-    final tentou = p.posicoes.every(
-      (a) => controle.cotacoes.containsKey(a.ticker),
-    );
-    return Text(
-      tentou ? 'cotação atual indisponível' : 'carregando cotação atual…',
-      style: TextStyle(color: c.textoSuave, fontSize: 12),
-    );
+    return const SeloCotacaoAtual();
   }
 }
 

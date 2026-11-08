@@ -135,7 +135,8 @@ class ControleApuracao extends ChangeNotifier {
       erroCarteira == null;
 
   void escolherModo(ModoLista modo) {
-    if (modo == modoLista) return;
+    // a escolha vale mesmo igual ao padrão: o padrão muda com o mês aberto
+    if (modo == _modoEscolhido) return;
     _modoEscolhido = modo;
     notifyListeners();
     _atualizarModo(recarregarCarteira: true);
@@ -267,18 +268,26 @@ class ControleApuracao extends ChangeNotifier {
     unawaited(_buscarCotacoes());
   }
 
-  /// Cotação atual dos ativos da posição de hoje. Uma cotação que falha deixa
-  /// o ativo sem valor de mercado; a que já chegou fica com a hora dela.
-  Future<void> _buscarCotacoes() async {
-    final p = posicoes;
-    if (p == null ||
-        !p.corrente ||
-        _estado.amigo != null ||
-        modoLista != ModoLista.posicao ||
-        _descartado) {
-      return;
+  /// Tickers cuja cotação atual a lista à vista mostra: os da posição de hoje
+  /// ou os da carteira atual; vazio numa posição de mês passado.
+  Set<String> get tickersCotacao {
+    if (modoLista == ModoLista.posicao) {
+      final p = posicoes;
+      if (p == null || !p.corrente) return const {};
+      return {for (final a in p.posicoes) a.ticker};
     }
-    final tickers = {for (final a in p.posicoes) a.ticker};
+    return {
+      for (final l in visaoLotes?.dados.lotes ?? const <Lote>[])
+        if (restante(l) > 0) l.ticker,
+    };
+  }
+
+  /// Cotação atual (com fonte e hora) dos ativos à vista. Uma cotação que
+  /// falha deixa o ativo sem valor de mercado; a que já chegou fica com a
+  /// hora dela.
+  Future<void> _buscarCotacoes() async {
+    if (visao == null || _descartado) return;
+    final tickers = tickersCotacao;
     if (tickers.isEmpty) return;
     final geracao = ++_geracaoCotacoes;
     var r = <String, CotacaoAtual?>{};
@@ -346,6 +355,7 @@ class ControleApuracao extends ChangeNotifier {
       };
     }
     notifyListeners();
+    unawaited(_buscarCotacoes());
   }
 
   Future<void> _carregarSaldo(int geracao) async {
@@ -708,6 +718,7 @@ class ControleApuracao extends ChangeNotifier {
       // fica o último conhecido
     }
     _aceitar(fechamento.visao);
+    _atualizarModo(recarregarCarteira: true);
     if (c.mounted) await avisar(c, 'Mês fechado', fechamento.mensagem);
   }
 }

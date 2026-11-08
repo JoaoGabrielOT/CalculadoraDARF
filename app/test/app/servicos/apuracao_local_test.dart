@@ -848,11 +848,11 @@ void main() {
       expect(repo.listarMeses(), ['2026-02', '2026-04']);
     });
 
-    test('mês de hoje: o corte é hoje e a carteira é a de hoje', () async {
+    test('mês de hoje: o corte é hoje', () async {
       gravarCadeia();
       final v = await servicos.posicoes('2026-10');
       expect((v.dataCorte, v.corrente), ('2026-10-28', true));
-      expect(v.carteira.single.qtd, 70);
+      expect(v.posicoes.single.qtd, 70);
       expect(await agendamentos(), 0);
     });
   });

@@ -139,7 +139,6 @@ class ApuracaoLocal {
       dataCorte: corte,
       corrente: corte == hoje,
       posicoes: posicoesEm(meses, corte),
-      carteira: posicoesEm(meses, hoje),
     );
   }
 

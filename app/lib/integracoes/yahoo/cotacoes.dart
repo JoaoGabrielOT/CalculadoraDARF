@@ -12,11 +12,17 @@ class CacheCotacoes {
 
   /// ticker -> (preço ou nulo, hora da última tentativa).
   final _precos = <String, (double?, double)>{};
+
+  /// ticker -> hora da consulta que trouxe o preço guardado.
+  final _horas = <String, double>{};
   bool _rodando = false;
 
   bool get rodando => _rodando;
 
   double? preco(String ticker) => _precos[ticker]?.$1;
+
+  /// Hora (época, em s) da consulta que trouxe o preço guardado.
+  double? hora(String ticker) => _horas[ticker];
 
   /// Já houve ao menos uma tentativa para o ticker (com ou sem preço).
   bool tentou(String ticker) => _precos.containsKey(ticker);
@@ -40,8 +46,10 @@ class CacheCotacoes {
     try {
       for (final t in faltam) {
         double? p;
+        final agora = ambiente.agora();
         try {
           p = await _cotacao(t);
+          _horas[t] = agora;
         } catch (_) {
           p = preco(t);
         }

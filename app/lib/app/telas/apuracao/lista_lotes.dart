@@ -11,6 +11,7 @@ import '../../../nucleo/nucleo.dart';
 import '../../componentes/cartao.dart';
 import '../../componentes/tabela.dart';
 import '../../regras/filtros.dart';
+import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
@@ -82,6 +83,42 @@ ButtonStyle estiloPerigo(BuildContext context) {
   );
 }
 
+/// "Cotação atual · Yahoo · dd/mm hh:mm": fonte e hora da consulta, no fuso de
+/// Brasília.
+String textoSeloCotacao(CotacaoAtual c) {
+  final h = c.hora.noFuso(fusoBrasilia);
+  final d = h.data;
+  return 'Cotação atual · ${c.fonte} · '
+      '${d.substring(8, 10)}/${d.substring(5, 7)} ${h.horaMinuto}';
+}
+
+/// Selo da cotação atual dos ativos à vista ([ControleApuracao.tickersCotacao]):
+/// vale a hora da consulta mais antiga, para nenhum valor parecer mais novo do
+/// que é. Sem cotação, diz o estado em vez de mostrar valor.
+class SeloCotacaoAtual extends StatelessWidget {
+  const SeloCotacaoAtual({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final controle = context.watch<ControleApuracao>();
+    final tickers = controle.tickersCotacao;
+    if (tickers.isEmpty) return const SizedBox.shrink();
+    final chegadas = [
+      for (final t in tickers)
+        if (controle.cotacoes[t] != null) controle.cotacoes[t]!,
+    ];
+    if (chegadas.isNotEmpty) {
+      final antiga = ordenadoCom(chegadas, (a, b) => a.hora.compareTo(b.hora));
+      return Selo(texto: textoSeloCotacao(antiga.first));
+    }
+    final tentou = tickers.every(controle.cotacoes.containsKey);
+    return Text(
+      tentou ? 'cotação atual indisponível' : 'carregando cotação atual…',
+      style: TextStyle(color: CoresApp.de(context).textoSuave, fontSize: 12),
+    );
+  }
+}
+
 /// Posição no fim do mês ou carteira atual (lotes do mês aberto). Na carteira
 /// de outro mês que o da tela, diz de qual mês vêm os lotes.
 class SeletorLista extends StatelessWidget {
@@ -113,6 +150,7 @@ class SeletorLista extends StatelessWidget {
             'Lotes do mês aberto (${fmtMes(aberto)})',
             style: TextStyle(color: c.textoSuave, fontSize: 11),
           ),
+        if (modo == ModoLista.carteira) const SeloCotacaoAtual(),
       ],
     );
   }

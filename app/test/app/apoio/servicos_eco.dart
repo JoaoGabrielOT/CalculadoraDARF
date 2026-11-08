@@ -129,7 +129,6 @@ class ServicosEco implements ServicosApp {
         dataCorte: '$mes-28',
         corrente: amigo == null,
         posicoes: const [],
-        carteira: const [],
       );
 
   @override

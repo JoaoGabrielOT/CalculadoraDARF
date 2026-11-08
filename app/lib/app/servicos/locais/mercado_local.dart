@@ -188,20 +188,25 @@ class MercadoLocal {
     };
   }
 
-  /// Cotação de agora de cada ticker, com fonte e hora; nulo = a consulta
-  /// falhou ou veio sem preço. Um ticker que falha não derruba os outros.
+  /// Último preço de cada ticker, com fonte e a hora da consulta que o
+  /// trouxe; nulo = nunca veio preço. Passa pelo mesmo cache de
+  /// [precosCarteira] (60 s; o preço anterior fica se a consulta falha, como
+  /// num 429).
   Future<Map<String, CotacaoAtual?>> cotacoesAtuais(Set<String> tickers) async {
-    final lista = ordenadoPor(tickers, (t) => [t]);
-    final dados = await Future.wait([
-      for (final t in lista)
-        yahoo.dados(t).then<DadosAtivo?>((d) => d, onError: (_) => null),
-    ]);
+    await _cotacoes.atualizar(tickers);
+    // outra atualização em curso (a dos preços da carteira): espera
+    for (var i = 0; i < 200 && _cotacoes.rodando; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    }
+    if (_cotacoes.pendentes(tickers).isNotEmpty) {
+      await _cotacoes.atualizar(tickers);
+    }
     return {
-      for (var i = 0; i < lista.length; i++)
-        lista[i]: switch (dados[i]) {
-          final d? when d.preco != null && d.preco! > 0 => CotacaoAtual(
-            preco: d.preco!,
-            hora: DataHora.deTimestamp(d.hora, fusoBrasilia),
+      for (final t in tickers)
+        t: switch ((_cotacoes.preco(t), _cotacoes.hora(t))) {
+          (final p?, final h?) when p > 0 => CotacaoAtual(
+            preco: p,
+            hora: DataHora.deTimestamp(h, fusoBrasilia),
             fonte: 'Yahoo',
           ),
           _ => null,

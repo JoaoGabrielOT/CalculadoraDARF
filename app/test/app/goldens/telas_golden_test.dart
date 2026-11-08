@@ -179,6 +179,20 @@ ServicosFalsos _servicos() {
       'WEGE3': 41.07,
       'ITUB4': 33.4,
     }
+    ..cotacoesAtuaisResp = {
+      for (final e in {
+        'PETR4': 36.2,
+        'VALE3': 58.4,
+        'AAPL34': 57.1,
+        'WEGE3': 41.07,
+        'ITUB4': 33.4,
+      }.entries)
+        e.key: CotacaoAtual(
+          preco: e.value,
+          hora: DataHora.parse('2026-10-28T14:05:00-03:00'),
+          fonte: 'Yahoo',
+        ),
+    }
     ..metasAtivasFalsas = 2
     ..estadoConta = const EstadoConta(
       email: 'investidor@gmail.com',

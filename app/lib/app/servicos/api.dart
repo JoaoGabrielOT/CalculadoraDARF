@@ -162,7 +162,6 @@ class VisaoPosicoes {
     required this.dataCorte,
     required this.corrente,
     required this.posicoes,
-    required this.carteira,
   });
 
   /// `AAAA-MM-DD`: o último dia do mês, ou hoje no mês de hoje.
@@ -171,9 +170,6 @@ class VisaoPosicoes {
   /// O corte é hoje: só então vale mostrar a cotação atual.
   final bool corrente;
   final List<PosicaoAtivo> posicoes;
-
-  /// Posições de hoje (a carteira atual), em qualquer mês escolhido.
-  final List<PosicaoAtivo> carteira;
 }
 
 class NovaCompra {
@@ -296,7 +292,7 @@ class VisaoRadar {
   final String? amigo;
 }
 
-/// Cotação de agora, com a fonte e a hora: nunca é uma cotação histórica.
+/// Cotação de agora, com a fonte e a hora da consulta: nunca é histórica.
 class CotacaoAtual {
   const CotacaoAtual({
     required this.preco,
@@ -306,7 +302,8 @@ class CotacaoAtual {
 
   final double preco;
 
-  /// Hora da consulta, no fuso de Brasília.
+  /// Hora em que o app consultou a fonte (não a hora do pregão), no fuso de
+  /// Brasília.
   final DataHora hora;
 
   /// `'Yahoo'`.

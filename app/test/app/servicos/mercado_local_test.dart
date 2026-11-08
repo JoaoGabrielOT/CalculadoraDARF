@@ -390,6 +390,22 @@ void main() {
       expect(p.hora.timestamp, closeTo(1761000000.123, 0.001));
     });
 
+    test('cotacoesAtuais: 429 depois de um preço mantém o preço e a hora '
+        'antiga', () async {
+      final primeira = (await servicos.cotacoesAtuais({'PETR4'}))['PETR4']!;
+      ambiente = Ambiente.fixo(agora: 1761000000.123 + 120);
+      status['PETR4'] = 429;
+      final c = (await servicos.cotacoesAtuais({'PETR4'}))['PETR4']!;
+      expect(c.preco, 10.5);
+      expect(c.hora, primeira.hora);
+      expect(falso.pedidos, hasLength(2));
+    });
+
+    test('cotacoesAtuais: ticker que nunca teve preço vem nulo', () async {
+      status['VALE3'] = 429;
+      expect((await servicos.cotacoesAtuais({'VALE3'}))['VALE3'], isNull);
+    });
+
     test('429 depois de um preço mantém o preço', () async {
       expect(await servicos.precosCarteira({'PETR4'}), {'PETR4': 10.5});
       ambiente = Ambiente.fixo(agora: 1761000000.123 + 120);
