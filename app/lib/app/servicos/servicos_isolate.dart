@@ -633,7 +633,8 @@ class ServicosIsolate implements ServicosApp {
   Future<VisaoMetas> metas() => _chamar((s) => s.metas());
 
   @override
-  Future<VisaoSugestoes> sugestoesMetas() => _chamar((s) => s.sugestoesMetas());
+  Future<VisaoSugestoes> sugestoesMetas({bool incluirRadar = false}) =>
+      _chamar((s) => s.sugestoesMetas(incluirRadar: incluirRadar));
 
   @override
   Future<PrecoAlvo> calcularPrecoAlvo(String loteId, int qtd, double lucro) =>

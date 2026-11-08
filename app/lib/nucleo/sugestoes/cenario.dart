@@ -80,6 +80,7 @@ const _avisoBarrasAntigas = 'Barras diárias desatualizadas';
 
 /// Texto do resumo quando não há oportunidade.
 const textoSemOportunidade = _semOportunidade;
+const textoMetaAcima = _avisoMeta;
 
 /// Uma cotação com a hora e a fonte, e se ela é atual (não histórica).
 class CotacaoInfo {
@@ -531,12 +532,13 @@ CenarioSaida _saida(
 }
 
 /// Consolida a posição: saída de 25%, 50%, 100% e [qtdDigitada] nos preços
-/// do alvo, do stop e da [meta]. O regime (taxas e IR) segue o horizonte do
-/// cenário.
+/// do alvo, do stop, da [meta] e do [precoDigitado]. O regime (taxas e IR)
+/// segue o horizonte do cenário.
 ConsolidadoAtivo consolidar(
   PosicaoAtivo p,
   CenarioMercado c, {
   double? meta,
+  double? precoDigitado,
   int? qtdDigitada,
 }) {
   final custo = p.custoFiscal ?? p.custoGerencial;
@@ -562,6 +564,7 @@ ConsolidadoAtivo consolidar(
     if (c.alvo != null) ('no alvo', c.alvo!),
     if (c.stop != null) ('no stop', c.stop!),
     if (meta != null) ('na meta', meta),
+    if (precoDigitado != null) ('no preço digitado', precoDigitado),
   ];
   return ConsolidadoAtivo(
     ticker: p.ticker,

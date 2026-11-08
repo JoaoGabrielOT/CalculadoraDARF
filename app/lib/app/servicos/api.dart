@@ -65,7 +65,7 @@ abstract interface class ServicosApp {
   Future<Map<String, CotacaoAtual?>> cotacoesAtuais(Set<String> tickers);
   Future<(double, String)> precoVenda(String ticker, String dia);
   Future<VisaoMetas> metas();
-  Future<VisaoSugestoes> sugestoesMetas();
+  Future<VisaoSugestoes> sugestoesMetas({bool incluirRadar = false});
   Future<PrecoAlvo> calcularPrecoAlvo(String loteId, int qtd, double lucro);
   Future<Projecao> projetarPreco(String loteId, int qtd, double preco);
   Future<Meta?> parceiraOco(String loteId, String gatilho);
@@ -352,22 +352,36 @@ class VisaoMetas {
   final int ativas;
 }
 
-class SugestaoPosicao {
-  const SugestaoPosicao({
-    required this.posicao,
-    required this.qtd,
-    required this.item,
+/// Situação dos dados de um ativo nas sugestões.
+enum EstadoDados { ok, semDados, desatualizado, falha }
+
+/// Dados de mercado de um ticker (barras diárias e cotação) e a posição de
+/// hoje; o cenário e o consolidado saem daqui por funções puras, sem nova
+/// requisição. [posicao] é nula para um ticker só do radar.
+class SugestaoAtivo {
+  const SugestaoAtivo({
+    required this.ticker,
+    required this.estado,
+    this.mensagem,
+    this.cotacao,
+    this.barras = const [],
+    this.posicao,
   });
 
-  final PosicaoAberta posicao;
-  final int qtd;
-  final ItemSugestao item;
+  final String ticker;
+  final EstadoDados estado;
+
+  /// Texto da falha ou do "sem dados".
+  final String? mensagem;
+  final CotacaoInfo? cotacao;
+  final List<BarraDiaria> barras;
+  final PosicaoAtivo? posicao;
 }
 
 class VisaoSugestoes {
-  const VisaoSugestoes({required this.itens, required this.rodape});
+  const VisaoSugestoes({required this.ativos, required this.rodape});
 
-  final List<SugestaoPosicao> itens;
+  final List<SugestaoAtivo> ativos;
   final List<LinhaCard> rodape;
 }
 

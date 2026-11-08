@@ -323,6 +323,87 @@ ServicosFalsos _servicosComPosicao() {
   return s;
 }
 
+/// 30 pregões até 2026-10-27 fechando em 10; [topo] é a resistência.
+List<BarraDiaria> _barrasSug(double topo) => [
+  for (var i = 0; i < 30; i++)
+    BarraDiaria(
+      data: somarDias('2026-10-27', -(29 - i)),
+      abre: 10,
+      alta: i == 12 ? topo : 10.2,
+      baixa: 9.8,
+      fech: 10,
+      volume: 2e6,
+    ),
+];
+
+/// Sugestões por ativo: PETR4 com oportunidade, VALE3 sem e WEGE3 com a
+/// falha da fonte.
+ServicosFalsos _servicosSugestoes() {
+  final s = _servicos();
+  CompraNaPosicao compra(String id, String data, int qtd, double preco) =>
+      CompraNaPosicao(
+        loteId: id,
+        mes: '2026-10',
+        dataCompra: data,
+        qtdOriginal: qtd,
+        restante: qtd,
+        preco: preco,
+      );
+  PosicaoAtivo posicao(String t, List<CompraNaPosicao> c) => PosicaoAtivo(
+    ticker: t,
+    tipo: 'Ação',
+    qtd: c.fold(0, (a, x) => a + x.restante),
+    custoGerencial: c.fold(0.0, (a, x) => a + x.restante * x.preco),
+    compras: c,
+  );
+  final cotacao = CotacaoInfo(
+    preco: 10,
+    hora: DataHora.parse('2026-10-28T11:55:00-03:00'),
+    fonte: 'Yahoo',
+    atual: true,
+  );
+  final petr = Lote(
+    id: 'L1',
+    ticker: 'PETR4',
+    tipo: 'Ação',
+    dataCompra: '2026-10-05',
+    qtd: 100,
+    preco: 9,
+  );
+  s.visaoMetas = VisaoMetas(
+    metas: const [],
+    descricoes: const {},
+    lotes: [(mes: '2026-10', lote: petr, livre: 100)],
+    ativas: 0,
+  );
+  s.visaoSugestoes = VisaoSugestoes(
+    ativos: [
+      SugestaoAtivo(
+        ticker: 'PETR4',
+        estado: EstadoDados.ok,
+        cotacao: cotacao,
+        barras: _barrasSug(12.5),
+        posicao: posicao('PETR4', [compra('L1', '2026-10-05', 100, 9)]),
+      ),
+      SugestaoAtivo(
+        ticker: 'VALE3',
+        estado: EstadoDados.ok,
+        cotacao: cotacao,
+        barras: _barrasSug(10.2),
+        posicao: posicao('VALE3', [compra('L2', '2026-10-06', 50, 9.5)]),
+      ),
+      SugestaoAtivo(
+        ticker: 'WEGE3',
+        estado: EstadoDados.falha,
+        mensagem: 'Sem conexão com a internet.',
+        posicao: posicao('WEGE3', [compra('L3', '2026-10-07', 30, 40)]),
+      ),
+    ],
+    rodape: const [('Patrimônio considerado', 'R\$ 10.000,00', null)],
+  );
+  return s;
+}
+
 void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: hojeExemplo, agora: _agora));
   tearDown(() => ambiente = Ambiente.sistema());
@@ -377,6 +458,50 @@ void main() {
                 t.element(seletor),
                 alignment: 0.2,
               );
+              await _decodificarImagens(t);
+              await expectLater(
+                find.byKey(chaveCaptura),
+                matchesGoldenFile('arquivos/$nome.png'),
+              );
+            } finally {
+              debugDisableShadows = true;
+            }
+          });
+        }
+      }
+    }
+
+    // Aba Sugestões (janela de metas): os três estados fechados e, no tema
+    // claro, o ativo com oportunidade aberto.
+    for (final expandido in [false, true]) {
+      for (final tema in _temas.entries) {
+        if (expandido && tema.key != 'claro') continue;
+        for (final tamanho in _tamanhos.entries) {
+          final nome =
+              'metas_sugestoes${expandido ? '_expandido' : ''}'
+              '_${tema.key}_${tamanho.key}';
+          testWidgets(nome, (t) async {
+            debugDisableShadows = false;
+            try {
+              await montarApp(
+                t,
+                servicos: _servicosSugestoes(),
+                tema: tema.value,
+                tamanho: tamanho.value,
+              );
+              await t.pumpAndSettle();
+              await t.tap(find.textContaining('Meta de lucro').first);
+              await t.pumpAndSettle();
+              if (expandido) {
+                await t.tap(find.byKey(const ValueKey('abrir-PETR4')));
+                await t.pumpAndSettle();
+                // desce até a simulação de saída e as compras
+                await Scrollable.ensureVisible(
+                  t.element(find.text('Compras (gerencial)')),
+                  alignment: 0.7,
+                );
+                await t.pumpAndSettle();
+              }
               await _decodificarImagens(t);
               await expectLater(
                 find.byKey(chaveCaptura),

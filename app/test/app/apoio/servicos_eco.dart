@@ -316,8 +316,8 @@ class ServicosEco implements ServicosApp {
   );
 
   @override
-  Future<VisaoSugestoes> sugestoesMetas() async =>
-      const VisaoSugestoes(itens: [], rodape: []);
+  Future<VisaoSugestoes> sugestoesMetas({bool incluirRadar = false}) async =>
+      const VisaoSugestoes(ativos: [], rodape: []);
 
   @override
   Future<PrecoAlvo> calcularPrecoAlvo(

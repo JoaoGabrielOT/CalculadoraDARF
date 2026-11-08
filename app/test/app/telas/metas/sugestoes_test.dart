@@ -18,99 +18,152 @@ final _lote = Lote(
   tipo: 'Ação',
   dataCompra: '2026-10-05',
   qtd: 100,
-  preco: 32.5,
+  preco: 9,
 );
 
-Projecao _proj() => Projecao(
-  c: ResultadoVenda(
-    dt: false,
-    compra: 3250,
-    venda: 3600,
-    taxas: 1,
-    corretagem: 0,
-    bruto: 350,
-    liquido: 349,
-  ),
-  imposto: 0,
-  irrf: 0,
-  darfEstimado: 0,
-  custos: 1,
-  lucroAposImposto: 349,
+final _cotacao = CotacaoInfo(
+  preco: 10,
+  hora: DataHora.parse('2026-10-28T11:55:00-03:00'),
+  fonte: 'Yahoo',
+  atual: true,
 );
 
-Sugestao _sug({
-  String modo = 'swing',
-  bool movel = true,
-  bool stopValido = true,
-  double? atr22 = 1.23456789,
-}) => Sugestao(
-  modo: modo,
-  atr14: 0.987654321,
-  atr22: atr22,
-  stopInicial: 30,
-  chandelier: movel ? 31 : null,
-  pp: 35,
-  r1: 36,
-  s1: 34,
-  stop: 31.5,
-  alvo: 36,
-  movelDisponivel: movel,
-  baseData: '2026-11-06',
-)..stopValido = stopValido;
+/// 30 pregões até [fim], fechando em 10 com ATR pequeno; o pico de [topo]
+/// (na barra 12) é a resistência dos últimos 20 pregões.
+List<BarraDiaria> _barras({
+  double topo = 12.5,
+  double volume = 1e6,
+  String fim = '2026-10-27',
+}) => [
+  for (var i = 0; i < 30; i++)
+    BarraDiaria(
+      data: somarDias(fim, -(29 - i)),
+      abre: 10,
+      alta: i == 12 ? topo : 10.2,
+      baixa: 9.8,
+      fech: 10,
+      volume: volume,
+    ),
+];
 
-ItemSugestao _item({
-  Sugestao? sug,
-  String? erro,
-  AlertaRisco? alerta,
-  double perda = -150,
-}) {
-  final item = ItemSugestao(
-    lote: _lote,
-    qtd: 60,
-    sug: erro == null ? (sug ?? _sug()) : null,
-    erro: erro,
-    precoAtual: 33,
-    alerta: alerta,
-  );
-  if (erro == null) {
-    item.aval = Avaliacao(
-      projAlvo: _proj(),
-      projStop: _proj(),
-      lucroAlvo: 349,
-      perdaStop: perda,
-      distAlvoPct: 9.09,
-      distStopPct: -4.54,
+CompraNaPosicao _compra(
+  String id, {
+  String data = '2026-10-05',
+  int qtd = 100,
+  double preco = 9,
+}) => CompraNaPosicao(
+  loteId: id,
+  mes: '2026-10',
+  dataCompra: data,
+  qtdOriginal: qtd,
+  restante: qtd,
+  preco: preco,
+);
+
+PosicaoAtivo _posicao(String ticker, List<CompraNaPosicao> compras) =>
+    PosicaoAtivo(
+      ticker: ticker,
+      tipo: 'Ação',
+      qtd: compras.fold(0, (s, c) => s + c.restante),
+      custoGerencial: compras.fold(0.0, (s, c) => s + c.restante * c.preco),
+      compras: compras,
     );
-  }
-  return item;
-}
 
-SugestaoPosicao _pos(ItemSugestao item, {int livre = 60}) => SugestaoPosicao(
-  posicao: (
-    mes: '2026-10',
-    lote: _lote,
-    restante: 100,
-    livre: livre,
-    ativas: <Meta>[],
-  ),
-  qtd: 60,
-  item: item,
+SugestaoAtivo _ativo(
+  String ticker, {
+  EstadoDados estado = EstadoDados.ok,
+  String? mensagem,
+  double topo = 12.5,
+  double volume = 1e6,
+  CotacaoInfo? cotacao,
+  List<CompraNaPosicao>? compras,
+  bool semPosicao = false,
+  bool semBarras = false,
+  String fimBarras = '2026-10-27',
+}) => SugestaoAtivo(
+  ticker: ticker,
+  estado: estado,
+  mensagem: mensagem,
+  cotacao: cotacao ?? _cotacao,
+  barras: semBarras
+      ? const []
+      : _barras(topo: topo, volume: volume, fim: fimBarras),
+  posicao: semPosicao ? null : _posicao(ticker, compras ?? [_compra('L1')]),
 );
 
-VisaoSugestoes _visao(List<SugestaoPosicao> itens) => VisaoSugestoes(
-  itens: itens,
+/// O cenário de swing que a tela deve mostrar para [a].
+CenarioMercado _cenario(SugestaoAtivo a) => cenarioSwing(
+  ticker: a.ticker,
+  barras: a.barras,
+  hoje: hojeExemplo,
+  cotacao: a.cotacao,
+  qtd: a.posicao!.qtd,
+);
+
+VisaoSugestoes _visao(List<SugestaoAtivo> ativos) => VisaoSugestoes(
+  ativos: ativos,
   rodape: const [('Patrimônio considerado', 'R\$ 10.000,00', null)],
 );
 
 Future<ServicosFalsos> _abrir(WidgetTester t, ServicosFalsos s) async {
-  s.visaoMetas ??= const VisaoMetas(
-    metas: [],
-    descricoes: {},
-    lotes: [],
+  s.visaoMetas ??= VisaoMetas(
+    metas: const [],
+    descricoes: const {},
+    lotes: [(mes: '2026-10', lote: _lote, livre: 100)],
     ativas: 0,
   );
   await abrirNoTeste<void>(t, s, abrirMetas, tamanho: _pc);
   return s;
+}
+
+int _chamadasSugestoes(ServicosFalsos s) =>
+    s.chamadas.where((c) => c.startsWith('sugestoesMetas')).length;
+
+Future<void> _expandir(WidgetTester t, String ticker) async {
+  await _tocar(t, find.byKey(ValueKey('abrir-$ticker')));
+}
+
+/// Rola até o item (a lista é maior que a janela do diálogo) e toca.
+Future<void> _tocar(WidgetTester t, Finder f) async {
+  await t.ensureVisible(f);
+  await t.pumpAndSettle();
+  await t.tap(f);
+  await t.pumpAndSettle();
+}
+
+/// Abre a lista suspensa [chave] e escolhe [rotulo].
+Future<void> _escolher(WidgetTester t, String chave, String rotulo) async {
+  await t.tap(find.byKey(ValueKey(chave)));
+  await t.pumpAndSettle();
+  await t.tap(find.text(rotulo).last);
+  await t.pumpAndSettle();
+}
+
+/// Os filtros rolam junto com a lista.
+Future<void> _aoTopo(WidgetTester t) async {
+  await t.drag(find.byType(ListView).first, const Offset(0, 3000));
+  await t.pumpAndSettle();
+}
+
+Future<void> _digitar(
+  WidgetTester t,
+  String chave,
+  String texto, {
+  bool esperar = true,
+}) async {
+  await t.enterText(find.byKey(ValueKey(chave)), texto);
+  if (esperar) await t.pump(const Duration(milliseconds: 300));
+  await t.pumpAndSettle();
+}
+
+/// Posição vertical de cada ticker na lista, de cima para baixo.
+List<String> _ordem(WidgetTester t, List<String> tickers) {
+  final y = {
+    for (final k in tickers)
+      if (find.byKey(ValueKey('sug-$k')).evaluate().isNotEmpty)
+        k: t.getTopLeft(find.byKey(ValueKey('sug-$k'))).dy,
+  };
+  return (y.keys.toList()..sort((a, b) => y[a]!.compareTo(y[b]!)));
 }
 
 ButtonStyleButton _botao(WidgetTester t, String texto, {int indice = 0}) => t
@@ -123,34 +176,29 @@ ButtonStyleButton _botao(WidgetTester t, String texto, {int indice = 0}) => t
     .elementAt(indice);
 
 void main() {
-  testWidgets('carregando sem travar e cartões quando chega', (t) async {
+  setUp(() => ambiente = Ambiente.fixo());
+  tearDown(() => ambiente = Ambiente.sistema());
+
+  testWidgets('carregando sem travar e ativos quando chega; avisos no '
+      'rodapé', (t) async {
     final espera = Completer<VisaoSugestoes>();
     var n = 0;
     final s = ServicosFalsos()
-      ..sugestoesMetasFn = () =>
+      ..sugestoesMetasFn = (_) =>
           n++ == 0 ? Future.value(_visao([])) : espera.future;
     await _abrir(t, s);
     await t.tap(find.text('Atualizar'));
     await t.pump();
     expect(find.text('Carregando sugestões…'), findsOneWidget);
     expect(find.text('Atualizar'), findsOneWidget);
-    espera.complete(_visao([_pos(_item())]));
+    espera.complete(_visao([_ativo('PETR4')]));
     await t.pumpAndSettle();
     expect(find.textContaining('Atualizado às '), findsOneWidget);
-    expect(
-      find.text('PETR4 · 100 un. a R\$ 32,50 · compra de 05/10/2026'),
-      findsOneWidget,
-    );
-    expect(
-      find.text('60 un. livres para metas · cálculo para 60 un.'),
-      findsOneWidget,
-    );
-    expect(find.text('Criar meta de alvo'), findsOneWidget);
-    expect(find.text('Criar stop fixo'), findsOneWidget);
-    expect(find.text('Criar stop móvel'), findsOneWidget);
+    expect(find.byKey(const ValueKey('sug-PETR4')), findsOneWidget);
     expect(find.text('PATRIMÔNIO CONSIDERADO'), findsOneWidget);
     expect(find.text(avisoSugestao), findsOneWidget);
     expect(find.text(avisoProventos), findsOneWidget);
+    expect(find.text(avisoGap), findsOneWidget);
   });
 
   testWidgets("sem posições: 'Nenhuma compra em aberto.'", (t) async {
@@ -158,158 +206,294 @@ void main() {
     expect(find.text('Nenhuma compra em aberto.'), findsOneWidget);
   });
 
-  testWidgets('erro do Yahoo no cartão com mensagemErro', (t) async {
+  testWidgets('agrupa por ativo e expande as compras', (t) async {
     final s = ServicosFalsos()
       ..visaoSugestoes = _visao([
-        _pos(_item(erro: 'Sem conexão com a internet.')),
+        _ativo(
+          'PETR4',
+          compras: [
+            _compra('L1'),
+            _compra('L2', data: '2026-10-06', qtd: 50, preco: 12),
+          ],
+        ),
+      ]);
+    await _abrir(t, s);
+    expect(find.byKey(const ValueKey('sug-PETR4')), findsOneWidget);
+    expect(find.textContaining('gerencial'), findsNothing);
+    await _expandir(t, 'PETR4');
+    expect(find.textContaining('Compra de 05/10/2026'), findsOneWidget);
+    expect(find.textContaining('Compra de 06/10/2026'), findsOneWidget);
+    expect(find.textContaining('custo gerencial'), findsNWidgets(2));
+  });
+
+  testWidgets('filtros de horizonte, posições abertas e dados', (t) async {
+    final hoje = hojeExemplo;
+    final s = ServicosFalsos()
+      ..sugestoesMetasFn = (radar) async => _visao([
+        _ativo(
+          'PETR4',
+          compras: [
+            _compra('L1'),
+            _compra('L2', data: hoje, qtd: 20),
+          ],
+        ),
+        _ativo(
+          'VALE3',
+          estado: EstadoDados.semDados,
+          mensagem: 'Sem dados para VALE3 no Yahoo Finance.',
+          semBarras: true,
+        ),
+        if (radar) _ativo('WEGE3', semPosicao: true),
+      ]);
+    await _abrir(t, s);
+    expect(find.byKey(const ValueKey('sug-PETR4')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sug-VALE3')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sug-WEGE3')), findsNothing);
+    expect(s.chamadas, contains('sugestoesMetas()'));
+
+    // desligado, o radar entra (e só então é pedido)
+    await t.tap(find.text('Só posições abertas'));
+    await t.pumpAndSettle();
+    expect(s.chamadas, contains('sugestoesMetas(radar)'));
+    expect(find.byKey(const ValueKey('sug-WEGE3')), findsOneWidget);
+    await t.tap(find.text('Só posições abertas'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('sug-WEGE3')), findsNothing);
+
+    await _escolher(t, 'filtro-dados', 'Com dados');
+    expect(find.byKey(const ValueKey('sug-PETR4')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sug-VALE3')), findsNothing);
+    await _escolher(t, 'filtro-dados', 'Sem dados ou desatualizados');
+    expect(find.byKey(const ValueKey('sug-PETR4')), findsNothing);
+    expect(find.byKey(const ValueKey('sug-VALE3')), findsOneWidget);
+    await _escolher(t, 'filtro-dados', 'Todos');
+
+    // day trade: só quem tem compra de hoje
+    await t.tap(find.text('Day trade'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('sug-PETR4')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sug-VALE3')), findsNothing);
+    await t.tap(find.text('Swing'));
+    await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('sug-VALE3')), findsOneWidget);
+  });
+
+  testWidgets('ordena por R/R, distância até o alvo, liquidez e ticker, '
+      'sem dado no fim', (t) async {
+    final todos = ['ZZZZ3', 'AAAA3', 'MMMM3', 'BBBB3'];
+    final s = ServicosFalsos()
+      ..visaoSugestoes = _visao([
+        _ativo('ZZZZ3', topo: 12.5, volume: 2e6),
+        _ativo('AAAA3', topo: 11.5, volume: 1e6),
+        _ativo('MMMM3', topo: 13.5, volume: 3e6),
+        _ativo(
+          'BBBB3',
+          estado: EstadoDados.semDados,
+          mensagem: 'sem dados',
+          semBarras: true,
+        ),
+      ]);
+    await _abrir(t, s);
+    // padrão: R/R, do maior para o menor
+    expect(_ordem(t, todos), ['MMMM3', 'ZZZZ3', 'AAAA3', 'BBBB3']);
+
+    Future<void> ordenar(String rotulo) =>
+        _escolher(t, 'ordem-sugestoes', rotulo);
+
+    await ordenar('Distância até o alvo');
+    expect(_ordem(t, todos), ['AAAA3', 'ZZZZ3', 'MMMM3', 'BBBB3']);
+    await ordenar('Liquidez');
+    expect(_ordem(t, todos), ['MMMM3', 'ZZZZ3', 'AAAA3', 'BBBB3']);
+    await ordenar('Ticker');
+    expect(_ordem(t, todos), ['AAAA3', 'MMMM3', 'ZZZZ3', 'BBBB3']);
+  });
+
+  testWidgets('recalcula ao mudar quantidade, preço e horizonte sem nova '
+      'requisição', (t) async {
+    final s = ServicosFalsos()
+      ..visaoSugestoes = _visao([
+        _ativo(
+          'PETR4',
+          compras: [
+            _compra('L1'),
+            _compra('L2', data: hojeExemplo, qtd: 20),
+          ],
+        ),
+      ]);
+    await _abrir(t, s);
+    expect(_chamadasSugestoes(s), 1);
+    await _expandir(t, 'PETR4');
+    expect(find.textContaining('Qtd. digitada'), findsNothing);
+
+    await t.enterText(find.byKey(const ValueKey('qtd-PETR4')), '40');
+    await t.pump(const Duration(milliseconds: 100));
+    // a espera de 300 ms entre teclas ainda não acabou
+    expect(find.textContaining('Qtd. digitada (40)'), findsNothing);
+    await t.pump(const Duration(milliseconds: 300));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Qtd. digitada (40)'), findsWidgets);
+
+    expect(find.textContaining('no preço digitado'), findsNothing);
+    await _digitar(t, 'preco-PETR4', '10,50');
+    expect(find.textContaining('no preço digitado'), findsWidgets);
+
+    await _aoTopo(t);
+    await t.tap(find.text('Day trade'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Swing'));
+    await t.pumpAndSettle();
+    expect(_chamadasSugestoes(s), 1);
+  });
+
+  testWidgets('falha da fonte em um ticker não quebra a tela', (t) async {
+    final s = ServicosFalsos()
+      ..visaoSugestoes = _visao([
+        _ativo('PETR4'),
+        _ativo(
+          'VALE3',
+          estado: EstadoDados.falha,
+          mensagem: 'Sem conexão com a internet.',
+          semBarras: true,
+        ),
       ]);
     await _abrir(t, s);
     expect(find.text('Sem conexão com a internet.'), findsOneWidget);
-    expect(find.text('Criar meta de alvo'), findsNothing);
+    expect(find.textContaining('Alvo R\$'), findsOneWidget);
   });
 
-  testWidgets('stop móvel só no swing com móvel disponível; stops '
-      'desabilitados sem stopValido', (t) async {
+  testWidgets('dados desatualizados mostram data e hora', (t) async {
     final s = ServicosFalsos()
       ..visaoSugestoes = _visao([
-        _pos(_item(sug: _sug(modo: 'day_trade', movel: false))),
-        _pos(_item(sug: _sug(stopValido: false))),
+        _ativo(
+          'PETR4',
+          estado: EstadoDados.desatualizado,
+          fimBarras: '2026-10-23',
+          cotacao: CotacaoInfo(
+            preco: 10,
+            hora: DataHora.parse('2026-10-26T17:30:00-03:00'),
+            fonte: 'Yahoo',
+            atual: false,
+          ),
+        ),
       ]);
     await _abrir(t, s);
-    expect(find.text('Criar stop móvel'), findsOneWidget);
-    expect(find.text('Criar stop fixo'), findsNWidgets(2));
-    expect(_botao(t, 'Criar stop fixo').onPressed, isNotNull);
-    expect(_botao(t, 'Criar stop fixo', indice: 1).onPressed, isNull);
-    expect(_botao(t, 'Criar stop móvel').onPressed, isNull);
+    expect(find.textContaining('Dados desatualizados'), findsOneWidget);
+    expect(find.textContaining('26/10/2026 17:30'), findsWidgets);
+    expect(find.textContaining('23/10/2026'), findsWidgets);
   });
 
-  testWidgets('alerta de 2% do patrimônio aparece no cartão', (t) async {
-    final s = ServicosFalsos()
-      ..visaoSugestoes = _visao([
-        _pos(_item(alerta: AlertaRisco(pct: 3.5, limite: 200, excede: true))),
-      ]);
+  testWidgets('meta financeira separada do cenário', (t) async {
+    final a = _ativo('PETR4');
+    final s = ServicosFalsos()..visaoSugestoes = _visao([a]);
     await _abrir(t, s);
-    expect(find.text('ALERTA DE RISCO'), findsOneWidget);
+    await _expandir(t, 'PETR4');
+    expect(find.text('Ponto de equilíbrio'), findsOneWidget);
+    expect(find.text('Meta financeira (simulação)'), findsOneWidget);
+    expect(find.text('Cenário de mercado'), findsOneWidget);
+    expect(find.textContaining('por ação, sem taxas'), findsWidgets);
+
+    // meta alcançável: sem aviso
+    await _digitar(t, 'lucro-PETR4', '50');
     expect(
-      find.textContaining('3,50% do patrimônio; o limite de 2% é R\$ 200,00'),
+      find.text('Meta acima do cenário de mercado para o horizonte'),
+      findsNothing,
+    );
+    // meta muito acima do alvo: o aviso aparece e o cenário não muda
+    final c = _cenario(a);
+    await _digitar(t, 'lucro-PETR4', '5000');
+    expect(
+      find.text('Meta acima do cenário de mercado para o horizonte'),
       findsOneWidget,
     );
+    expect(find.textContaining(brl(c.alvo!)), findsWidgets);
+    expect(find.textContaining('na meta'), findsWidgets);
+    expect(s.ultimaMetaAlvo, isNull);
   });
 
-  group('criar', () {
-    testWidgets('alvo sem parceira usa a quantidade livre; depois verifica e '
-        'recarrega as sugestões', (t) async {
-      final s = ServicosFalsos()..visaoSugestoes = _visao([_pos(_item())]);
+  group('criar meta de alvo e stop', () {
+    testWidgets('sem oportunidade fica desativado; com oportunidade usa o '
+        'alvo e o stop do cenário, depois da confirmação', (t) async {
+      final bom = _ativo('PETR4', topo: 12.5);
+      final ruim = _ativo('VALE3', topo: 10.2);
+      final c = _cenario(bom);
+      expect(c.oportunidade, isTrue);
+      expect(_cenario(ruim).oportunidade, isFalse);
+      final s = ServicosFalsos()..visaoSugestoes = _visao([bom, ruim]);
       await _abrir(t, s);
-      s.chamadas.clear();
-      await t.tap(find.text('Criar meta de alvo'));
-      await t.pumpAndSettle();
-      expect(s.ultimaMetaAlvo?.qtd, 60);
-      expect(s.ultimaMetaAlvo?.preco, 36);
-      expect(s.ultimoOcoAlvo, isNull);
-      final nomes = s.chamadas.map((c) => c.split('(').first).toList();
-      expect(nomes, containsAllInOrder(['criarMetaAlvo', 'verificarMetas']));
-      expect(
-        nomes.sublist(nomes.indexOf('verificarMetas')),
-        contains('sugestoesMetas'),
-      );
-    });
+      expect(find.text('Sem oportunidade identificada'), findsWidgets);
+      await _expandir(t, 'VALE3');
+      expect(_botao(t, 'Criar meta de alvo e stop').onPressed, isNull);
+      await _expandir(t, 'VALE3'); // fecha
+      await _aoTopo(t);
+      await _expandir(t, 'PETR4');
+      expect(_botao(t, 'Criar meta de alvo e stop').onPressed, isNotNull);
 
-    testWidgets("com parceira OCO pergunta 'Ligar em OCO' e usa a quantidade "
-        "da parceira; 'Voltar' não cria", (t) async {
-      final parceira = metasExemplo().first; // M1, alvo, 60 un.
-      final s = ServicosFalsos()
-        ..visaoSugestoes = _visao([_pos(_item(), livre: 10)])
-        ..parceirasOco['stop'] = parceira;
-      await _abrir(t, s);
-      await t.tap(find.text('Criar stop fixo'));
-      await t.pumpAndSettle();
-      expect(find.text('Ligar em OCO'), findsOneWidget);
-      expect(
-        find.textContaining(
-          'Será ligado (OCO) à meta ${descricao(parceira).titulo}.\n\n'
-          'Quando uma das duas executar, a outra é cancelada '
-          'automaticamente. Quantidade: 60 un.',
-        ),
-        findsOneWidget,
-      );
+      // 'Voltar' não cria nada
+      await _tocar(t, find.text('Criar meta de alvo e stop'));
+      expect(find.byType(AlertDialog), findsOneWidget);
       await t.tap(find.text('Voltar'));
       await t.pumpAndSettle();
+      expect(s.ultimaMetaAlvo, isNull);
       expect(s.ultimoStop, isNull);
-      await t.tap(find.text('Criar stop fixo'));
+
+      await _tocar(t, find.text('Criar meta de alvo e stop'));
+      await t.tap(find.text('Criar metas'));
       await t.pumpAndSettle();
-      await t.tap(find.text('Criar com OCO'));
-      await t.pumpAndSettle();
-      expect(s.ultimoStop?.ocoCom, 'M1');
-      expect(s.ultimoStop?.qtd, 60);
+      expect(s.ultimaMetaAlvo?.loteId, 'L1');
+      expect(s.ultimaMetaAlvo?.qtd, 100);
+      expect(s.ultimaMetaAlvo?.preco, c.alvo);
+      expect(s.ultimoStop?.preco, c.stop);
+      expect(s.ultimoStop?.qtd, 100);
+      expect(s.ultimoStop?.movel, isFalse);
+      expect(s.ultimoStop?.precoAtual, 10);
+      // o stop nasce ligado (OCO) ao alvo recém-criado
+      expect(s.ultimoStop?.ocoCom, isNotNull);
     });
 
     testWidgets('sem quantidade livre avisa e não cria', (t) async {
       final s = ServicosFalsos()
-        ..visaoSugestoes = _visao([_pos(_item(), livre: 0)]);
+        ..visaoMetas = const VisaoMetas(
+          metas: [],
+          descricoes: {},
+          lotes: [],
+          ativas: 0,
+        )
+        ..visaoSugestoes = _visao([_ativo('PETR4')]);
       await _abrir(t, s);
-      await t.tap(find.text('Criar meta de alvo'));
-      await t.pumpAndSettle();
-      expect(
-        find.text(
-          'Não há quantidade livre nesta compra: cancele uma meta ativa '
-          'antes.',
-        ),
-        findsOneWidget,
-      );
+      await _expandir(t, 'PETR4');
+      await _tocar(t, find.text('Criar meta de alvo e stop'));
+      expect(find.textContaining('Não há quantidade livre'), findsOneWidget);
       expect(s.ultimaMetaAlvo, isNull);
     });
+  });
 
-    testWidgets('stop móvel passa movel: true e o dicionário sugestao', (
-      t,
-    ) async {
-      final s = ServicosFalsos()..visaoSugestoes = _visao([_pos(_item())]);
-      await _abrir(t, s);
-      await t.tap(find.text('Criar stop móvel'));
-      await t.pumpAndSettle();
-      final st = s.ultimoStop!;
-      expect(st.movel, isTrue);
-      expect(st.preco, 31.5);
-      expect(st.precoAtual, 33);
-      expect(st.sugestao, {
-        'modo': 'swing',
-        'atr14': 0.9877,
-        'compra': 32.5,
-        'atr22': 1.2346,
-      });
-    });
-
-    testWidgets('stop fixo sem atr22 não leva a chave', (t) async {
-      final s = ServicosFalsos()
-        ..visaoSugestoes = _visao([_pos(_item(sug: _sug(atr22: null)))]);
-      await _abrir(t, s);
-      await t.tap(find.text('Criar stop fixo'));
-      await t.pumpAndSettle();
-      expect(s.ultimoStop!.movel, isFalse);
-      expect(s.ultimoStop!.sugestao!.containsKey('atr22'), isFalse);
-    });
-
-    testWidgets('erro do serviço vira aviso', (t) async {
-      final s = ServicosFalsos()
-        ..visaoSugestoes = _visao([_pos(_item())])
-        ..erros['criarMetaAlvo'] = ArgumentError('preço inválido');
-      await _abrir(t, s);
-      await t.tap(find.text('Criar meta de alvo'));
-      await t.pumpAndSettle();
-      expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.text('Meta'), findsOneWidget);
-    });
+  testWidgets('horizonte e fonte sempre visíveis no alvo', (t) async {
+    final s = ServicosFalsos()..visaoSugestoes = _visao([_ativo('PETR4')]);
+    await _abrir(t, s);
+    // sem expandir
+    expect(find.textContaining('5 a 20 pregões'), findsWidgets);
+    expect(find.textContaining('Yahoo'), findsWidgets);
+    expect(find.textContaining('28/10/2026 11:55'), findsWidgets);
   });
 
   testWidgets('Atualizar recarrega e o pedido antigo é descartado', (t) async {
     final lenta = Completer<VisaoSugestoes>();
     var n = 0;
     final s = ServicosFalsos()
-      ..sugestoesMetasFn = () {
+      ..sugestoesMetasFn = (_) {
         n++;
         return switch (n) {
           2 => lenta.future,
-          3 => Future.value(_visao([_pos(_item(erro: 'terceira'))])),
+          3 => Future.value(
+            _visao([
+              _ativo(
+                'TERC3',
+                estado: EstadoDados.falha,
+                mensagem: 'terceira',
+                semBarras: true,
+              ),
+            ]),
+          ),
           _ => Future.value(_visao([])),
         };
       };
@@ -319,7 +503,16 @@ void main() {
     await t.tap(find.text('Atualizar'));
     await t.pumpAndSettle();
     expect(find.text('terceira'), findsOneWidget);
-    lenta.complete(_visao([_pos(_item(erro: 'segunda'))]));
+    lenta.complete(
+      _visao([
+        _ativo(
+          'SEGU3',
+          estado: EstadoDados.falha,
+          mensagem: 'segunda',
+          semBarras: true,
+        ),
+      ]),
+    );
     await t.pumpAndSettle();
     expect(find.text('segunda'), findsNothing);
     expect(find.text('terceira'), findsOneWidget);

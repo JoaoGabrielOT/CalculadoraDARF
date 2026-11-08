@@ -321,7 +321,8 @@ class ServicosLocais implements ServicosApp {
   Future<VisaoMetas> metas() => _mercado.metas();
 
   @override
-  Future<VisaoSugestoes> sugestoesMetas() => _mercado.sugestoesMetas();
+  Future<VisaoSugestoes> sugestoesMetas({bool incluirRadar = false}) =>
+      _mercado.sugestoesMetas(incluirRadar: incluirRadar);
 
   @override
   Future<PrecoAlvo> calcularPrecoAlvo(String loteId, int qtd, double lucro) =>

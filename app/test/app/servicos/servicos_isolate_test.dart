@@ -131,7 +131,7 @@ void main() {
       'PETR4@2026-10-01',
     ));
     expect((await s.metas()).ativas, 7);
-    expect((await s.sugestoesMetas()).itens, isEmpty);
+    expect((await s.sugestoesMetas()).ativos, isEmpty);
     expect((await s.calcularPrecoAlvo('L1', 12, 3.5)).preco, 12);
     expect((await s.projetarPreco('L1', 1, 8.5)).lucroAposImposto, 8.5);
     expect(await s.parceiraOco('L1', 'nenhuma'), isNull);

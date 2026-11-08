@@ -21,6 +21,9 @@ late List<EventoServico> eventos;
 late Map<String, int> status;
 late Map<String, String> precos;
 
+/// Pregões do chart por ticker (padrão 20).
+late Map<String, int> pregoes;
+
 /// Chamado em cada pedido, antes da resposta (a "busca" que demora).
 void Function(PedidoGravado)? aoPedir;
 
@@ -77,7 +80,10 @@ RespostaFalsa _responder(PedidoGravado p) {
   final t = p.url.pathSegments.last.replaceAll('.SA', '');
   final st = status[t] ?? 200;
   if (st != 200) return RespostaFalsa(st, texto: 'erro', motivo: 'erro');
-  return RespostaFalsa(200, texto: corpoChart(preco: precos[t] ?? '10.5'));
+  return RespostaFalsa(
+    200,
+    texto: corpoChart(preco: precos[t] ?? '10.5', n: pregoes[t] ?? 20),
+  );
 }
 
 void main() {
@@ -87,6 +93,7 @@ void main() {
     repo = Repositorio(disco);
     status = {};
     precos = {};
+    pregoes = {};
     aoPedir = null;
     falso = ClienteFalso(_responder);
     servicos = ServicosLocais(
@@ -439,33 +446,82 @@ void main() {
       expect({for (final l in v.lotes) l.lote.id: l.livre}, {'L2': 60});
     });
 
-    test('sugestoesMetas monta um item por posição com qtd = livre ou '
-        'restante e o rodapé', () async {
-      gravarMes([compra('L1'), compra('L2', ticker: 'VALE3')]);
-      gravarMeta({'qtd': 40});
-      gravarMeta({'id': 'meta-b', 'lote_id': 'L2', 'ticker': 'VALE3'});
+    test('sugestoesMetas agrupa a carteira de hoje por ativo, com posição, '
+        'barras, cotação e o rodapé', () async {
+      gravarMes([
+        compra('L1'),
+        compra('L2', data: '2026-10-06', qtd: 50, preco: 12),
+        compra('L3', ticker: 'VALE3'),
+      ]);
+      pregoes['PETR4'] = 30;
       final v = await servicos.sugestoesMetas();
-      expect(v.itens.map((s) => s.posicao.lote.id), ['L1', 'L2']);
-      // L1 tem 60 livres; L2 está toda reservada e usa o restante
-      expect(v.itens.map((s) => s.qtd), [60, 100]);
-      expect(v.itens.map((s) => s.item.qtd), [60, 100]);
+      expect(v.ativos.map((a) => a.ticker), ['PETR4', 'VALE3']);
+      final petr = v.ativos.first;
+      expect(petr.posicao!.qtd, 150);
+      expect(petr.posicao!.compras.map((c) => c.loteId), ['L1', 'L2']);
+      expect(petr.barras, hasLength(30));
+      expect((petr.cotacao!.preco, petr.cotacao!.fonte), (10.5, 'Yahoo'));
+      // as barras do falso são de 2025: não são as do último pregão
+      expect(petr.estado, EstadoDados.desatualizado);
+      // 20 pregões não bastam para o swing
+      expect(v.ativos.last.estado, EstadoDados.semDados);
       expect(v.rodape.first.$1, 'Patrimônio considerado');
-      expect(falso.pedidos.map((p) => p.url.pathSegments.last).toSet(), {
-        'PETR4.SA',
-        'VALE3.SA',
-      });
     });
 
-    test('sugestoesMetas: falha na consulta vira erro do item', () async {
+    test('sugestoesMetas faz uma requisição de barras por ticker e reabrir '
+        'usa o cache', () async {
+      gravarMes([compra('L1'), compra('L2', ticker: 'VALE3')]);
+      int diarias() => falso.pedidos
+          .where((p) => p.url.queryParameters['range'] == '6mo')
+          .length;
+      await servicos.sugestoesMetas();
+      expect(diarias(), 2);
+      final total = falso.pedidos.length;
+      await servicos.sugestoesMetas();
+      expect(falso.pedidos, hasLength(total));
+    });
+
+    test('sugestoesMetas: falha da fonte em um ticker vira estado falha e '
+        'os outros seguem', () async {
+      gravarMes([compra('L1'), compra('L2', ticker: 'VALE3')]);
+      pregoes['PETR4'] = 30;
+      status['VALE3'] = 500;
+      final v = await servicos.sugestoesMetas();
+      final vale = v.ativos.last;
+      expect(vale.estado, EstadoDados.falha);
+      expect(vale.mensagem, isNotEmpty);
+      expect(vale.barras, isEmpty);
+      expect(v.ativos.first.estado, isNot(EstadoDados.falha));
+    });
+
+    test('sugestoesMetas: ticker sem barras no Yahoo vira sem dados', () async {
       gravarMes([compra('L1')]);
       status['PETR4'] = 404;
-      final v = await servicos.sugestoesMetas();
-      expect(v.itens.single.item.erro, isNotNull);
+      final a = (await servicos.sugestoesMetas()).ativos.single;
+      expect(a.estado, EstadoDados.semDados);
+      expect(a.mensagem, isNotEmpty);
     });
 
     test('sugestoesMetas sem compras em aberto devolve vazio', () async {
       final v = await servicos.sugestoesMetas();
-      expect(v.itens, isEmpty);
+      expect(v.ativos, isEmpty);
+      expect(falso.pedidos, isEmpty);
+    });
+
+    test('sugestoesMetas: o radar sem posição só é buscado com incluirRadar, '
+        'só com o cenário', () async {
+      gravarMes([compra('L1')]);
+      await servicos.adicionarRadar('WEGE3');
+      var v = await servicos.sugestoesMetas();
+      expect(v.ativos.map((a) => a.ticker), ['PETR4']);
+      expect(
+        falso.pedidos.where((p) => p.url.pathSegments.last == 'WEGE3.SA'),
+        isEmpty,
+      );
+      v = await servicos.sugestoesMetas(incluirRadar: true);
+      expect(v.ativos.map((a) => a.ticker), ['PETR4', 'WEGE3']);
+      expect(v.ativos.last.posicao, isNull);
+      expect(v.ativos.last.barras, isNotEmpty);
     });
 
     test('calcularPrecoAlvo e projetarPreco usam a compra do mês', () async {

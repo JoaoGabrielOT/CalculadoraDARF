@@ -227,45 +227,76 @@ class MercadoLocal {
     );
   }
 
-  Future<VisaoSugestoes> sugestoesMetas() async {
+  /// Barras e cotação de cada ticker da carteira de hoje (e do radar, com
+  /// [incluirRadar]); uma requisição de barras por ticker, pelo cache do
+  /// Yahoo. O cenário é calculado na tela, sem nova requisição.
+  Future<VisaoSugestoes> sugestoesMetas({bool incluirRadar = false}) async {
     final cfg = lerConfigParaGravar(repo);
-    final posicoes = posicoesAbertas(repo, cfg);
-    if (posicoes.isEmpty) return const VisaoSugestoes(itens: [], rodape: []);
-    final tickers = ordenadoPor({
-      for (final p in posicoes) p.lote.ticker,
-    }, (t) => [t]);
-    final resultados = <String, Object>{};
-    for (final t in tickers) {
-      try {
-        resultados[t] = await yahoo.barrasDiarias(t);
-      } catch (e) {
-        resultados[t] = e is Exception ? e : mensagemErro(e);
-      }
-    }
-    final cotacoes = {
-      for (final MapEntry(key: t, value: r) in resultados.entries)
-        if (r is Diarias && r.preco != null) t: r.preco!,
+    final hoje = ambiente.hoje();
+    final posicoes = {
+      for (final p in posicoesEm(repo.carregarMeses(), hoje)) p.ticker: p,
     };
-    final (pat, resultado) = resumoPatrimonio(repo, cfg, cotacoes);
-    return VisaoSugestoes(
-      itens: [
-        for (final p in posicoes)
-          () {
-            final qtd = p.livre > 0 ? p.livre : p.restante;
-            return SugestaoPosicao(
-              posicao: p,
-              qtd: qtd,
-              item: montarItem(
-                p.lote,
-                qtd,
-                resultados[p.lote.ticker]!,
-                valorPatrimonio: pat.valor,
-              ),
-            );
-          }(),
-      ],
-      rodape: linhasRodape(pat, resultado),
-    );
+    final tickers = ordenadoPor({
+      ...posicoes.keys,
+      if (incluirRadar)
+        for (final r in cfg.radar) r.ticker,
+    }, (t) => [t]);
+    if (tickers.isEmpty) return const VisaoSugestoes(ativos: [], rodape: []);
+    final resultados = await Future.wait([
+      for (final t in tickers)
+        yahoo.barrasDiarias(t).then<Object>((d) => d, onError: (Object e) => e),
+    ]);
+    final cotacoes = await cotacoesAtuais({
+      for (final (i, t) in tickers.indexed)
+        if (resultados[i] is Diarias) t,
+    });
+    final agoraBr = ambiente.agoraBr();
+    final ativos = <SugestaoAtivo>[];
+    final precos = <String, double>{};
+    for (final (i, t) in tickers.indexed) {
+      final r = resultados[i];
+      if (r is! Diarias) {
+        ativos.add(
+          SugestaoAtivo(
+            ticker: t,
+            estado: r is SemDados ? EstadoDados.semDados : EstadoDados.falha,
+            mensagem: _mensagemFalha(r),
+            posicao: posicoes[t],
+          ),
+        );
+        continue;
+      }
+      final c = cotacoes[t];
+      final cotacao = c == null
+          ? null
+          : cotacaoInfo(c.preco, c.hora, c.fonte, agoraBr);
+      final preco = c?.preco ?? r.preco;
+      if (preco != null) precos[t] = preco;
+      final EstadoDados estado;
+      if (r.barras.length < minPregoesSwing) {
+        estado = EstadoDados.semDados;
+      } else if (barrasDesatualizadas(r.barras, hoje) ||
+          (cotacao != null && !cotacao.atual)) {
+        estado = EstadoDados.desatualizado;
+      } else {
+        estado = EstadoDados.ok;
+      }
+      ativos.add(
+        SugestaoAtivo(
+          ticker: t,
+          estado: estado,
+          mensagem: estado == EstadoDados.semDados
+              ? 'Dados insuficientes: o swing exige $minPregoesSwing pregões '
+                    'fechados.'
+              : null,
+          cotacao: cotacao,
+          barras: r.barras,
+          posicao: posicoes[t],
+        ),
+      );
+    }
+    final (pat, resultado) = resumoPatrimonio(repo, cfg, precos);
+    return VisaoSugestoes(ativos: ativos, rodape: linhasRodape(pat, resultado));
   }
 
   Future<PrecoAlvo> calcularPrecoAlvo(

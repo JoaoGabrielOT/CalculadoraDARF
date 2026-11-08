@@ -330,7 +330,7 @@ class ServicosFalsos implements ServicosApp {
 
   /// Resposta de `sugestoesMetas`; [sugestoesMetasFn] tem precedência.
   VisaoSugestoes? visaoSugestoes;
-  Future<VisaoSugestoes> Function()? sugestoesMetasFn;
+  Future<VisaoSugestoes> Function(bool incluirRadar)? sugestoesMetasFn;
 
   /// Resposta de `parceiraOco` (por gatilho); sem entrada = sem parceira.
   Map<String, Meta?> parceirasOco = {};
@@ -348,16 +348,16 @@ class ServicosFalsos implements ServicosApp {
   ultimoStop;
 
   @override
-  Future<VisaoSugestoes> sugestoesMetas() {
+  Future<VisaoSugestoes> sugestoesMetas({bool incluirRadar = false}) {
     final fn = sugestoesMetasFn;
     if (fn != null) {
-      chamadas.add('sugestoesMetas()');
-      return fn();
+      chamadas.add('sugestoesMetas(${incluirRadar ? 'radar' : ''})');
+      return fn(incluirRadar);
     }
     return _chamar(
       'sugestoesMetas',
-      [],
-      () => visaoSugestoes ?? const VisaoSugestoes(itens: [], rodape: []),
+      [if (incluirRadar) 'radar'],
+      () => visaoSugestoes ?? const VisaoSugestoes(ativos: [], rodape: []),
     );
   }
 

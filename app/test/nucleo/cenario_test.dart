@@ -428,6 +428,20 @@ void main() {
       expect(r.cenarios.any((s) => s.preco == 11.19), isTrue);
     });
 
+    test('preço digitado entra como "no preço digitado", sem sobrescrever o '
+        'alvo', () {
+      final c = CenarioMercado(
+        horizonte: Horizonte.swing,
+        alvo: 10.5,
+        stop: 9.0,
+      );
+      final r = consolidar(_posicao(100, 700.0), c, precoDigitado: 9.8);
+      final d = r.cenarios.where((s) => s.rotulo.endsWith('no preço digitado'));
+      expect(d.map((s) => s.qtd), [25, 50, 100]);
+      expect(d.every((s) => s.preco == 9.8), isTrue);
+      expect(r.cenarios.where((s) => s.preco == 10.5), hasLength(3));
+    });
+
     test('horizonte day trade: IR de 20% e taxa de 0,023%', () {
       final c = CenarioMercado(
         horizonte: Horizonte.dayTrade,

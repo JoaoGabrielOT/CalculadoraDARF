@@ -12,6 +12,20 @@ import '../../componentes/dialogos.dart';
 import '../../estado/estado_app.dart';
 import '../../regras/textos.dart';
 import '../../servicos/api.dart';
+import 'calculo_sugestao.dart';
+
+/// Quantidade, preço de saída e lucro desejado digitados num ativo.
+class CamposAtivo {
+  final qtd = TextEditingController();
+  final preco = TextEditingController();
+  final lucro = TextEditingController();
+
+  void dispose() {
+    qtd.dispose();
+    preco.dispose();
+    lucro.dispose();
+  }
+}
 
 /// O que a coluna esquerda mostra (`seg_modo`).
 enum ModoMetas { sugestoes, calculadora }
@@ -68,6 +82,86 @@ class ControleMetas extends ChangeNotifier {
   /// Criando a meta de um cartão: desabilita os botões.
   bool criandoSug = false;
 
+  // filtros, ordenação e o que foi digitado em cada ativo; nada disso pede
+  // dados novos ao serviço (só desligar "Só posições abertas" busca o radar)
+  Horizonte horizonte = Horizonte.swing;
+  bool soPosicoes = true;
+  FiltroDados filtroDados = FiltroDados.todos;
+  OrdemSugestao ordem = OrdemSugestao.rr;
+  final _entradas = <String, EntradasAtivo>{};
+  final _campos = <String, CamposAtivo>{};
+
+  EntradasAtivo entradasDe(String ticker) =>
+      _entradas[ticker] ?? const EntradasAtivo();
+
+  /// Campos de texto do ativo; ficam aqui para sobreviver à rolagem da lista.
+  CamposAtivo camposDe(String ticker) =>
+      _campos.putIfAbsent(ticker, CamposAtivo.new);
+
+  /// Lê os campos do ativo (vazio ou inválido = sem valor) e refaz as contas.
+  void aplicarCampos(String ticker) {
+    final c = camposDe(ticker);
+    T? tentar<T>(T Function(String) ler, String texto) {
+      try {
+        return ler(texto);
+      } on FormatException {
+        return null;
+      }
+    }
+
+    _entradas[ticker] = EntradasAtivo(
+      qtd: tentar(parseQtd, c.qtd.text),
+      preco: tentar(parseNum, c.preco.text),
+      lucro: tentar(parseValor, c.lucro.text),
+    );
+    notifyListeners();
+  }
+
+  void definirHorizonte(Horizonte h) {
+    if (h == horizonte) return;
+    horizonte = h;
+    notifyListeners();
+  }
+
+  void definirFiltroDados(FiltroDados f) {
+    if (f == filtroDados) return;
+    filtroDados = f;
+    notifyListeners();
+  }
+
+  void definirOrdem(OrdemSugestao o) {
+    if (o == ordem) return;
+    ordem = o;
+    notifyListeners();
+  }
+
+  /// Desligado, os tickers do radar entram e só então são pedidos.
+  void alternarSoPosicoes() {
+    soPosicoes = !soPosicoes;
+    notifyListeners();
+    if (!soPosicoes) unawaited(recarregarSugestoes());
+  }
+
+  /// Ativos filtrados e ordenados, com o cenário de cada um.
+  List<ResultadoAtivo> get listaSugestoes => prepararLista(
+    sugestoes?.ativos ?? const [],
+    horizonte: horizonte,
+    soPosicoes: soPosicoes,
+    dados: filtroDados,
+    ordem: ordem,
+    entradas: entradasDe,
+    hoje: ambiente.hoje(),
+    agoraBr: ambiente.agoraBr(),
+  );
+
+  /// Quantidade livre de uma compra para metas (0 se não há ou sumiu).
+  int livreDe(String loteId) {
+    for (final l in visao?.lotes ?? const <LoteLivre>[]) {
+      if (l.lote.id == loteId) return l.livre;
+    }
+    return 0;
+  }
+
   // --- verificar agora
   bool verificando = false;
   String textoVerif = '';
@@ -104,6 +198,9 @@ class ControleMetas extends ChangeNotifier {
     qtd.dispose();
     lucro.dispose();
     preco.dispose();
+    for (final c in _campos.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -140,11 +237,11 @@ class ControleMetas extends ChangeNotifier {
     textoSug = 'Carregando sugestões…';
     notifyListeners();
     try {
-      final nova = await _servicos.sugestoesMetas();
+      final nova = await _servicos.sugestoesMetas(incluirRadar: !soPosicoes);
       if (geracao != _geracaoSug) return;
       sugestoes = nova;
       erroSug = null;
-      textoSug = nova.itens.isEmpty
+      textoSug = nova.ativos.isEmpty
           ? ''
           : 'Atualizado às ${horaMinuto(ambiente.agora())}.';
     } catch (e) {
@@ -156,81 +253,77 @@ class ControleMetas extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// "Criar meta de alvo" / "Criar stop fixo" / "Criar stop móvel" de um
-  /// cartão (`criar_sugerido`). [gatilho]: `alvo` ou `stop`.
-  Future<void> criarSugerido(
+  /// "Criar meta de alvo e stop" de uma compra: usa o alvo e o stop do
+  /// cenário de mercado, sobre a quantidade livre da compra, e só depois da
+  /// confirmação. O stop nasce ligado (OCO) ao alvo.
+  Future<void> criarMetasDoCenario(
     BuildContext c,
-    SugestaoPosicao s,
-    String gatilho, {
-    bool movel = false,
-  }) async {
+    ResultadoAtivo r,
+    CompraNaPosicao compra,
+  ) async {
     if (criandoSug) return;
-    final sug = s.item.sug!;
-    final lote = s.posicao.lote;
+    final cen = r.cenario;
+    if (cen == null ||
+        !cen.oportunidade ||
+        r.ativo.estado != EstadoDados.ok ||
+        cen.alvo == null ||
+        cen.stop == null) {
+      return;
+    }
+    final alvo = cen.alvo!;
+    final stop = cen.stop!;
+    final qtd = livreDe(compra.loteId);
+    if (qtd <= 0) {
+      await avisar(
+        c,
+        'Meta',
+        'Não há quantidade livre nesta compra: cancele uma meta ativa antes.',
+      );
+      return;
+    }
+    final sim = await confirmar(
+      c,
+      'Criar meta de alvo e stop',
+      'Serão criadas duas vendas automáticas de $qtd un. de '
+          '${r.ativo.ticker} (compra de ${fmtData(compra.dataCompra)}): alvo '
+          'a ${brl(alvo)} e stop a ${brl(stop)}, ligadas em OCO (quando uma '
+          'executar, a outra é cancelada).'
+          '\n\n'
+          'A venda só é registrada quando '
+          'o preço for atingido. Alvo e stop vêm do cenário de mercado, uma '
+          'estimativa sem probabilidade associada.',
+      sim: 'Criar metas',
+      nao: 'Voltar',
+    );
+    if (!sim || !c.mounted) return;
     criandoSug = true;
     notifyListeners();
     try {
-      final Meta? parceira;
+      final Meta meta;
       try {
-        parceira = await _servicos.parceiraOco(lote.id, gatilho);
+        meta = await _servicos.criarMetaAlvo(compra.loteId, qtd, alvo);
       } catch (e) {
         if (e is! PedidoSuperado && c.mounted) {
           await avisar(c, 'Meta', textoErro(e));
         }
         return;
       }
-      final qtd = parceira?.qtd ?? s.posicao.livre;
-      if (!c.mounted) return;
-      if (qtd <= 0) {
-        await avisar(
-          c,
-          'Meta',
-          'Não há quantidade livre nesta compra: cancele uma meta ativa '
-              'antes.',
-        );
-        return;
-      }
-      String? oco;
-      if (parceira != null) {
-        final nome =
-            (visao?.descricoes[parceira.id] ?? descricao(parceira)).titulo;
-        final sim = await confirmar(
-          c,
-          'Ligar em OCO',
-          'Será ligado (OCO) à meta $nome.\n\nQuando uma das duas executar, '
-              'a outra é cancelada automaticamente. Quantidade: $qtd un.',
-          sim: 'Criar com OCO',
-          nao: 'Voltar',
-        );
-        if (!sim || !c.mounted) return;
-        oco = parceira.id;
-      }
       try {
-        if (gatilho == 'alvo') {
-          await _servicos.criarMetaAlvo(lote.id, qtd, sug.alvo, ocoCom: oco);
-        } else {
-          final info = <String, Object?>{
-            'modo': sug.modo,
-            'atr14': arredondar(sug.atr14, 4),
-            'compra': lote.preco,
-          };
-          final atr22 = sug.atr22;
-          if (atr22 != null) info['atr22'] = arredondar(atr22, 4);
-          await _servicos.criarStop(
-            lote.id,
-            qtd,
-            sug.stop,
-            movel: movel,
-            ocoCom: oco,
-            precoAtual: s.item.precoAtual,
-            sugestao: info,
+        await _servicos.criarStop(
+          compra.loteId,
+          qtd,
+          stop,
+          ocoCom: meta.id,
+          precoAtual: r.ativo.cotacao?.preco ?? cen.ancora,
+        );
+      } catch (e) {
+        if (e is! PedidoSuperado && c.mounted) {
+          await avisar(
+            c,
+            'Meta',
+            'A meta de alvo foi criada, mas o stop não: ${textoErro(e)}',
           );
         }
-      } catch (e) {
-        if (e is! PedidoSuperado && c.mounted) {
-          await avisar(c, 'Meta', textoErro(e));
-        }
-        return;
       }
     } finally {
       criandoSug = false;
