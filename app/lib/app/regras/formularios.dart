@@ -346,3 +346,34 @@ textosResumo(ResumoOrdem? r) {
     liquidacao: '📅 Liquidação financeira: ${fmtLiquidacao(r.liquidacao)}',
   );
 }
+
+const _nomesMeses = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
+
+/// `AAAA-MM` por extenso: "2026-11" vira "novembro/2026".
+String mesPorExtenso(String mes) {
+  final partes = mes.split('-');
+  return '${_nomesMeses[int.parse(partes[1]) - 1]}/${partes[0]}';
+}
+
+/// Venda com o mês aberto já terminado: a data só vai até o fim dele, e
+/// vender no mês de [hoje] pede fechar o mês [aberto] antes.
+String textoVenderDepoisDoMesAberto(String hoje, String aberto) =>
+    'Para vender em ${mesPorExtenso(hoje.substring(0, 7))}, feche '
+    '${mesPorExtenso(aberto)}.';
+
+/// Botão do formulário de venda que fecha o mês [aberto].
+String rotuloFecharMesAberto(String aberto) =>
+    'Fechar ${mesPorExtenso(aberto)}';

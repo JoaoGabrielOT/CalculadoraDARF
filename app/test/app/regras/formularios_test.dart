@@ -679,4 +679,15 @@ void main() {
       );
     });
   });
+
+  test('mês por extenso e textos do mês aberto já terminado', () {
+    expect(mesPorExtenso('2026-01'), 'janeiro/2026');
+    expect(mesPorExtenso('2026-03'), 'março/2026');
+    expect(mesPorExtenso('2026-12'), 'dezembro/2026');
+    expect(
+      textoVenderDepoisDoMesAberto('2027-01-05', '2026-12'),
+      'Para vender em janeiro/2027, feche dezembro/2026.',
+    );
+    expect(rotuloFecharMesAberto('2026-10'), 'Fechar outubro/2026');
+  });
 }

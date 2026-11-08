@@ -452,7 +452,12 @@ class ControleApuracao extends ChangeNotifier {
       nao: 'Ainda não',
     );
     if (!vendeu || !c.mounted) return;
-    final r = await abrirFormVenda(c, nova, lote: novoLote);
+    final r = await abrirFormVenda(
+      c,
+      nova,
+      lote: novoLote,
+      fecharMesAberto: _fecharPeloFormulario,
+    );
     if (r != null) _aceitar(r.visao);
   }
 
@@ -542,7 +547,12 @@ class ControleApuracao extends ChangeNotifier {
     if (atual == null || !atual.editavel) return;
     var alvo = lote ?? _lote(loteSelecionado);
     if (alvo != null && restante(alvo) == 0) alvo = null;
-    final r = await abrirFormVenda(c, atual, lote: alvo);
+    final r = await abrirFormVenda(
+      c,
+      atual,
+      lote: alvo,
+      fecharMesAberto: _fecharPeloFormulario,
+    );
     if (r != null) _aceitar(r.visao);
   }
 
@@ -656,7 +666,34 @@ class ControleApuracao extends ChangeNotifier {
   /// recusa).
   Future<void> fecharMes(BuildContext c) async {
     final atual = visao;
-    if (atual == null || !atual.editavel || fechando) return;
+    if (atual == null) return;
+    await _fecharMesDe(c, atual);
+  }
+
+  /// O botão "Fechar mês" do formulário de venda, quando o mês aberto já
+  /// terminou: o mesmo fluxo do [fecharMes], sobre a visão [atual] do
+  /// formulário (o mês aberto, mesmo com outro mês na tela). Devolve a visão do
+  /// novo mês aberto, ou nulo se cancelou, foi bloqueado ou falhou.
+  Future<VisaoMes?> _fecharPeloFormulario(
+    BuildContext c,
+    VisaoMes atual,
+  ) async {
+    if (!await _fecharMesDe(c, atual)) return null;
+    final aberto = mesAberto;
+    if (aberto == null || aberto == atual.mes) return null;
+    try {
+      return await _servicos.carregarMes(aberto);
+    } catch (e) {
+      if (c.mounted) {
+        await avisar(c, 'Não foi possível carregar', textoErro(e));
+      }
+      return null;
+    }
+  }
+
+  /// Fecha o mês de [atual]; verdadeiro quando o mês foi fechado.
+  Future<bool> _fecharMesDe(BuildContext c, VisaoMes atual) async {
+    if (!atual.editavel || fechando) return false;
     final inconsistentes = atual.apuracao.inconsistentes;
     if (inconsistentes.isNotEmpty) {
       await avisar(
@@ -664,13 +701,15 @@ class ControleApuracao extends ChangeNotifier {
         'Não foi possível fechar o mês',
         bloqueioSaldoInconsistente(inconsistentes),
       );
-      return;
+      return false;
     }
     final mes = atual.mes;
+    // o fluxo para se o usuário trocar o mês da tela no meio
+    final tela = _estado.mes;
     fechando = true;
     notifyListeners();
     try {
-      await _fechar(c, mes);
+      return await _fechar(c, mes, tela);
     } finally {
       fechando = false;
       notifyListeners();
@@ -685,7 +724,7 @@ class ControleApuracao extends ChangeNotifier {
     return p is num ? ' a ${brl(p.toDouble())}' : '';
   }
 
-  Future<void> _fechar(BuildContext c, String mes) async {
+  Future<bool> _fechar(BuildContext c, String mes, String tela) async {
     // As metas são lidas na hora (como o Python lê a config), não do valor
     // em cache do estado, que outro aparelho pode ter deixado velho.
     PreparoFechamento? preparo;
@@ -701,7 +740,7 @@ class ControleApuracao extends ChangeNotifier {
       verificando = false;
       notifyListeners();
     }
-    if (!c.mounted || _mudou(mes)) return;
+    if (!c.mounted || _mudou(tela)) return false;
     if (falha != null) {
       await avisar(
         c,
@@ -709,21 +748,21 @@ class ControleApuracao extends ChangeNotifier {
         'Falha ao verificar as metas antes de fechar: '
             '${String.fromCharCodes(textoErro(falha).runes.take(120))}',
       );
-      return;
+      return false;
     }
     if (preparo != null) {
       final bloqueio = preparo.bloqueio;
       if (bloqueio != null && bloqueio.isNotEmpty) {
         await avisar(c, 'Não foi possível fechar o mês', bloqueio);
-        return;
+        return false;
       }
       if (preparo.executadas.isNotEmpty || preparo.invalidas.isNotEmpty) {
         await recarregar();
-        if (!c.mounted || _mudou(mes)) return;
+        if (!c.mounted || _mudou(tela)) return false;
         final erroCarga = erro;
         if (visao == null && erroCarga != null) {
           await avisar(c, 'Não foi possível carregar', erroCarga);
-          return;
+          return false;
         }
         final linhas = [
           for (final m in preparo.executadas)
@@ -732,15 +771,30 @@ class ControleApuracao extends ChangeNotifier {
             '${m.ticker}: meta inválida. ${m.ultimoErro ?? ''}',
         ];
         await avisar(c, 'Metas verificadas antes de fechar', linhas.join('\n'));
-        if (!c.mounted || _mudou(mes)) return;
+        if (!c.mounted || _mudou(tela)) return false;
       }
     }
-    await _confirmar(c, mes);
+    return _confirmar(c, mes, tela);
   }
 
-  Future<void> _confirmar(BuildContext c, String mes) async {
-    final atual = visao;
-    if (atual == null || atual.mes != mes || !atual.editavel) return;
+  Future<bool> _confirmar(BuildContext c, String mes, String tela) async {
+    final VisaoMes? atual;
+    if (visao?.mes == mes) {
+      atual = visao;
+    } else {
+      // mês aberto com outro mês na tela (venda): o total vem do disco, já
+      // com o que as metas verificadas acabaram de gravar
+      try {
+        atual = await _servicos.carregarMes(mes);
+      } catch (e) {
+        if (c.mounted) {
+          await avisar(c, 'Não foi possível fechar o mês', textoErro(e));
+        }
+        return false;
+      }
+      if (!c.mounted || _mudou(tela)) return false;
+    }
+    if (atual == null || atual.mes != mes || !atual.editavel) return false;
     final sim = await confirmar(
       c,
       'Fechar ${fmtMes(mes)}',
@@ -748,7 +802,7 @@ class ControleApuracao extends ChangeNotifier {
           'Total da DARF: ${brl(atual.apuracao.darf)}',
       sim: 'Fechar mês',
     );
-    if (!sim || !c.mounted || _mudou(mes)) return;
+    if (!sim || !c.mounted || _mudou(tela)) return false;
     final Fechamento fechamento;
     try {
       fechamento = await _servicos.fecharMes(mes);
@@ -756,7 +810,7 @@ class ControleApuracao extends ChangeNotifier {
       if (c.mounted) {
         await avisar(c, 'Não foi possível fechar o mês', textoErro(e));
       }
-      return;
+      return false;
     }
     // o mês de trabalho mudou: a lista de compras acompanha o novo
     try {
@@ -768,5 +822,6 @@ class ControleApuracao extends ChangeNotifier {
     _aceitar(fechamento.visao);
     _atualizarModo(recarregarCarteira: true);
     if (c.mounted) await avisar(c, 'Mês fechado', fechamento.mensagem);
+    return true;
   }
 }

@@ -30,12 +30,16 @@ const _esperaPrevia = Duration(milliseconds: 300);
 /// [ticker] são a escolha inicial; [editar] é a compra com a venda editada
 /// (a compra fica fixa). Numa venda retroativa o aviso devolvido pelo serviço
 /// aparece aqui, depois de gravar (py:1655-1670); quem chama não o repete.
+/// [fecharMesAberto] fecha o mês da visão do formulário pelo fluxo do "Fechar mês" da
+/// Apuração e devolve a visão do novo mês aberto (nula se cancelou ou
+/// falhou); sem ela, o formulário só avisa que o mês precisa ser fechado.
 Future<VendaRegistrada?> abrirFormVenda(
   BuildContext c,
   VisaoMes visao, {
   Lote? lote,
   String ticker = '',
   (Lote, Venda)? editar,
+  FecharMesAberto? fecharMesAberto,
 }) async {
   if (!visao.editavel) return null;
   if (editar == null && !visao.dados.lotes.any((l) => restante(l) > 0)) {
@@ -45,12 +49,23 @@ Future<VendaRegistrada?> abrirFormVenda(
   if (!c.mounted) return null;
   final r = await abrirFormulario<VendaRegistrada>(
     c,
-    (dialogo) => FormVenda(
+    (dialogo) => _TrocaDeMes(
       visao: visao,
-      lote: lote,
-      ticker: ticker,
-      editar: editar,
-      dialogo: dialogo,
+      construir: (v, trocou, aoTrocar) => FormVenda(
+        // um mês novo recria o formulário: os lotes e limites são outros
+        key: ValueKey('venda-${v.mes}'),
+        visao: v,
+        lote: trocou == null ? lote : null,
+        ticker: trocou ?? ticker,
+        editar: editar,
+        dialogo: dialogo,
+        fecharMesAberto: fecharMesAberto == null
+            ? null
+            : (fc, t) async {
+                final nova = await fecharMesAberto(fc, v);
+                if (nova != null) aoTrocar(nova, t);
+              },
+      ),
     ),
   );
   final aviso = r?.aviso;
@@ -58,6 +73,47 @@ Future<VendaRegistrada?> abrirFormVenda(
     await avisar(c, 'Venda registrada', aviso);
   }
   return r;
+}
+
+/// Fecha o mês aberto a partir do formulário; devolve a visão do novo mês
+/// aberto, ou nulo se o fechamento foi cancelado ou falhou.
+typedef FecharMesAberto = Future<VisaoMes?> Function(
+  BuildContext c,
+  VisaoMes aberta,
+);
+
+/// Guarda a visão do formulário: depois de fechar o mês pelo botão, o
+/// formulário é refeito com o novo mês aberto, mantendo o ticker digitado.
+class _TrocaDeMes extends StatefulWidget {
+  const _TrocaDeMes({required this.visao, required this.construir});
+
+  final VisaoMes visao;
+  final Widget Function(
+    VisaoMes visao,
+    String? tickerAposTroca,
+    void Function(VisaoMes nova, String ticker) aoTrocar,
+  )
+  construir;
+
+  @override
+  State<_TrocaDeMes> createState() => _TrocaDeMesState();
+}
+
+class _TrocaDeMesState extends State<_TrocaDeMes> {
+  late VisaoMes _visao = widget.visao;
+  String? _ticker;
+
+  void _trocar(VisaoMes nova, String ticker) {
+    if (!mounted) return;
+    setState(() {
+      _visao = nova;
+      _ticker = ticker;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      widget.construir(_visao, _ticker, _trocar);
 }
 
 class FormVenda extends StatefulWidget {
@@ -68,6 +124,7 @@ class FormVenda extends StatefulWidget {
     this.lote,
     this.ticker = '',
     this.editar,
+    this.fecharMesAberto,
   });
 
   final VisaoMes visao;
@@ -75,6 +132,10 @@ class FormVenda extends StatefulWidget {
   final Lote? lote;
   final String ticker;
   final (Lote, Venda)? editar;
+
+  /// Fecha o mês da [visao] (botão do aviso de mês terminado); recebe o
+  /// ticker digitado para o formulário do novo mês.
+  final Future<void> Function(BuildContext c, String ticker)? fecharMesAberto;
 
   @override
   State<FormVenda> createState() => _FormVendaState();
@@ -358,6 +419,49 @@ class _FormVendaState extends State<FormVenda>
     final q = _qtdValida;
     if (q == null) return false;
     return _erroManual(_elegiveis) == null;
+  }
+
+  // --- mês aberto já terminado
+
+  /// Com ticker, a data vai até o fim do mês aberto; se hoje já passou dele,
+  /// vender no mês de hoje pede fechar o mês aberto (sem ticker, nada muda).
+  bool get _mesAbertoTerminou =>
+      !_editando && _maximo != null && _fimMes.compareTo(ambiente.hoje()) < 0;
+
+  bool _fechandoMes = false;
+
+  Future<void> _fecharMesAberto() async {
+    final fechar = widget.fecharMesAberto;
+    if (fechar == null || _fechandoMes) return;
+    setState(() => _fechandoMes = true);
+    try {
+      await fechar(context, _ticker.text.trim().toUpperCase());
+    } finally {
+      if (mounted) setState(() => _fechandoMes = false);
+    }
+  }
+
+  Widget _avisoMesTerminado(CoresApp c) {
+    final aberto = widget.visao.mes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          textoVenderDepoisDoMesAberto(ambiente.hoje(), aberto),
+          key: const ValueKey('aviso-mes-terminado'),
+          style: TextStyle(color: c.aviso, fontWeight: FontWeight.w600),
+        ),
+        if (widget.fecharMesAberto != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton(
+              onPressed: salvando || _fechandoMes ? null : _fecharMesAberto,
+              child: Text(rotuloFecharMesAberto(aberto)),
+            ),
+          ),
+      ],
+    );
   }
 
   // --- ticker e compra
@@ -905,6 +1009,7 @@ class _FormVendaState extends State<FormVenda>
         else if (_opcoes.isEmpty)
           Text(semOpcao, style: suave),
         if (info.isNotEmpty) Text(info, style: suave),
+        if (_mesAbertoTerminou) _avisoMesTerminado(c),
         CampoData(
           // recriada quando muda o ticker (limites diferentes)
           key: ValueKey('data-${_tickerAtual ?? ''}'),

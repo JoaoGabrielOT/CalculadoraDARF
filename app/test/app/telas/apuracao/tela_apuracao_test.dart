@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/campo_data.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
@@ -420,6 +421,85 @@ void main() {
       expect(s.chamadas, contains('fecharMes(2026-10)'));
       expect(find.text('Mês fechado'), findsOneWidget);
       expect(find.text('Não há DARF a pagar.'), findsOneWidget);
+    });
+
+    group('pela venda, com o mês aberto já terminado', () {
+      Future<ServicosFalsos> abrirVenda(WidgetTester t) async {
+        ambiente = Ambiente.fixo(hoje: '2026-11-08');
+        final s = ServicosFalsos();
+        s.visoes['2026-11'] = visaoExemplo(
+          Mes(
+            mes: '2026-11',
+            lotes: [
+              Lote(
+                id: 'L1~2026-11',
+                origem: 'L1',
+                ticker: 'PETR4',
+                tipo: 'Ação',
+                dataCompra: '2026-10-05',
+                qtd: 60,
+                preco: 32.5,
+              ),
+            ],
+          ),
+        );
+        await montarApp(
+          t,
+          servicos: s,
+          tamanho: _pc,
+          tela: const TelaApuracao(
+            conteudo: listasApuracao,
+            sliversCompactos: listasSliversApuracao,
+          ),
+        );
+        await t.pumpAndSettle();
+        await t.tap(find.widgetWithText(OutlinedButton, 'Registrar venda'));
+        await t.pumpAndSettle();
+        await t.tap(
+          find.descendant(
+            of: find.byType(Dialog),
+            matching: find.text('PETR4'),
+          ),
+        );
+        await t.pump();
+        await t.tap(find.text('Fechar outubro/2026'));
+        await t.pumpAndSettle();
+        return s;
+      }
+
+      String? maximoDaData(WidgetTester t) =>
+          t.widget<CampoData>(find.byType(CampoData)).maximo;
+
+      testWidgets('mesma confirmação do Fechar mês; depois o formulário usa '
+          'o novo mês aberto', (t) async {
+        final s = await abrirVenda(t);
+        expect(find.text('Fechar 10/2026'), findsOneWidget);
+        s.mesAberto = '2026-11'; // o fechamento abre novembro
+        await t.tap(_noDialogo('Fechar mês'));
+        await t.pumpAndSettle();
+        expect(s.chamadas, contains('fecharMes(2026-10)'));
+        expect(find.text('Mês fechado'), findsOneWidget);
+        await t.tap(find.text('OK'));
+        await t.pumpAndSettle();
+        expect(find.text('Registrar venda'), findsWidgets);
+        expect(find.text('Mês 11/2026'), findsOneWidget);
+        expect(maximoDaData(t), '2026-11-08');
+      });
+
+      testWidgets('cancelar a confirmação não fecha nem muda o formulário', (
+        t,
+      ) async {
+        final s = await abrirVenda(t);
+        await t.tap(_noDialogo('Cancelar'));
+        await t.pumpAndSettle();
+        expect(_chamadasA(s, 'fecharMes'), 0);
+        expect(find.text('Mês 10/2026'), findsOneWidget);
+        expect(maximoDaData(t), '2026-10-31');
+        expect(
+          find.text('Para vender em novembro/2026, feche outubro/2026.'),
+          findsOneWidget,
+        );
+      });
     });
 
     testWidgets('cancelar a confirmação não fecha', (t) async {

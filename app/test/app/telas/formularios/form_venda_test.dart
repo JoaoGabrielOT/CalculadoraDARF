@@ -258,6 +258,131 @@ void main() {
     await t.pump(const Duration(milliseconds: 400));
   });
 
+  group('mês aberto já terminou', () {
+    const aviso = 'Para vender em novembro/2026, feche outubro/2026.';
+    const botao = 'Fechar outubro/2026';
+
+    /// Novembro aberto depois de fechar outubro: a cópia de L1 levada.
+    VisaoMes novembro() => visaoExemplo(
+      Mes(
+        mes: '2026-11',
+        lotes: [
+          Lote(
+            id: 'L1~2026-11',
+            origem: 'L1',
+            ticker: 'PETR4',
+            tipo: 'Ação',
+            dataCompra: '2026-10-05',
+            qtd: 60,
+            preco: 32.5,
+          ),
+        ],
+      ),
+    );
+
+    Future<List<String>> abrirComFechar(
+      WidgetTester t,
+      ServicosFalsos s,
+      VisaoMes? Function() resultado,
+    ) async {
+      final chamadas = <String>[];
+      await abrirNoTeste<VendaRegistrada>(
+        t,
+        s,
+        (c) => abrirFormVenda(
+          c,
+          _visao(s),
+          fecharMesAberto: (fc, aberta) async {
+            expect(aberta.mes, '2026-10');
+            chamadas.add('fechar');
+            return resultado();
+          },
+        ),
+      );
+      return chamadas;
+    }
+
+    CampoData campoData(WidgetTester t) =>
+        t.widget<CampoData>(find.byType(CampoData));
+
+    testWidgets('sem passar do fim do mês aberto, não há aviso', (t) async {
+      final s = ServicosFalsos();
+      await abrirComFechar(t, s, () => null);
+      await t.tap(find.text('PETR4'));
+      await t.pump();
+      expect(find.text(aviso), findsNothing);
+      expect(find.text(botao), findsNothing);
+      await t.pump(const Duration(milliseconds: 400));
+    });
+
+    testWidgets('hoje depois do fim do mês: aviso e botão só com ticker', (
+      t,
+    ) async {
+      ambiente = Ambiente.fixo(hoje: '2026-11-08');
+      final s = ServicosFalsos();
+      await abrirComFechar(t, s, () => null);
+      // sem ticker: comportamento de antes
+      expect(find.text(aviso), findsNothing);
+      expect(find.text(botao), findsNothing);
+      await t.tap(find.text('PETR4'));
+      await t.pump();
+      expect(find.text(aviso), findsOneWidget);
+      expect(find.text(botao), findsOneWidget);
+      expect(campoData(t).maximo, '2026-10-31');
+      await t.pump(const Duration(milliseconds: 400));
+    });
+
+    testWidgets('fechar pelo botão troca para o novo mês aberto e libera '
+        'as datas até hoje', (t) async {
+      ambiente = Ambiente.fixo(hoje: '2026-11-08');
+      final s = ServicosFalsos();
+      final chamadas = await abrirComFechar(t, s, novembro);
+      await t.tap(find.text('PETR4'));
+      await t.pump();
+      await t.tap(find.text(botao));
+      await t.pumpAndSettle();
+      expect(chamadas, ['fechar']);
+      expect(find.text('Mês 11/2026'), findsOneWidget);
+      expect(campoTexto(t, 'ticker').controller!.text, 'PETR4');
+      expect(campoData(t).maximo, '2026-11-08');
+      expect(campoData(t).valor, '2026-11-08');
+      expect(find.text(aviso), findsNothing);
+    });
+
+    testWidgets('fechamento cancelado ou com erro não muda nada', (t) async {
+      ambiente = Ambiente.fixo(hoje: '2026-11-08');
+      final s = ServicosFalsos();
+      final chamadas = await abrirComFechar(t, s, () => null);
+      await t.tap(find.text('PETR4'));
+      await t.pump();
+      await t.tap(find.text(botao));
+      await t.pumpAndSettle();
+      expect(chamadas, ['fechar']);
+      expect(find.text('Mês 10/2026'), findsOneWidget);
+      expect(campoData(t).maximo, '2026-10-31');
+      expect(find.text(aviso), findsOneWidget);
+    });
+
+    testWidgets('editar venda do mês aberto não mostra o aviso', (t) async {
+      ambiente = Ambiente.fixo(hoje: '2026-11-08');
+      final s = ServicosFalsos();
+      final lote = _l('L1');
+      await _abrir(t, s, editar: (lote, lote.vendas.first));
+      expect(find.text(aviso), findsNothing);
+      expect(find.text(botao), findsNothing);
+      await t.pump(const Duration(milliseconds: 400));
+    });
+
+    testWidgets('sem a ação de fechar, só o aviso', (t) async {
+      ambiente = Ambiente.fixo(hoje: '2026-11-08');
+      final s = ServicosFalsos();
+      await _abrir(t, s, ticker: 'PETR4');
+      expect(find.text(aviso), findsOneWidget);
+      expect(find.text(botao), findsNothing);
+      await t.pump(const Duration(milliseconds: 400));
+    });
+  });
+
   testWidgets('datas na edição: só o mês aberto, sem consultar os meses', (
     t,
   ) async {
