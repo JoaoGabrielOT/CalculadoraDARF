@@ -144,6 +144,72 @@ void main() {
     expect(valor, '2000-01-01');
   });
 
+  testWidgets('CampoData: data digitada sem barras é aceita (ddmmaaaa)', (
+    t,
+  ) async {
+    String? valor;
+    await montarComponente(t, CampoData(aoMudar: (v) => valor = v));
+    await t.enterText(find.byType(TextField), '05102026');
+    await t.pump();
+    expect(valor, '2026-10-05');
+    expect(find.widgetWithText(TextField, '05/10/2026'), findsOneWidget);
+    expect(find.text('Data inválida.'), findsNothing);
+
+    // Oito dígitos impossíveis: erro na hora, como dd/mm/aaaa completo.
+    await t.enterText(find.byType(TextField), '31022026');
+    await t.pump();
+    expect(find.widgetWithText(TextField, '31/02/2026'), findsOneWidget);
+    expect(find.text('Data inválida.'), findsOneWidget);
+  });
+
+  testWidgets('CampoData: as barras entram sozinhas enquanto digita', (
+    t,
+  ) async {
+    String? valor;
+    await montarComponente(t, CampoData(aoMudar: (v) => valor = v));
+    final campo = find.byType(TextField);
+    String texto() => t.widget<TextField>(campo).controller!.text;
+    // Cada passo é o texto anterior mais um dígito, como no teclado.
+    final passos = {
+      '0': '0',
+      '08': '08',
+      '081': '08/1',
+      '08/11': '08/11',
+      '08/112': '08/11/2',
+      '08/11/2026': '08/11/2026',
+    };
+    for (final MapEntry(key: digitado, value: esperado) in passos.entries) {
+      await t.enterText(campo, digitado);
+      await t.pump();
+      expect(texto(), esperado, reason: 'digitado: $digitado');
+    }
+    expect(valor, isNull); // 08/11/2026 é depois de hoje (28/10/2026)
+    await t.enterText(campo, '0810');
+    await t.pump();
+    expect(texto(), '08/10');
+    await t.enterText(campo, '08/102026');
+    await t.pump();
+    expect(texto(), '08/10/2026');
+    expect(valor, '2026-10-08');
+
+    // Barras digitadas pelo usuário e dia/mês de um dígito continuam valendo.
+    await t.enterText(campo, '5/10/2026');
+    await t.pump();
+    expect(texto(), '5/10/2026');
+    expect(valor, '2026-10-05');
+    // A barra digitada pelo usuário depois do dia fica.
+    await t.enterText(campo, '');
+    await t.enterText(campo, '08/');
+    await t.pump();
+    expect(texto(), '08/');
+    // Apagar não recoloca a barra.
+    await t.enterText(campo, '08/10/');
+    await t.pump();
+    await t.enterText(campo, '08/10');
+    await t.pump();
+    expect(texto(), '08/10');
+  });
+
   testWidgets('CampoData: desmontar com o foco no campo não dá erro', (
     t,
   ) async {

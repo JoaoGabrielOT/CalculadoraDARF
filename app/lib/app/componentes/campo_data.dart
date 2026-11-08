@@ -1,8 +1,10 @@
 // Campo de data: texto dd/mm/aaaa editável, calendário e atalhos Hoje/Ontem
 // (android/main.py:292-350; componentes.py:71-204). Os valores são ISO
-// (AAAA-MM-DD).
+// (AAAA-MM-DD). Aceita a data com ou sem barras (ddmmaaaa) e põe as barras
+// enquanto se digita.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show TextInputFormatter;
 
 import '../../nucleo/nucleo.dart';
 import 'cartao.dart';
@@ -83,8 +85,15 @@ class _CampoDataState extends State<CampoData> {
   static String _formatar(String? iso) => iso == null ? '' : fmtData(iso);
 
   static String? _ler(String texto) {
+    final t = texto.trim();
     try {
-      return parseData(texto);
+      // ddmmaaaa: oito dígitos sem barras
+      if (_soDigitos.hasMatch(t)) {
+        return parseData(
+          '${t.substring(0, 2)}/${t.substring(2, 4)}/${t.substring(4)}',
+        );
+      }
+      return parseData(t);
     } on FormatException {
       return null;
     }
@@ -99,7 +108,8 @@ class _CampoDataState extends State<CampoData> {
       iso.compareTo(_maximo) <= 0 &&
       (widget.permitido?.call(iso) ?? true);
 
-  static final _formatoCompleto = RegExp(r'^\d{1,2}/\d{1,2}/\d{4}$');
+  static final _soDigitos = RegExp(r'^\d{8}$');
+  static final _formatoCompleto = RegExp(r'^(\d{1,2}/\d{1,2}/\d{4}|\d{8})$');
 
   /// Texto vazio, inválido ou fora do período não deixa a data antiga valendo:
   /// o pai recebe null (o formulário bloqueia o salvar).
@@ -183,6 +193,7 @@ class _CampoDataState extends State<CampoData> {
           controller: _texto,
           focusNode: _foco,
           keyboardType: TextInputType.datetime,
+          inputFormatters: const [BarrasData()],
           onChanged: _digitou,
           decoration: InputDecoration(
             labelText: 'Data',
@@ -209,6 +220,48 @@ class _CampoDataState extends State<CampoData> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Põe as barras de dd/mm/aaaa enquanto se digita no fim do texto: "081"
+/// vira "08/1" e "08112026" vira "08/11/2026". Só mexe quando as barras que
+/// já existem estão nessas posições, então "5/10/2026" fica como está; ao
+/// apagar (o texto novo é começo do antigo), nada é recolocado.
+class BarrasData extends TextInputFormatter {
+  const BarrasData();
+
+  static final _digitosEBarras = RegExp(r'^[\d/]*$');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue antigo,
+    TextEditingValue novo,
+  ) {
+    final t = novo.text;
+    final noFim =
+        novo.selection.isCollapsed && novo.selection.baseOffset == t.length;
+    if (!noFim || antigo.text.startsWith(t) || !_digitosEBarras.hasMatch(t)) {
+      return novo;
+    }
+    var digitos = t.replaceAll('/', '');
+    if (digitos.length > 8) digitos = digitos.substring(0, 8);
+    final b = StringBuffer();
+    for (var i = 0; i < digitos.length; i++) {
+      if (i == 2 || i == 4) b.write('/');
+      b.write(digitos[i]);
+    }
+    final mascarado = b.toString();
+    // barra fora das posições 2 e 5 (dia ou mês de um dígito, ou "08/"
+    // digitado com a barra): o texto fica como o usuário escreveu
+    for (var i = 0; i < t.length; i++) {
+      if (t[i] == '/' && (i >= mascarado.length || mascarado[i] != '/')) {
+        return novo;
+      }
+    }
+    return TextEditingValue(
+      text: mascarado,
+      selection: TextSelection.collapsed(offset: mascarado.length),
     );
   }
 }

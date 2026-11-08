@@ -244,6 +244,20 @@ void main() {
     expect(permitido('2026-07-20'), isTrue);
   });
 
+  testWidgets('data digitada sem barras vale com o ticker escolhido', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    await _abrir(t, s);
+    await t.tap(find.text('PETR4'));
+    await t.pump();
+    await t.enterText(_campoData, '27102026');
+    await t.pump();
+    expect(find.widgetWithText(TextField, '27/10/2026'), findsOneWidget);
+    expect(t.widget<CampoData>(find.byType(CampoData)).valor, '2026-10-27');
+    await t.pump(const Duration(milliseconds: 400));
+  });
+
   testWidgets('datas na edição: só o mês aberto, sem consultar os meses', (
     t,
   ) async {
