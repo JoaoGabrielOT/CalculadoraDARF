@@ -355,27 +355,51 @@ void main() {
       expect(fev.custoFiscal, isNull);
     });
 
-    test('mês aberto depois do corte sem marcador usa a posição derivada', () {
-      final m = {
-        '2026-03': Mes(mes: '2026-03', fechado: true, metodo: metodoCustoMedio),
-        '2026-04': Mes(
-          mes: '2026-04',
-          lotes: [
-            Lote(
-              id: 'P~2026-04',
-              origem: 'P',
-              ticker: 'PETR4',
-              tipo: 'Ação',
-              dataCompra: '2026-02-10',
-              qtd: 100,
-              preco: 10.0,
-            ),
-          ],
+    Mes abrilSemMarcador() => Mes(
+      mes: '2026-04',
+      lotes: [
+        Lote(
+          id: 'P~2026-04',
+          origem: 'P',
+          ticker: 'PETR4',
+          tipo: 'Ação',
+          dataCompra: '2026-02-10',
+          qtd: 100,
+          preco: 10.0,
         ),
+      ],
+    );
+
+    test('mês aberto sem marcador, sem antecessor pelo custo médio, usa a '
+        'posição derivada', () {
+      final m = {
+        '2026-02': Mes(mes: '2026-02', fechado: true, metodo: metodoCustoMedio),
+        '2026-04': abrilSemMarcador(),
       };
       // derivada: arredondar(100 × 10 × 1,0003) = 1000,30
       final p = posicoesEm(m, '2026-04-30').single;
       expect(p.custoFiscal, closeTo(1000.30, 1e-9));
+    });
+
+    test('mês aberto sem marcador depois de um fechado pelo custo médio herda '
+        'a posição final dele, sem gravar', () {
+      final abril = abrilSemMarcador();
+      final m = {
+        '2026-03': Mes(
+          mes: '2026-03',
+          fechado: true,
+          metodo: metodoCustoMedio,
+          posicaoInicial: {'PETR4': PosicaoFiscal(qtd: 100, custo: 1234.56)},
+          prejuizoAnterior: PrejuizoAcumulado(),
+        ),
+        '2026-04': abril,
+      };
+      final antes = jsonPython(abril.toJson());
+      // como marcarAoCarregar: a posição final de março, não a derivada
+      final p = posicoesEm(m, '2026-04-30').single;
+      expect(p.custoFiscal, closeTo(1234.56, 1e-9));
+      expect(jsonPython(abril.toJson()), antes);
+      expect(abril.metodo, isNull);
     });
 
     test('quantidade fiscal diferente não inventa custo', () {

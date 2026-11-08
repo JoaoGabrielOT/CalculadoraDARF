@@ -10,6 +10,7 @@ import 'package:calculadoradarf/nucleo/metas/verificacao.dart';
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
+import 'package:calculadoradarf/nucleo/planilha/mesclagem.dart';
 import 'package:calculadoradarf/nucleo/repositorio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -316,14 +317,14 @@ void main() {
       expect(repo.carregar('2026-02').metodo, isNull);
     });
 
-    test('retroativa de toda a posição tira o ticker', () {
-      repo.salvar(
-        marcado(
-          '2026-03',
-          [lote('P0', '2026-01-15', 100, 10, origem: 'P')],
-          (100, 1000.30),
-        ),
-      );
+    test('retroativa de toda a posição mantém o ticker zerado e vence a '
+        'mesclagem', () {
+      final antes = marcado(
+        '2026-03',
+        [lote('P0', '2026-01-15', 100, 10, origem: 'P')],
+        (100, 1000.30),
+      )..mod = 5;
+      repo.salvar(antes, carimbar: false);
       registrarVendaRetroativa(repo, repo.carregar('2026-03'), 'P0', (
         data: '2026-02-10',
         qtd: 100,
@@ -331,7 +332,19 @@ void main() {
       ));
       final marco = repo.carregar('2026-03');
       expect(marco.lotes, isEmpty);
-      expect(marco.posicaoInicial, isEmpty);
+      expect(marco.toJson()['posicao_inicial'], {
+        'PETR4': {'qtd': 0, 'custo': 0.0},
+      });
+      expect(apurar(marco).inconsistentes, isEmpty);
+      // a planilha ainda traz o marcador antigo (100 de PETR4, mod menor): a
+      // posição zerada vence e o mês continua consistente
+      final r = mesclarMes(marco, antes)!;
+      expect(r.toJson()['posicao_inicial'], {
+        'PETR4': {'qtd': 0, 'custo': 0.0},
+      });
+      expect(apurar(r).inconsistentes, isEmpty);
+      final r2 = mesclarMes(antes, marco)!;
+      expect(r2.posicaoInicial!['PETR4']!.qtd, 0);
     });
 
     test('retroativa sem posição inicial é recusada sem gravar', () {

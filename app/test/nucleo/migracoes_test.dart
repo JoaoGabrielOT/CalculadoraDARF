@@ -1,5 +1,6 @@
 import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/apuracao.dart';
+import 'package:calculadoradarf/nucleo/apuracao_medio.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/migracoes.dart';
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
@@ -186,6 +187,22 @@ void main() {
     expect(r.corte, '2026-04');
     expect(repo.carregar('2026-04').metodo, metodoCustoMedio);
     expect(repo.lerConfig().migracoes, [idMigracaoCustoMedio]);
+  });
+
+  test('mês aberto antes de um fechado não é o corte: vale o primeiro aberto '
+      'depois do último fechado', () async {
+    // fevereiro reaberto (ex.: mês de venda retroativa), março fechado
+    final fev = repo.carregar('2026-02')..fechado = false;
+    repo.salvar(fev, carimbar: false);
+    final antesFev = disco.ler('2026-02.json');
+    final r = await _migrar();
+    expect(r.aplicada, isTrue);
+    expect(r.corte, '2026-04');
+    expect(disco.ler('2026-02.json'), antesFev);
+    expect(repo.carregar('2026-04').metodo, metodoCustoMedio);
+    expect(repo.carregar('2026-05').metodo, metodoCustoMedio);
+    // o prejuízo inicial (Configurações) edita o mês de corte
+    expect(mesDeCorte(repo.carregarMeses().values), '2026-04');
   });
 
   test('mês já marcado (outro aparelho) fica como está', () async {

@@ -149,6 +149,7 @@ List<PosicaoAtivo> posicoesEm(Map<String, Mes> meses, String dataCorte) {
       : dataCorte.substring(0, 7);
   final fiscal = _fiscalEm(
     meses[mesFiscal],
+    meses[somarDias('$mesFiscal-01', -1).substring(0, 7)],
     mesDeCorte(meses.values),
     dataCorte,
   );
@@ -179,14 +180,26 @@ double? _custoSeBate(PosicaoFiscal? f, List<CompraNaPosicao> compras) =>
     : null;
 
 /// Posição fiscal em [dataCorte] pelo mês [m] quando ele usa o custo médio: a
-/// posição inicial do mês (derivada dos lotes levados, se ainda sem marcador)
-/// mais as compras e vendas até a data, pela mesma apuração do mês.
-Map<String, PosicaoFiscal>? _fiscalEm(Mes? m, String? corte, String dataCorte) {
+/// posição inicial do mês (se ainda sem marcador, a que [marcarAoCarregar]
+/// daria com o mês [anterior], numa cópia) mais as compras e vendas até a
+/// data, pela mesma apuração do mês.
+Map<String, PosicaoFiscal>? _fiscalEm(
+  Mes? m,
+  Mes? anterior,
+  String? corte,
+  String dataCorte,
+) {
   if (m == null || !usaCustoMedio(m, corte)) return null;
+  var inicial = m.posicaoInicial;
+  if (m.metodo != metodoCustoMedio) {
+    final copia = Mes(mes: m.mes, lotes: m.lotes);
+    marcarAoCarregar(copia, anterior);
+    inicial = copia.posicaoInicial;
+  }
   final ate = Mes(
     mes: m.mes,
     metodo: metodoCustoMedio,
-    posicaoInicial: m.posicaoInicial ?? posicaoInicialDerivada(m),
+    posicaoInicial: inicial ?? posicaoInicialDerivada(m),
     prejuizoAnterior: m.prejuizoAnterior,
     lotes: [
       for (final l in m.lotes)

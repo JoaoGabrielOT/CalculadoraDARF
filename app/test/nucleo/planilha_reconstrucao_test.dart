@@ -106,7 +106,7 @@ void main() {
 
   group('coluna Detalhes do Resumo', () {
     const detalhes =
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio",'
         '"posicao_inicial":{"PETR4":{"qtd":100,"custo":2550.0}},'
         '"prejuizo_anterior":{"comum":120.5,"day_trade":0.0}}';
     Linha resumo(String mes, [Object? col14]) => [
@@ -150,6 +150,38 @@ void main() {
       expect(d.prejuizoAnterior, isNull);
     });
 
+    test('marcador só vale com o mod da própria linha', () {
+      // linha com o mod 5: o marcador gravado junto vale
+      expect(
+        reconstruir({
+          'Resumo': [resumo('11/2026', detalhes)],
+        }).meses['2026-11']!.metodo,
+        metodoCustoMedio,
+      );
+      // a 1.12 regravou a linha (mod novo) sem limpar a 14ª célula; ou o
+      // marcador não traz o mod: ignorado
+      for (final v in [
+        detalhes.replaceFirst('"mod":5.0', '"mod":4.0'),
+        detalhes.replaceFirst('"mod":5.0,', ''),
+        detalhes.replaceFirst('"mod":5.0', '"mod":"x"'),
+      ]) {
+        final d = reconstruir({
+          'Resumo': [resumo('11/2026', v)],
+        }).meses['2026-11']!;
+        expect(d.metodo, isNull, reason: v);
+        expect(d.posicaoInicial, isNull, reason: v);
+        expect(d.prejuizoAnterior, isNull, reason: v);
+      }
+      // mod lido como texto na célula (mesma conversão da coluna 13)
+      final texto = [...resumo('11/2026', detalhes)]..[12] = '5';
+      expect(
+        reconstruir({
+          'Resumo': [texto],
+        }).meses['2026-11']!.metodo,
+        metodoCustoMedio,
+      );
+    });
+
     test('valor desalinhado ignorado (mês trocado)', () {
       final dados = reconstruir({
         'Resumo': [
@@ -166,28 +198,28 @@ void main() {
       for (final v in [
         'não é JSON',
         '[1, 2]',
-        '{"mes":"2026-11"}',
-        '{"mes":"2026-11","metodo":"outro"}',
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":5.0}',
+        '{"mes":"2026-11","mod":5.0,"metodo":"outro"}',
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio",'
             '"posicao_inicial":{"PETR4":{"qtd":1.5,"custo":1.0}}}',
         12,
         // marcador com posição ou prejuízo de tipo errado: inválido inteiro
         // (não pode vencer a mesclagem e apagar a posição local)
-        '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":"x"}',
-        '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":null}',
-        '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":[1]}',
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio","posicao_inicial":"x"}',
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio","posicao_inicial":null}',
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio","posicao_inicial":[1]}',
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio",'
             '"posicao_inicial":{"PETR4":5}}',
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio",'
             '"posicao_inicial":{"PETR4":{"qtd":"100","custo":1.0}}}',
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio",'
             '"posicao_inicial":{"PETR4":{"qtd":100,"custo":"1"}}}',
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio",'
             '"posicao_inicial":{"PETR4":{"qtd":100}}}',
-        '{"mes":"2026-11","metodo":"custo_medio","prejuizo_anterior":7}',
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio","prejuizo_anterior":7}',
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio",'
             '"prejuizo_anterior":{"comum":"1","day_trade":0.0}}',
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":5.0,"metodo":"custo_medio",'
             '"posicao_inicial":{"PETR4":{"qtd":100,"custo":1.0}},'
             '"prejuizo_anterior":{"comum":1.0}}',
       ]) {

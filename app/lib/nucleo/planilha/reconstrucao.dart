@@ -190,8 +190,10 @@ DadosPlanilha reconstruir(Map<String, List<Linha>> abas) {
 }
 
 /// Coluna Detalhes do Resumo (§5.3, só da 2.1): o marcador de custo médio
-/// vale só se o JSON traz o mês da própria linha (uma gravação da 1.12 pode
-/// deixar a coluna desalinhada); valor inválido ou de outro mês é ignorado.
+/// vale só se o JSON traz o mês e o `mod` da própria linha (a 1.12 grava só
+/// as 13 primeiras colunas: a 14ª pode ficar desalinhada ou ser de antes de
+/// ela regravar o mês); valor inválido, de outro mês ou de outro `mod` é
+/// ignorado.
 void _lerMarcador(Mes d, Object? valor) {
   if (!verdadeiroPython(valor)) return;
   final Mes lido;
@@ -199,6 +201,7 @@ void _lerMarcador(Mes d, Object? valor) {
     final json = jsonPythonDecode(strPython(valor));
     if (json is! Map ||
         json['mes'] != d.mes ||
+        numOuPadrao(json['mod'], double.nan) != d.mod ||
         json['metodo'] != metodoCustoMedio) {
       return;
     }

@@ -91,7 +91,8 @@ void main() {
     expect(mesPorCustoMedio(repo, '2026-12'), isTrue);
     expect(
       r.linhas['Resumo']!.single[13],
-      '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":{},'
+      '{"mes":"2026-11","mod":20.0,"metodo":"custo_medio",'
+      '"posicao_inicial":{},'
       '"prejuizo_anterior":{"comum":3.5,"day_trade":0.0}}',
     );
   });

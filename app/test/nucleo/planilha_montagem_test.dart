@@ -97,7 +97,7 @@ void main() {
       expect(resumo.single[12], 7.0);
       expect(
         resumo.single[13],
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":7.0,"metodo":"custo_medio",'
         '"posicao_inicial":{"PETR4":{"qtd":100,"custo":2550.0}},'
         '"prejuizo_anterior":{"comum":120.5,"day_trade":0.0}}',
       );

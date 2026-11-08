@@ -158,7 +158,9 @@ String registrarVendaRetroativa(
     pos
       ..custo = arredondar(pos.custo - baixado, 2)
       ..qtd -= venda.qtd;
-    if (pos.qtd == 0) d.posicaoInicial!.remove(lote.ticker);
+    // posição zerada fica com o ticker: vazia, perderia na mesclagem para o
+    // marcador antigo da planilha
+    if (pos.qtd == 0) pos.custo = 0.0;
   }
   lote.qtd -= venda.qtd;
   if (lote.qtd <= 0) {

@@ -166,7 +166,7 @@ void main() {
       [for (final l in linhas['Resumo']!) l[13]],
       [
         '',
-        '{"mes":"2026-11","metodo":"custo_medio",'
+        '{"mes":"2026-11","mod":42.5,"metodo":"custo_medio",'
             '"posicao_inicial":{"VALE3":{"qtd":10,"custo":600.0}},'
             '"prejuizo_anterior":{"comum":12.5,"day_trade":0.0}}',
       ],

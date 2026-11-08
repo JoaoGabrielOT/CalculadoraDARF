@@ -70,6 +70,7 @@ String detalhesResumo(Mes d) {
   final j = d.toJson();
   return jsonPython({
     'mes': d.mes,
+    'mod': d.mod,
     for (final k in camposMetodo)
       if (j.containsKey(k)) k: j[k],
   }, compacto: true);

@@ -74,7 +74,8 @@ bool _erroDeLeitura(Object e) =>
 /// 1. backup (se falhar, nada é feito e volta o `erro`);
 /// 2. sincronização completa, limitada por quem chama (sem rede, sem login
 ///    ou demorada, segue com os dados locais);
-/// 3. corte = primeiro mês aberto legível; marca ele e os abertos
+/// 3. corte = primeiro mês aberto legível depois do último fechado (como em
+///    [reaplicarCorteCustoMedio]); marca ele e os abertos
 ///    posteriores sem marcador, **sem carimbar** o `mod` (o marcador não pode
 ///    vencer, na mesclagem, um mês que outro aparelho já fechou);
 /// 4. registra o id em `migracoes`.
@@ -114,7 +115,12 @@ Future<ResultadoMigracaoDados> migrarCustoMedio(
       pulados.add(m);
       continue;
     }
-    if (d.fechado) continue;
+    if (d.fechado) {
+      // um aberto anterior a um fechado (retroativo) não é o corte
+      corte = null;
+      marcar.clear();
+      continue;
+    }
     corte ??= m;
     if (d.metodo != metodoCustoMedio) marcar.add(d);
   }

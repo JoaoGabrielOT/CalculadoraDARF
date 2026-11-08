@@ -1,6 +1,7 @@
 import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/apuracao_medio.dart';
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
+import 'package:calculadoradarf/nucleo/modelos/lote.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
 import 'package:calculadoradarf/nucleo/modelos/meta.dart';
 import 'package:calculadoradarf/nucleo/planilha/mesclagem.dart';
@@ -199,15 +200,76 @@ void main() {
       final r = mesclarMes(local, semMarcador('2026-11', fechado: true))!;
       expect(campos(r), esperado);
       expect(r.fechado, isTrue);
-      // ida pela planilha: a linha regravada pela 1.12 não tem a coluna 14
+      // ida pela planilha: a 1.12 grava só as 13 primeiras colunas e não
+      // limpa a 14ª; sem mudar o mês (mesmo mod) o marcador continua valendo
       final linha = montarLinhas([r], Config())['Resumo']!.single;
+      expect(
+        reconstruir({
+          'Resumo': [linha],
+        }).meses['2026-11']!.metodo,
+        metodoCustoMedio,
+      );
+      // a 1.12 regravou o mês (mod novo) e manteve a 14ª célula antiga: o
+      // marcador, de outro mod, é ignorado
       final lido = reconstruir({
-        'Resumo': [linha.sublist(0, 13)],
+        'Resumo': [
+          [...linha.sublist(0, 12), 30.0, linha[13]],
+        ],
       }).meses['2026-11']!;
       expect(lido.metodo, isNull);
       final denovo = mesclarMes(r, lido)!;
       expect(campos(denovo), esperado);
       expect(usaCustoMedio(denovo, mesDeCorte([denovo])), isTrue);
+    });
+
+    test('mês fechado pela 1.12 com a 14ª célula antiga fica no método '
+        'antigo e o Resumo não muda', () {
+      Mes novembro({required bool marcadoAberto}) => Mes(
+        mes: '2026-11',
+        mod: marcadoAberto ? 10 : 40,
+        fechado: !marcadoAberto,
+        metodo: marcadoAberto ? metodoCustoMedio : null,
+        posicaoInicial: marcadoAberto
+            ? {'PETR4': PosicaoFiscal(qtd: 100, custo: 2550.0)}
+            : null,
+        prejuizoAnterior: marcadoAberto ? PrejuizoAcumulado() : null,
+        lotes: [
+          Lote(
+            id: 'L1',
+            origem: 'L0',
+            ticker: 'PETR4',
+            tipo: 'Ação',
+            dataCompra: '2026-10-05',
+            qtd: 100,
+            preco: 20.0,
+            vendas: [
+              Venda(id: 'V1', data: '2026-11-10', qtd: 100, preco: 30.0),
+            ],
+          ),
+        ],
+      );
+      // 2.4: mês aberto, marcado, gravado com o marcador na 14ª coluna
+      final local = novembro(marcadoAberto: true);
+      final antiga = montarLinhas([local], Config())['Resumo']!.single;
+      // 1.12: fechou o mês pelo método antigo (mod novo) e regravou só as 13
+      // primeiras colunas; a 14ª ficou como estava
+      final abas = montarLinhas([novembro(marcadoAberto: false)], Config());
+      final da112 = abas['Resumo']!.single;
+      expect(da112[4], isNot(antiga[4])); // os dois métodos diferem aqui
+      abas['Resumo'] = [
+        [...da112.sublist(0, 13), antiga[13]],
+      ];
+      final lido = reconstruir(abas).meses['2026-11']!;
+      expect(lido.metodo, isNull);
+      expect(lido.posicaoInicial, isNull);
+      final r = mesclarMes(local, lido)!;
+      expect(r.fechado, isTrue);
+      expect(campos(r), isEmpty);
+      expect(usaCustoMedio(r, mesDeCorte([r])), isFalse);
+      // a DARF mostrada e regravada é a da 1.12 (a paga)
+      final regravada = montarLinhas([r], Config())['Resumo']!.single;
+      expect(regravada.sublist(0, 12), da112.sublist(0, 12));
+      expect(regravada[13], '');
     });
 
     test('dois marcadores: vence o do mod maior', () {
@@ -234,7 +296,8 @@ void main() {
         semMarcador('2026-11', mod: 30),
       ], Config())['Resumo']!.single;
       linha[13] =
-          '{"mes":"2026-11","metodo":"custo_medio","posicao_inicial":"x"}';
+          '{"mes":"2026-11","mod":30.0,"metodo":"custo_medio",'
+          '"posicao_inicial":"x"}';
       final remoto = reconstruir({
         'Resumo': [linha],
       }).meses['2026-11']!;
