@@ -71,7 +71,7 @@ jobs:
 
       - name: Testes
         working-directory: app
-        run: flutter test --exclude-tags golden
+        run: flutter test --exclude-tags golden,vivo
 
   android:
     needs: versao
@@ -321,6 +321,8 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4  # lê as notas em docs/release
+
       - uses: actions/download-artifact@v4
         with:
           name: android
@@ -331,16 +333,99 @@ jobs:
           name: windows
           path: saida
 
-      - name: Publicar a release (pré-release até o dono aprovar)
+      - name: Publicar a release estável
         uses: softprops/action-gh-release@v2
         with:
           name: Calculadora DARF ${{ needs.versao.outputs.versao }}
           files: |
             saida/CalculadoraDARF.exe
             saida/CalculadoraDARF.apk
-          prerelease: true     # o atualizador Python e o Flutter usam /releases/latest, que ignora pré-release
-          make_latest: "false" # após a aprovação: gh release edit <tag> --prerelease=false --latest, e trocar estas duas linhas
-          body: |
-            Pré-release de teste da versão Flutter. Ainda não é a versão estável: a 1.12.x continua sendo a última.
-          generate_release_notes: true
+          prerelease: false    # /releases/latest (atualizadores Python e Flutter) só enxerga release estável
+          make_latest: "true"
+          body_path: docs/release/${{ needs.versao.outputs.versao }}.md
           fail_on_unmatched_files: true
+
+  conferir-atualizador:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [versao, publicar]
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    env:
+      VERSAO: ${{ needs.versao.outputs.versao }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: saida
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: saida
+
+      - name: Conferir a última release e os assets
+        run: |
+          set -u
+          falha() { echo "::error title=Atualizadores::$1"; exit 1; }
+          URL="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest"
+          ok=0
+          for i in $(seq 1 10); do
+            if curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$URL" -o latest.json               && [ "$(jq -r .tag_name latest.json)" = "v$VERSAO" -o "$(jq -r .tag_name latest.json)" = "$VERSAO" ]               && [ "$(jq -r .prerelease latest.json)" = "false" ]               && [ "$(jq -r .draft latest.json)" = "false" ]; then
+              ok=1; break
+            fi
+            echo "tentativa $i: /releases/latest ainda não aponta para $VERSAO"
+            sleep 30
+          done
+          [ "$ok" = 1 ] || falha "/releases/latest não devolveu a tag $VERSAO estável (prerelease=false, draft=false)"
+          resumo=""
+          for nome in CalculadoraDARF.exe CalculadoraDARF.apk; do
+            tam=$(stat -c %s "saida/$nome")
+            sha=$(sha256sum "saida/$nome" | cut -d' ' -f1)
+            tam_api=$(jq -r --arg n "$nome" '.assets[] | select(.name == $n) | .size' latest.json)
+            dig_api=$(jq -r --arg n "$nome" '.assets[] | select(.name == $n) | .digest' latest.json)
+            [ -n "$tam_api" ] || falha "asset $nome ausente na release"
+            [ "$tam_api" = "$tam" ] || falha "$nome: size da release ($tam_api) difere do artefato ($tam)"
+            [ "$dig_api" = "sha256:$sha" ] || falha "$nome: digest da release ($dig_api) difere do artefato (sha256:$sha)"
+            resumo="$resumo $nome=$tam bytes sha256:$sha;"
+          done
+          echo "ASSETS_RESUMO=$resumo" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Atualizador Python 1.12 detecta a versão
+        run: |
+          set -e
+          pip install requests
+          for nome in CalculadoraDARF.exe CalculadoraDARF.apk; do
+            python -c "
+          import sys, atualizador
+          atualizador.VERSAO = '1.12.1'
+          info = atualizador.verificar(sys.argv[1])
+          if not info or info['versao'] != sys.argv[2]:
+              print('::error title=Atualizadores::atualizador Python 1.12 não detectou ' + sys.argv[2] + ' para ' + sys.argv[1] + ': ' + repr(info))
+              sys.exit(1)
+          print(sys.argv[1], info['versao'])
+          " "$nome" "$VERSAO"
+          done
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+
+      - name: Atualizador Flutter detecta a versão
+        working-directory: app
+        run: |
+          flutter pub get
+          if ! flutter test --tags vivo test/integracoes/atualizador/atualizador_vivo_test.dart --dart-define=VERSAO_ESPERADA="$VERSAO"; then
+            echo "::error title=Atualizadores::atualizador Flutter não detectou $VERSAO"
+            exit 1
+          fi
+          echo "::notice title=Atualizadores::versão $VERSAO detectada pelos atualizadores Python 1.12 e Flutter;$ASSETS_RESUMO"
