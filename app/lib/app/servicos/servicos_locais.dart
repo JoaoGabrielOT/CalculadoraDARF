@@ -175,7 +175,12 @@ class ServicosLocais implements ServicosApp {
       }
       if (r.pulados.isNotEmpty) {
         _emitir(
-          EventoMigracao(tituloMesesIlegiveis, textoMesesIlegiveis(r.pulados)),
+          EventoMigracao(
+            tituloMesesIlegiveis,
+            r.aplicada
+                ? textoMesesIlegiveis(r.pulados)
+                : textoMigracaoAdiada(r.pulados),
+          ),
         );
       }
       // a coluna 14 do Resumo sobe na próxima sincronização

@@ -2,6 +2,8 @@
 // sobre HTTP falso: a migração espera a sincronização (limitada) e nunca
 // carimba o marcador, para não reabrir um mês fechado em outro aparelho.
 
+import 'dart:io';
+
 import 'package:calculadoradarf/app/servicos/servicos_locais.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
@@ -20,10 +22,24 @@ late Repositorio repo;
 /// com o token, primeiro passo da rodada).
 Map<String, List<Linha>> remoto = {};
 Duration atrasoAbout = Duration.zero;
+bool offline = false;
+bool aboutFalha = false;
 late ClienteFalso cliente;
 
 RespostaFalsa _responder(PedidoGravado p) {
+  if (offline) {
+    return RespostaFalsa(0, erro: const SocketException('sem rede'));
+  }
   final caminho = p.url.path;
+  if (caminho.endsWith('/about') && aboutFalha) {
+    return RespostaFalsa(
+      500,
+      json: {
+        'error': {'code': 500, 'message': 'falhou'},
+      },
+      atraso: atrasoAbout,
+    );
+  }
   if (caminho.endsWith('/about')) {
     return RespostaFalsa(
       200,
@@ -122,6 +138,8 @@ void main() {
     repo = Repositorio(disco);
     remoto = {};
     atrasoAbout = Duration.zero;
+    offline = false;
+    aboutFalha = false;
     cliente = ClienteFalso(_responder);
     gravarToken(
       disco,
@@ -249,4 +267,129 @@ void main() {
     expect(repo.lerConfig().migracoes, [idMigracaoCustoMedio]);
     await s2.encerrar();
   });
+
+  group('corte do aparelho que migrou sem rede', () {
+    // local: março aberto (2.0, mod 100). Outro aparelho, ainda na versão
+    // antiga: março fechado sem marcador (mod 200) e abril aberto, sem
+    // marcador, com a cópia levada.
+    late Mes marFechado;
+    late Mes abril;
+
+    setUp(() {
+      repo.salvar(
+        Mes(
+          mes: '2026-03',
+          lotes: [_compra('L1', data: '2026-03-02')],
+          mod: 100,
+        ),
+        carimbar: false,
+      );
+      marFechado = Mes(
+        mes: '2026-03',
+        fechado: true,
+        mod: 200,
+        lotes: [_compra('L1', data: '2026-03-02')],
+      );
+      marFechado.resumo = apurar(marFechado).resumo;
+      abril = Mes(
+        mes: '2026-04',
+        mod: 210,
+        lotes: [_compra('L1~2026-04', origem: 'L1', data: '2026-03-02')],
+      );
+      remoto = montarLinhas([marFechado, abril], Config());
+    });
+
+    List<Object?> resumoMarco(Iterable<Mes> meses) => montarLinhas(
+      meses.toList(),
+      Config(),
+    )['Resumo']!.firstWhere((l) => l[0] == '03/2026').sublist(0, 13);
+
+    bool marcadorNaPlanilha() => cliente.pedidos.any(
+      (p) =>
+          p.url.path.endsWith(':batchUpdate') &&
+          p.texto.contains('custo_medio'),
+    );
+
+    test('migra sem rede; a sincronização fecha março como veio e o corte '
+        'passa para abril', () async {
+      offline = true;
+      final s = _servicos(<String>[]);
+      await s.iniciar();
+      // sem rede: março marcado, sem carimbo
+      expect(repo.carregar('2026-03').metodo, metodoCustoMedio);
+      expect(repo.carregar('2026-03').mod, 100.0);
+      expect(repo.lerConfig().migracoes, [idMigracaoCustoMedio]);
+
+      offline = false;
+      await s.tickSync();
+      // março fechado no outro aparelho continua fechado, Resumo idêntico
+      final mar = repo.carregar('2026-03');
+      expect(mar.fechado, isTrue);
+      expect(mar.metodo, isNull);
+      expect(mar.mod, 200.0);
+      expect(
+        resumoMarco(repo.carregarMeses().values),
+        resumoMarco([marFechado]),
+      );
+      // o corte foi reaplicado em abril, sem carimbo, e subiu na mesma rodada
+      final abr = repo.carregar('2026-04');
+      expect(abr.metodo, metodoCustoMedio);
+      expect(abr.posicaoInicial!['PETR4']!.qtd, 100);
+      expect(abr.mod, 210.0);
+      expect(marcadorNaPlanilha(), isTrue);
+      await s.encerrar();
+    });
+
+    test('sincronização além do limite: a rodada em voo termina, não começa '
+        'outra, e depois do tick abril está marcado', () async {
+      atrasoAbout = const Duration(milliseconds: 600);
+      final s = _servicos(
+        <String>[],
+        espera: const Duration(milliseconds: 150),
+      );
+      await s.iniciar();
+      expect(repo.carregar('2026-03').metodo, metodoCustoMedio);
+      expect(repo.lerConfig().migracoes, [idMigracaoCustoMedio]);
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      // uma só conexão: o limite não deixou outra rodada começar
+      expect(
+        cliente.pedidos.where((p) => p.url.path.endsWith('/about')),
+        hasLength(1),
+      );
+      await s.tickSync();
+      final mar = repo.carregar('2026-03');
+      expect(mar.fechado, isTrue);
+      expect(mar.metodo, isNull);
+      expect(repo.carregar('2026-04').metodo, metodoCustoMedio);
+      expect(repo.carregar('2026-04').mod, 210.0);
+      await s.encerrar();
+    });
+  });
+
+  test(
+    'rodada em voo que falha depois do limite: nenhuma outra começa',
+    () async {
+      repo.salvar(
+        Mes(mes: '2026-04', lotes: [_compra('L1')], mod: 100),
+        carimbar: false,
+      );
+      atrasoAbout = const Duration(milliseconds: 500);
+      aboutFalha = true;
+      final s = _servicos(
+        <String>[],
+        espera: const Duration(milliseconds: 150),
+      );
+      final tick = s.tickSync();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await s.iniciar();
+      expect(repo.carregar('2026-04').metodo, metodoCustoMedio);
+      await tick;
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      expect(
+        cliente.pedidos.where((p) => p.url.path.endsWith('/about')),
+        hasLength(1),
+      );
+      await s.encerrar();
+    },
+  );
 }

@@ -194,7 +194,7 @@ void main() {
       });
 
       test(
-        'mês ilegível: os outros são marcados e o aviso lista o pulado',
+        'mês ilegível antes do corte: nada marcado e o aviso lista o pulado',
         () async {
           disco.gravar(
             '2026-09.json',
@@ -206,13 +206,50 @@ void main() {
           s.eventos.listen(ev.add);
           await s.iniciar();
           await Future<void>.delayed(Duration.zero);
-          expect(repo.carregar('2026-10').metodo, metodoCustoMedio);
+          expect(repo.carregar('2026-10').metodo, isNull);
+          expect(repo.lerConfig().migracoes, isEmpty);
           final aviso = ev.whereType<EventoMigracao>().single;
           expect(aviso.titulo, tituloMesesIlegiveis);
-          expect(aviso.texto, textoMesesIlegiveis(['2026-09']));
+          expect(aviso.texto, textoMigracaoAdiada(['2026-09']));
           await s.encerrar();
         },
       );
+
+      test(
+        'mês ilegível depois do corte: aviso de que ficou de fora',
+        () async {
+          gravarMes('2026-10', [compra('L1')]);
+          disco.gravar(
+            '2026-11.json',
+            '{"mes": "2026-11", "lotes": [{"qtd": 1.5}]}',
+          );
+          final s = criar(() => 'backup/pre');
+          final ev = <EventoServico>[];
+          s.eventos.listen(ev.add);
+          await s.iniciar();
+          await Future<void>.delayed(Duration.zero);
+          expect(repo.carregar('2026-10').metodo, metodoCustoMedio);
+          final aviso = ev.whereType<EventoMigracao>().single;
+          expect(aviso.texto, textoMesesIlegiveis(['2026-11']));
+          await s.encerrar();
+        },
+      );
+
+      test('carga com a migração registrada e nenhum mês marcado reaplica o '
+          'corte, sem carimbo', () async {
+        gravarMes('2026-09', [compra('L0', data: '2026-09-01')], fechado: true);
+        gravarMes('2026-10', [compra('L1', origem: 'L0', data: '2026-09-01')]);
+        final cfg = repo.lerConfig()..migracoes = [idMigracaoCustoMedio];
+        repo.gravarConfig(cfg);
+        final mod = repo.carregar('2026-10').mod;
+        ambiente = Ambiente.fixo(agora: 1790000000.5);
+        final v = await servicos.carregarMes('2026-10');
+        expect(v.dados.metodo, metodoCustoMedio);
+        expect(v.apuracao.metodo, metodoCustoMedio);
+        expect(repo.carregar('2026-10').metodo, metodoCustoMedio);
+        expect(repo.carregar('2026-10').mod, mod);
+        expect(repo.carregar('2026-09').metodo, isNull);
+      });
 
       test(
         'instalação nova: sem backup, sem mês criado, sem registro',

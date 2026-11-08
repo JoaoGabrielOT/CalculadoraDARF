@@ -201,29 +201,97 @@ void main() {
     expect(repo.carregar('2026-05').metodo, metodoCustoMedio);
   });
 
-  test('mês ilegível é pulado e os legíveis são marcados', () async {
-    const ilegivel = '{"mes": "2026-02", "lotes": [{"qtd": 1.5}]}';
-    disco.gravar('2026-02.json', ilegivel);
+  test('mês ilegível depois do corte é pulado e os outros marcados', () async {
+    const ilegivel = '{"mes": "2026-06", "lotes": [{"qtd": 1.5}]}';
+    disco.gravar('2026-06.json', ilegivel);
     final r = await _migrar();
     expect(r.aplicada, isTrue);
     expect(r.corte, '2026-04');
-    expect(r.pulados, ['2026-02']);
-    expect(disco.ler('2026-02.json'), ilegivel);
+    expect(r.pulados, ['2026-06']);
+    expect(disco.ler('2026-06.json'), ilegivel);
     expect(repo.carregar('2026-04').metodo, metodoCustoMedio);
+    expect(repo.carregar('2026-05').metodo, metodoCustoMedio);
     expect(repo.lerConfig().migracoes, [idMigracaoCustoMedio]);
     expect(
       textoMesesIlegiveis(r.pulados),
       'Estes meses não puderam ser lidos e ficaram fora da ativação do '
-      'cálculo por custo médio: 02/2026. Confira esses arquivos.',
+      'cálculo por custo médio: 06/2026. Confira esses arquivos.',
     );
   });
 
-  test('primeiro mês aberto ilegível: o corte é o próximo legível', () async {
+  test('mês ilegível antes do corte: nada marcado, não registra', () async {
+    disco.gravar('2026-02.json', '{"mes": "2026-02", "lotes": [{"qtd": 1.5}]}');
+    final antes = _arquivos();
+    final r = await _migrar();
+    expect(r.aplicada, isFalse);
+    expect(r.pulados, ['2026-02']);
+    expect(_arquivos(), antes);
+    expect(repo.lerConfig().migracoes, isEmpty);
+    expect(migracaoCustoMedioPendente(repo), isTrue);
+    expect(
+      textoMigracaoAdiada(r.pulados),
+      'O cálculo por custo médio não foi ativado porque estes meses não '
+      'puderam ser lidos: 02/2026. Confira esses arquivos; o app tenta de '
+      'novo na próxima abertura.',
+    );
+  });
+
+  test('primeiro mês aberto ilegível: espera a correção', () async {
     disco.gravar('2026-04.json', '{"mes": "2026-04", "lotes": [{"qtd": 1.5}]}');
     final r = await _migrar();
-    expect(r.corte, '2026-05');
+    expect(r.aplicada, isFalse);
     expect(r.pulados, ['2026-04']);
-    expect(repo.carregar('2026-05').metodo, metodoCustoMedio);
+    expect(repo.carregar('2026-05').metodo, isNull);
+    expect(repo.lerConfig().migracoes, isEmpty);
+  });
+
+  group('corte reaplicado', () {
+    test('migração registrada e nenhum mês marcado: marca o primeiro aberto '
+        'sem carimbo', () async {
+      await _migrar();
+      // um aparelho antigo fechou abril sem marcador; maio veio sem marcador
+      final abr = repo.carregar('2026-04')
+        ..fechado = true
+        ..metodo = null
+        ..posicaoInicial = null
+        ..prejuizoAnterior = null;
+      repo.salvar(abr, carimbar: false);
+      final mai = repo.carregar('2026-05')
+        ..metodo = null
+        ..posicaoInicial = null
+        ..prejuizoAnterior = null;
+      repo.salvar(mai, carimbar: false);
+      final antesAbr = disco.ler('2026-04.json');
+      final modMai = repo.carregar('2026-05').mod;
+      ambiente = Ambiente.fixo(hoje: '2026-05-06', agora: 1790000000.5);
+      expect(reaplicarCorteCustoMedio(repo), '2026-05');
+      expect(repo.carregar('2026-05').metodo, metodoCustoMedio);
+      expect(repo.carregar('2026-05').mod, modMai);
+      expect(disco.ler('2026-04.json'), antesAbr);
+      // já há marcador: nada a fazer
+      expect(reaplicarCorteCustoMedio(repo), isNull);
+    });
+
+    test('sem a migração registrada, nada muda', () {
+      expect(reaplicarCorteCustoMedio(repo), isNull);
+      expect(repo.carregar('2026-04').metodo, isNull);
+    });
+
+    test('mês ilegível (pode ser o marcado): nada muda', () async {
+      await _migrar();
+      final mai = repo.carregar('2026-05');
+      disco.gravar(
+        '2026-04.json',
+        '{"mes": "2026-04", "lotes": [{"qtd": 1.5}]}',
+      );
+      mai
+        ..metodo = null
+        ..posicaoInicial = null
+        ..prejuizoAnterior = null;
+      repo.salvar(mai, carimbar: false);
+      expect(reaplicarCorteCustoMedio(repo), isNull);
+      expect(repo.carregar('2026-05').metodo, isNull);
+    });
   });
 
   test('instalação nova: nada criado, nenhum backup, não registra', () async {

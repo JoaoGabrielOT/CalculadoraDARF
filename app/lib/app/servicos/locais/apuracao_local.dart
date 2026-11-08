@@ -68,7 +68,9 @@ class ApuracaoLocal {
   /// Mês aberto a partir do corte do custo médio ainda sem o marcador (§5.3):
   /// marca ([marcarAoCarregar]) e grava, se [gravar] e o mês já tem arquivo
   /// (sem arquivo, só em memória; numa mutação, a gravação dela leva o
-  /// marcador). Um mês anterior ilegível não decide o corte.
+  /// marcador). Um mês anterior ilegível não decide o corte. Sem nenhum mês
+  /// marcado, com a migração já registrada, o corte é reaplicado
+  /// ([reaplicarCorteCustoMedio]).
   Mes _marcado(Mes d, {bool gravar = true}) {
     if (d.fechado || d.metodo != null) return d;
     String? corte;
@@ -81,6 +83,14 @@ class ApuracaoLocal {
         }
       } catch (e) {
         if (!_erroDeLeitura(e)) rethrow;
+      }
+    }
+    if (corte == null) {
+      final reaplicado = reaplicarCorteCustoMedio(repo);
+      if (reaplicado != null) {
+        _gravou();
+        if (reaplicado == d.mes) return repo.carregar(d.mes);
+        if (compararTexto(reaplicado, d.mes) < 0) corte = reaplicado;
       }
     }
     if (!usaCustoMedio(d, corte)) return d;

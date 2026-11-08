@@ -3,6 +3,7 @@
 // `config.json` (`Config.migracoes`, por aparelho).
 
 import 'apuracao_medio.dart';
+import 'compat/ordenacao.dart';
 import 'datas.dart';
 import 'erros.dart';
 import 'modelos/mes.dart';
@@ -25,6 +26,12 @@ String textoMesesIlegiveis(List<String> meses) =>
     'Estes meses não puderam ser lidos e ficaram fora da ativação do cálculo '
     'por custo médio: ${meses.map(fmtMes).join(', ')}. Confira esses '
     'arquivos.';
+
+/// Meses ilegíveis anteriores ao corte: a migração espera a correção.
+String textoMigracaoAdiada(List<String> meses) =>
+    'O cálculo por custo médio não foi ativado porque estes meses não '
+    'puderam ser lidos: ${meses.map(fmtMes).join(', ')}. Confira esses '
+    'arquivos; o app tenta de novo na próxima abertura.';
 
 class ResultadoMigracaoDados {
   const ResultadoMigracaoDados({
@@ -72,8 +79,10 @@ bool _erroDeLeitura(Object e) =>
 ///    vencer, na mesclagem, um mês que outro aparelho já fechou);
 /// 4. registra o id em `migracoes`.
 ///
-/// Meses ilegíveis são pulados (voltam em `pulados`). Sem mês aberto com
-/// arquivo não cria nenhum e não registra: tenta de novo na próxima abertura.
+/// Meses ilegíveis voltam em `pulados`. Depois do corte eles só ficam como
+/// estão; antes dele (poderiam ser o mês aberto do corte) nada é marcado nem
+/// registrado. Sem mês aberto com arquivo também não: tenta de novo na
+/// próxima abertura.
 /// Nunca reescreve lotes, vendas, `resumo` nem meses fechados.
 Future<ResultadoMigracaoDados> migrarCustoMedio(
   Repositorio repo, {
@@ -109,7 +118,8 @@ Future<ResultadoMigracaoDados> migrarCustoMedio(
     corte ??= m;
     if (d.metodo != metodoCustoMedio) marcar.add(d);
   }
-  if (corte == null) {
+  final c = corte;
+  if (c == null || pulados.any((m) => compararTexto(m, c) < 0)) {
     return ResultadoMigracaoDados(pulados: pulados, sincronizou: sincronizou);
   }
 
@@ -126,4 +136,29 @@ Future<ResultadoMigracaoDados> migrarCustoMedio(
     pulados: pulados,
     sincronizou: sincronizou,
   );
+}
+
+/// Corte reaplicado (§11): com a migração registrada neste aparelho e nenhum
+/// mês marcado (o mês do corte voltou fechado, sem marcador, de um aparelho
+/// antigo pela sincronização), marca o primeiro mês aberto, sem carimbo, e
+/// devolve qual. Um mês ilegível pode ser o marcado: nesse caso nada muda.
+String? reaplicarCorteCustoMedio(Repositorio repo) {
+  Mes? primeiro;
+  try {
+    if (!repo.lerConfig().migracoes.contains(idMigracaoCustoMedio)) {
+      return null;
+    }
+    for (final m in repo.listarMeses()) {
+      final d = repo.carregar(m);
+      if (d.metodo == metodoCustoMedio) return null;
+      if (!d.fechado) primeiro ??= d;
+    }
+  } catch (e) {
+    if (!_erroDeLeitura(e)) rethrow;
+    return null;
+  }
+  if (primeiro == null) return null;
+  marcarCustoMedio(primeiro);
+  repo.salvar(primeiro, carimbar: false);
+  return primeiro.mes;
 }

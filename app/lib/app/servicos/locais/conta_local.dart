@@ -44,7 +44,7 @@ class ContaLocal {
       conta: _conta,
       dados: DadosSincronizacaoLocal(_repo),
       aoMudarStatus: (_) => _emitirConta(),
-      aoMudarDados: () => _emitir(const EventoDadosMudaram()),
+      aoMudarDados: _aoMudarDados,
       aoAvisar: (texto) => _emitir(avisoDe(texto)),
       atrasoAgendamento: atrasoAgendamento,
     );
@@ -52,6 +52,7 @@ class ContaLocal {
 
   final Repositorio _repo;
   final ContaGoogle _conta;
+  bool _encerrado = false;
   final AbrirUrl _abrirUrl;
   final void Function(EventoServico) _emitir;
   late final Sincronizador _sync;
@@ -140,7 +141,25 @@ class ContaLocal {
   }
 
   /// Fim do isolate: o timer de `agendar` não pode sincronizar depois.
-  void encerrar() => _sync.encerrar();
+  void encerrar() {
+    _encerrado = true;
+    _sync.encerrar();
+  }
+
+  /// A mesclagem mudou os dados locais. Se ela tirou o único marcador de
+  /// custo médio (o mês do corte voltou fechado por um aparelho antigo), o
+  /// corte é reaplicado e a mesma rodada sobe o marcador (o pedido feito
+  /// durante a rodada a refaz).
+  void _aoMudarDados() {
+    try {
+      if (reaplicarCorteCustoMedio(_repo) != null) {
+        unawaited(_sync.sincronizar());
+      }
+    } catch (_) {
+      // config ou disco: a próxima carga do mês tenta de novo
+    }
+    _emitir(const EventoDadosMudaram());
+  }
 
   Future<void> cancelarLogin() async {
     await _sync.cancelarLogin();
@@ -173,16 +192,20 @@ class ContaLocal {
   }) async {
     if (_conta.email == null && !_conta.temToken()) return false;
     final antes = _sync.concluidas;
+    var expirou = false;
     bool concluiu() => _sync.concluidas != antes;
+    bool parar() => expirou || _encerrado;
     Future<void> esperarRodada() async {
-      while (_sync.rodando || _sync.ocupado) {
+      while (!parar() && (_sync.rodando || _sync.ocupado)) {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       }
     }
 
+    // depois do limite (ou do encerramento) nenhuma rodada nova começa; a que
+    // já está em voo termina sozinha
     Future<void> rodada() async {
       await esperarRodada();
-      if (concluiu()) return;
+      if (parar() || concluiu()) return;
       if (_conta.email == null) {
         await _sync.conectarComToken();
       } else {
@@ -194,7 +217,7 @@ class ContaLocal {
     try {
       await rodada().timeout(limite);
     } on TimeoutException {
-      // segue com os dados locais; a rodada termina sozinha
+      expirou = true; // segue com os dados locais
     } finally {
       _reconciliar();
     }
