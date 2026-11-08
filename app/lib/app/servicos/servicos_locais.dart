@@ -28,6 +28,7 @@ class ServicosLocais implements ServicosApp {
     NoticiasLocal Function(void Function(EventoServico))? noticias,
     AtualizadorLocal Function(void Function(EventoServico))? atualizador,
     this._fazerBackup,
+    this._esperaSyncMigracao = const Duration(seconds: 10),
   }) {
     // Quem não usa notícias nem atualização (testes de apuração) não monta.
     _noticiasLocal = noticias?.call(_emitir);
@@ -59,6 +60,9 @@ class ServicosLocais implements ServicosApp {
   /// Backup da pasta de dados (`plataforma/backup.dart`). Sem ele (testes) a
   /// migração dos dados não roda.
   final String Function()? _fazerBackup;
+
+  /// Limite da sincronização antes da migração (a partida espera por ela).
+  final Duration _esperaSyncMigracao;
   final StreamController<EventoServico> _eventos =
       StreamController<EventoServico>.broadcast();
   late final ContaLocal _conta;
@@ -115,6 +119,22 @@ class ServicosLocais implements ServicosApp {
       erroConfig = e.mensagem;
     }
 
+    // Migração dos dados pendente (§11): o backup vem antes de qualquer
+    // gravação desta partida. Só com a config legível (o id aplicado é
+    // gravado nela) e com meses gravados.
+    final backup = _fazerBackup;
+    String Function()? backupFeito;
+    if (backup != null && cfg != null && migracaoCustoMedioPendente(_repo)) {
+      String? pasta;
+      Object? erro;
+      try {
+        pasta = backup();
+      } catch (e) {
+        erro = e;
+      }
+      backupFeito = () => erro != null ? throw erro : pasta!;
+    }
+
     // Com a config ilegível os tipos dos meses ainda são corrigidos, mas
     // `pendente` não é marcado (nada é gravado na config).
     // Corrige o tipo (Ação/BDR) gravado; um mês ilegível fica como está e a
@@ -143,16 +163,21 @@ class ServicosLocais implements ServicosApp {
       _conta.agendar();
     }
 
-    // Migração dos dados (§11), depois da correção dos tipos e só com a
-    // config legível (o id aplicado é gravado nela).
-    final backup = _fazerBackup;
-    if (backup != null && cfg != null) {
+    if (backupFeito != null) {
       final r = await migrarCustoMedio(
         _repo,
-        fazerBackup: backup,
-        sincronizar: _conta.sincronizarAgora,
+        fazerBackup: backupFeito,
+        sincronizar: () =>
+            _conta.sincronizarParaMigracao(limite: _esperaSyncMigracao),
       );
-      if (r.erro != null) _emitir(const EventoMigracao(textoBackupFalhou));
+      if (r.erro != null) {
+        _emitir(const EventoMigracao(tituloBackupFalhou, textoBackupFalhou));
+      }
+      if (r.pulados.isNotEmpty) {
+        _emitir(
+          EventoMigracao(tituloMesesIlegiveis, textoMesesIlegiveis(r.pulados)),
+        );
+      }
       // a coluna 14 do Resumo sobe na próxima sincronização
       if (r.aplicada) _conta.agendar();
     }

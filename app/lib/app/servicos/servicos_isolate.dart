@@ -93,6 +93,7 @@ class TimersServicos {
   }
 
   void iniciar() {
+    if (_parado) return;
     unawaited(_seguro(sync));
     _timers.add(Timer.periodic(intervaloSync, (_) => unawaited(_seguro(sync))));
     _agendar(primeiraMetas, intervaloMetas, metas);
@@ -123,6 +124,21 @@ class _ServicosReais extends ServicosLocais {
 
   final http.Client cliente;
   TimersServicos? timers;
+  bool _timersIniciados = false;
+
+  /// Os timers (sincronização no primeiro tick) só começam depois da
+  /// partida: o backup da migração vem antes de qualquer sincronização.
+  @override
+  Future<EstadoInicial> iniciar() async {
+    try {
+      return await super.iniciar();
+    } finally {
+      if (!_timersIniciados) {
+        _timersIniciados = true;
+        timers?.iniciar();
+      }
+    }
+  }
 
   @override
   Future<void> encerrar() async {
@@ -182,7 +198,7 @@ ServicosApp criarServicosLocais(
       metas: s.verificacaoAutomatica,
       noticias: s.tickNoticias,
       intervaloSync: intervaloSyncPadrao(windows: p.windows),
-    )..iniciar();
+    );
   }
   return s;
 }

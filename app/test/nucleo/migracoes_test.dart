@@ -44,7 +44,7 @@ Map<String, List<Object?>> _resumo() => {
 
 Future<ResultadoMigracaoDados> _migrar({
   String Function()? backup,
-  Future<void> Function()? sincronizar,
+  Future<bool> Function()? sincronizar,
 }) => migrarCustoMedio(
   repo,
   fazerBackup:
@@ -57,6 +57,7 @@ Future<ResultadoMigracaoDados> _migrar({
       sincronizar ??
       () async {
         ordem.add('sincronizar');
+        return true;
       },
 );
 
@@ -98,12 +99,17 @@ void main() {
     final antes = _arquivos();
     final resumoAntes = _resumo();
     final lotesAbrAntes = repo.carregar('2026-04').toJson()['lotes'];
+    final modAbr = repo.carregar('2026-04').mod;
+    final modMai = repo.carregar('2026-05').mod;
+    ambiente = Ambiente.fixo(hoje: '2026-05-06', agora: 1780000000.5);
 
     final r = await _migrar();
 
     expect(r.aplicada, isTrue);
     expect(r.corte, '2026-04');
     expect(r.erro, isNull);
+    expect(r.sincronizou, isTrue);
+    expect(r.pulados, isEmpty);
     // backup antes de qualquer gravação, sincronização antes de marcar
     expect(ordem.first, 'backup');
     expect(ordem[1], 'sincronizar');
@@ -128,6 +134,10 @@ void main() {
     expect(abr.posicaoInicial!['TAEE11']!.qtd, 200);
     expect(abr.prejuizoAnterior!.toJson(), {'comum': 0.0, 'day_trade': 0.0});
     expect(abr.toJson()['lotes'], lotesAbrAntes);
+    // marcador sem carimbo: não vence pelo mod um mês fechado em outro
+    // aparelho
+    expect(abr.mod, modAbr);
+    expect(repo.carregar('2026-05').mod, modMai);
     final a = apurar(abr);
     expect(a.metodo, metodoCustoMedio);
     expect(a.ops.single.resultadoFiscal, closeTo(4983.50, 1e-9));
@@ -168,9 +178,11 @@ void main() {
 
   test('sem rede usa os dados locais', () async {
     final r = await _migrar(
-      sincronizar: () async => throw Exception('sem conexão'),
+      // como em produção: a rodada falha (offline) sem lançar
+      sincronizar: () async => false,
     );
     expect(r.aplicada, isTrue);
+    expect(r.sincronizou, isFalse);
     expect(r.corte, '2026-04');
     expect(repo.carregar('2026-04').metodo, metodoCustoMedio);
     expect(repo.lerConfig().migracoes, [idMigracaoCustoMedio]);
@@ -189,17 +201,57 @@ void main() {
     expect(repo.carregar('2026-05').metodo, metodoCustoMedio);
   });
 
-  test('mês ilegível: não migra e tenta de novo na próxima abertura', () async {
-    disco.gravar('2026-02.json', '{"mes": "2026-02", "lotes": [{"qtd": 1.5}]}');
-    final antes = _arquivos();
-    ordem.clear();
+  test('mês ilegível é pulado e os legíveis são marcados', () async {
+    const ilegivel = '{"mes": "2026-02", "lotes": [{"qtd": 1.5}]}';
+    disco.gravar('2026-02.json', ilegivel);
+    final r = await _migrar();
+    expect(r.aplicada, isTrue);
+    expect(r.corte, '2026-04');
+    expect(r.pulados, ['2026-02']);
+    expect(disco.ler('2026-02.json'), ilegivel);
+    expect(repo.carregar('2026-04').metodo, metodoCustoMedio);
+    expect(repo.lerConfig().migracoes, [idMigracaoCustoMedio]);
+    expect(
+      textoMesesIlegiveis(r.pulados),
+      'Estes meses não puderam ser lidos e ficaram fora da ativação do '
+      'cálculo por custo médio: 02/2026. Confira esses arquivos.',
+    );
+  });
+
+  test('primeiro mês aberto ilegível: o corte é o próximo legível', () async {
+    disco.gravar('2026-04.json', '{"mes": "2026-04", "lotes": [{"qtd": 1.5}]}');
+    final r = await _migrar();
+    expect(r.corte, '2026-05');
+    expect(r.pulados, ['2026-04']);
+    expect(repo.carregar('2026-05').metodo, metodoCustoMedio);
+  });
+
+  test('instalação nova: nada criado, nenhum backup, não registra', () async {
+    disco = _Registrado(ordem);
+    repo = Repositorio(disco);
     final r = await _migrar();
     expect(r.aplicada, isFalse);
-    expect(r.erro, isNull);
-    expect(ordem.where((x) => x.startsWith('gravar ')), isEmpty);
-    expect(_arquivos(), antes);
-    expect(repo.lerConfig().migracoes, isEmpty);
+    expect(ordem, isEmpty);
+    expect(disco.listar(), isEmpty);
+    expect(migracaoCustoMedioPendente(repo), isFalse);
   });
+
+  test(
+    'sem mês aberto com arquivo: não cria o mês de hoje nem registra',
+    () async {
+      disco = _Registrado(ordem);
+      repo = Repositorio(disco);
+      repo.salvar(Mes(mes: '2026-03', fechado: true));
+      ordem.clear();
+      final r = await _migrar();
+      expect(r.aplicada, isFalse);
+      expect(r.corte, isNull);
+      expect(repo.listarMeses(), ['2026-03']);
+      expect(ordem.where((x) => x.startsWith('gravar ')), isEmpty);
+      expect(repo.lerConfig().migracoes, isEmpty);
+      expect(migracaoCustoMedioPendente(repo), isTrue);
+    },
+  );
 
   test('migracoes preserva as outras chaves da config', () async {
     final cfg = repo.lerConfig()..extras['tema_visual'] = 'terminal';

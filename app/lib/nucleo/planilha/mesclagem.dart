@@ -24,13 +24,15 @@ T? escolher<T extends ComMod>(T? a, T? b) {
 /// regravada por uma 1.12, migração concorrente em dois aparelhos): o
 /// marcador fica, a menos que o vencedor seja um mês fechado sem marcador
 /// (fechado pelo método antigo) e o lado marcado ainda esteja aberto. Com os
-/// dois marcados, um lado sem posição inicial não vence o que tem.
+/// dois marcados, um lado sem posição inicial (ausente ou vazia) não vence o
+/// que tem.
 Mes _ladoDoMetodo(Mes vencedor, Mes local, Mes remoto) {
+  bool temPosicao(Mes m) => m.posicaoInicial?.isNotEmpty ?? false;
   final marcadoL = local.metodo == metodoCustoMedio;
   if (marcadoL == (remoto.metodo == metodoCustoMedio)) {
-    if (!marcadoL || vencedor.posicaoInicial != null) return vencedor;
+    if (!marcadoL || temPosicao(vencedor)) return vencedor;
     final outro = identical(vencedor, local) ? remoto : local;
-    return outro.posicaoInicial != null ? outro : vencedor;
+    return temPosicao(outro) ? outro : vencedor;
   }
   final marcado = marcadoL ? local : remoto;
   if (vencedor.fechado && !marcado.fechado) return vencedor;

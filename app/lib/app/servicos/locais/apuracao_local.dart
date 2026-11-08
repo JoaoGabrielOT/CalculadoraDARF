@@ -95,7 +95,9 @@ class ApuracaoLocal {
     }
     marcarAoCarregar(d, anterior);
     if (gravar && repo.existeMes(d.mes)) {
-      repo.salvar(d);
+      // sem carimbo: o marcador não pode vencer pelo `mod` um mês que outro
+      // aparelho fechou (a regra monotônica da mesclagem o leva)
+      repo.salvar(d, carimbar: false);
       _gravou();
     }
     return d;

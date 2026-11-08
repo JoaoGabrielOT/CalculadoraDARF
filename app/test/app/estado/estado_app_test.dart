@@ -106,7 +106,9 @@ void main() {
 
     test('backup da migração que falhou vira aviso', () async {
       final (e, s, _) = await _criar();
-      s.eventosFalsos.add(const EventoMigracao(textoBackupFalhou));
+      s.eventosFalsos.add(
+        const EventoMigracao(tituloBackupFalhou, textoBackupFalhou),
+      );
       await _soltar();
       expect(e.avisos.single.titulo, tituloBackupFalhou);
       expect(e.avisos.single.texto, textoBackupFalhou);

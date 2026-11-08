@@ -153,16 +153,79 @@ void main() {
           await Future<void>.delayed(Duration.zero);
           expect(disco.ler('2026-10.json'), antes);
           expect(repo.lerConfig().migracoes, isEmpty);
-          expect(
-            ev.whereType<EventoMigracao>().single.texto,
-            textoBackupFalhou,
-          );
+          final aviso = ev.whereType<EventoMigracao>().single;
+          expect(aviso.titulo, tituloBackupFalhou);
+          expect(aviso.texto, textoBackupFalhou);
           expect(
             textoBackupFalhou,
             'Não foi possível fazer o backup dos dados; o cálculo por custo '
             'médio não foi ativado. Feche outros programas que usem a pasta de '
             'dados e abra o app de novo.',
           );
+          await s.encerrar();
+        },
+      );
+
+      test(
+        'o backup vem antes da correção dos tipos (primeira gravação)',
+        () async {
+          gravarMes('2026-10', [compra('L1', ticker: 'AAPL34', tipo: 'Ação')]);
+          String? noBackup;
+          final s = criar(() {
+            noBackup = disco.ler('2026-10.json');
+            return 'backup/pre';
+          });
+          await s.iniciar();
+          expect(noBackup, contains('"Ação"'));
+          expect(repo.carregar('2026-10').lotes.single.tipo, 'BDR');
+          await s.encerrar();
+        },
+      );
+
+      test('mês marcado na partida mantém o mod (sem carimbo)', () async {
+        gravarMes('2026-10', [compra('L1')]);
+        final mod = repo.carregar('2026-10').mod;
+        ambiente = Ambiente.fixo(agora: 1790000000.5);
+        final s = criar(() => 'backup/pre');
+        await s.iniciar();
+        expect(repo.carregar('2026-10').metodo, metodoCustoMedio);
+        expect(repo.carregar('2026-10').mod, mod);
+        await s.encerrar();
+      });
+
+      test(
+        'mês ilegível: os outros são marcados e o aviso lista o pulado',
+        () async {
+          disco.gravar(
+            '2026-09.json',
+            '{"mes": "2026-09", "lotes": [{"qtd": 1.5}]}',
+          );
+          gravarMes('2026-10', [compra('L1')]);
+          final s = criar(() => 'backup/pre');
+          final ev = <EventoServico>[];
+          s.eventos.listen(ev.add);
+          await s.iniciar();
+          await Future<void>.delayed(Duration.zero);
+          expect(repo.carregar('2026-10').metodo, metodoCustoMedio);
+          final aviso = ev.whereType<EventoMigracao>().single;
+          expect(aviso.titulo, tituloMesesIlegiveis);
+          expect(aviso.texto, textoMesesIlegiveis(['2026-09']));
+          await s.encerrar();
+        },
+      );
+
+      test(
+        'instalação nova: sem backup, sem mês criado, sem registro',
+        () async {
+          var backups = 0;
+          final s = criar(() {
+            backups++;
+            return 'backup/pre';
+          });
+          await s.iniciar();
+          expect(backups, 0);
+          expect(repo.listarMeses(), isEmpty);
+          expect(repo.lerConfig().migracoes, isEmpty);
           await s.encerrar();
         },
       );
@@ -1208,6 +1271,8 @@ void main() {
 
     test('mês aberto posterior ao corte é marcado ao carregar', () async {
       gravarCorte(marcarOutubro: false);
+      final antesDeMarcar = disco.ler('2026-10.json')!;
+      ambiente = Ambiente.fixo(agora: 1790000000.5);
       final v = await servicos.carregarMes('2026-10');
       expect(v.dados.metodo, metodoCustoMedio);
       expect(v.apuracao.metodo, metodoCustoMedio);
@@ -1217,6 +1282,13 @@ void main() {
       expect(gravado.posicaoInicial!['PETR4']!.qtd, 100);
       expect(gravado.posicaoInicial!['PETR4']!.custo, closeTo(1000.30, 1e-9));
       expect(await agendamentos(), 1);
+      // marcar ao carregar não carimba: o mês fechado em outro aparelho
+      // continua vencendo a mesclagem pelo mod
+      expect(
+        gravado.mod,
+        Mes.fromJson(jsonPythonDecode(antesDeMarcar)! as Map<String, Object?>)
+            .mod,
+      );
       // já marcado: carregar de novo não grava
       final antes = disco.ler('2026-10.json');
       await servicos.carregarMes('2026-10');

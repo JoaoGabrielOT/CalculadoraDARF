@@ -3,7 +3,7 @@
 // `config.json` (`Config.migracoes`, por aparelho).
 
 import 'apuracao_medio.dart';
-import 'compat/ordenacao.dart';
+import 'datas.dart';
 import 'erros.dart';
 import 'modelos/mes.dart';
 import 'repositorio.dart';
@@ -18,71 +18,112 @@ const textoBackupFalhou =
     'não foi ativado. Feche outros programas que usem a pasta de dados e abra '
     'o app de novo.';
 
+const tituloMesesIlegiveis = 'Cálculo por custo médio';
+
+/// Meses que a migração não conseguiu ler (ficaram como estavam).
+String textoMesesIlegiveis(List<String> meses) =>
+    'Estes meses não puderam ser lidos e ficaram fora da ativação do cálculo '
+    'por custo médio: ${meses.map(fmtMes).join(', ')}. Confira esses '
+    'arquivos.';
+
 class ResultadoMigracaoDados {
-  const ResultadoMigracaoDados({this.aplicada = false, this.corte, this.erro});
+  const ResultadoMigracaoDados({
+    this.aplicada = false,
+    this.corte,
+    this.erro,
+    this.pulados = const [],
+    this.sincronizou = false,
+  });
 
   final bool aplicada;
 
-  /// Primeiro mês marcado para o custo médio.
+  /// Primeiro mês aberto, a partir do qual vale o custo médio.
   final String? corte;
 
   /// O backup falhou: nada foi migrado.
   final String? erro;
+
+  /// Meses ilegíveis, deixados como estavam.
+  final List<String> pulados;
+
+  /// Uma sincronização completa terminou antes da marcação.
+  final bool sincronizou;
 }
 
-/// Migração `2.1-custo-medio`: backup, sincronização (sem rede ou sem login
-/// segue com os dados locais), marcador no primeiro mês aberto e nos abertos
-/// posteriores que ainda não o têm, e o id em `migracoes`. Nunca reescreve
-/// lotes, vendas, `resumo` nem meses fechados. Um mês ilegível deixa tudo
-/// como está, sem registrar: tenta de novo na próxima abertura.
+/// A migração ainda não foi registrada e há meses gravados. Sem nenhum mês
+/// (instalação nova) ela espera: roda numa abertura depois que a
+/// sincronização trouxer os dados.
+bool migracaoCustoMedioPendente(Repositorio repo) =>
+    !repo.lerConfig().migracoes.contains(idMigracaoCustoMedio) &&
+    repo.listarMeses().isNotEmpty;
+
+bool _erroDeLeitura(Object e) =>
+    e is FormatException ||
+    e is TypeError ||
+    e is RangeError ||
+    e is ErroNucleo;
+
+/// Migração `2.1-custo-medio`:
+/// 1. backup (se falhar, nada é feito e volta o `erro`);
+/// 2. sincronização completa, limitada por quem chama (sem rede, sem login
+///    ou demorada, segue com os dados locais);
+/// 3. corte = primeiro mês aberto legível; marca ele e os abertos
+///    posteriores sem marcador, **sem carimbar** o `mod` (o marcador não pode
+///    vencer, na mesclagem, um mês que outro aparelho já fechou);
+/// 4. registra o id em `migracoes`.
+///
+/// Meses ilegíveis são pulados (voltam em `pulados`). Sem mês aberto com
+/// arquivo não cria nenhum e não registra: tenta de novo na próxima abertura.
+/// Nunca reescreve lotes, vendas, `resumo` nem meses fechados.
 Future<ResultadoMigracaoDados> migrarCustoMedio(
   Repositorio repo, {
   required String Function() fazerBackup,
-  required Future<void> Function() sincronizar,
+  required Future<bool> Function() sincronizar,
 }) async {
-  if (repo.lerConfigParaGravar().migracoes.contains(idMigracaoCustoMedio)) {
-    return const ResultadoMigracaoDados();
-  }
+  if (!migracaoCustoMedioPendente(repo)) return const ResultadoMigracaoDados();
   try {
     fazerBackup();
   } catch (e) {
     return ResultadoMigracaoDados(erro: '$e');
   }
+  var sincronizou = false;
   try {
-    await sincronizar();
+    sincronizou = await sincronizar();
   } catch (_) {
-    // sem rede ou sem login: os dados locais bastam
+    // os dados locais bastam
   }
 
-  // lê tudo antes de gravar qualquer coisa
-  final String corte;
+  String? corte;
+  final pulados = <String>[];
   final marcar = <Mes>[];
-  try {
-    corte = repo.mesInicial();
-    for (final m in [
-      corte,
-      for (final m in repo.listarMeses())
-        if (compararTexto(m, corte) > 0) m,
-    ]) {
-      final d = repo.carregar(m);
-      if (!d.fechado && d.metodo != metodoCustoMedio) marcar.add(d);
+  for (final m in repo.listarMeses()) {
+    final Mes d;
+    try {
+      d = repo.carregar(m);
+    } catch (e) {
+      if (!_erroDeLeitura(e)) rethrow;
+      pulados.add(m);
+      continue;
     }
-  } on FormatException {
-    return const ResultadoMigracaoDados();
-  } on TypeError {
-    return const ResultadoMigracaoDados();
-  } on RangeError {
-    return const ResultadoMigracaoDados();
-  } on ErroNucleo {
-    return const ResultadoMigracaoDados();
+    if (d.fechado) continue;
+    corte ??= m;
+    if (d.metodo != metodoCustoMedio) marcar.add(d);
+  }
+  if (corte == null) {
+    return ResultadoMigracaoDados(pulados: pulados, sincronizou: sincronizou);
   }
 
   for (final d in marcar) {
     marcarCustoMedio(d);
-    repo.salvar(d);
+    repo.salvar(d, carimbar: false);
   }
   final cfg = repo.lerConfigParaGravar();
   cfg.migracoes = [...cfg.migracoes, idMigracaoCustoMedio];
   repo.gravarConfig(cfg);
-  return ResultadoMigracaoDados(aplicada: true, corte: corte);
+  return ResultadoMigracaoDados(
+    aplicada: true,
+    corte: corte,
+    pulados: pulados,
+    sincronizou: sincronizou,
+  );
 }

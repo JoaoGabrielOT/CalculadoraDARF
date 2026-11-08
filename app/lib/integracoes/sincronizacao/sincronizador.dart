@@ -37,6 +37,7 @@ class Sincronizador {
   double _ultimaPuxada = 0;
   double? _ultimaSync;
   bool _rodando = false;
+  int _concluidas = 0;
   bool _resync = false;
   bool _conectandoToken = false;
   bool _logando = false;
@@ -52,6 +53,9 @@ class Sincronizador {
   double get ultimaPuxada => _ultimaPuxada;
   double? get ultimaSync => _ultimaSync;
   bool get rodando => _rodando;
+
+  /// Rodadas de sincronização concluídas com sucesso desde a criação.
+  int get concluidas => _concluidas;
 
   /// Login ou reconexão com o token em andamento: a UI não deve iniciar outro.
   bool get ocupado => _logando || _conectandoToken;
@@ -217,6 +221,7 @@ class Sincronizador {
       _ultimaSync = ambiente.agora();
       _ultimaPuxada = ambiente.agora();
       _ultimoErro = '';
+      _concluidas++;
       _definirStatus(StatusSync.ok);
     } catch (e) {
       await _tratarErro(e, geracao);

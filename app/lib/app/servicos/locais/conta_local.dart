@@ -164,6 +164,43 @@ class ContaLocal {
     await _sync.sincronizar();
   }
 
+  /// Sincronização completa antes da migração dos dados (§11): espera a
+  /// rodada em curso (tick do timer ou conexão com o token) ou faz uma, por
+  /// no máximo [limite]. Devolve se alguma rodada terminou bem depois da
+  /// chamada. Sem conta nem token não faz nada.
+  Future<bool> sincronizarParaMigracao({
+    Duration limite = const Duration(seconds: 10),
+  }) async {
+    if (_conta.email == null && !_conta.temToken()) return false;
+    final antes = _sync.concluidas;
+    bool concluiu() => _sync.concluidas != antes;
+    Future<void> esperarRodada() async {
+      while (_sync.rodando || _sync.ocupado) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    }
+
+    Future<void> rodada() async {
+      await esperarRodada();
+      if (concluiu()) return;
+      if (_conta.email == null) {
+        await _sync.conectarComToken();
+      } else {
+        await _sync.sincronizar();
+      }
+      await esperarRodada();
+    }
+
+    try {
+      await rodada().timeout(limite);
+    } on TimeoutException {
+      // segue com os dados locais; a rodada termina sozinha
+    } finally {
+      _reconciliar();
+    }
+    return concluiu();
+  }
+
   /// `agendar_sync`: marca pendente (mesmo sem conta) e sincroniza depois do
   /// atraso. Usado pelas mutações das outras partes.
   void agendar() => unawaited(_sync.agendar());

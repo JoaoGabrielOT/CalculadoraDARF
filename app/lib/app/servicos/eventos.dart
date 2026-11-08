@@ -54,9 +54,11 @@ class EventoConfigIlegivel extends EventoServico {
   final String mensagem;
 }
 
-/// A migração dos dados na partida não rodou ([texto] para o usuário).
+/// Aviso da migração dos dados na partida (backup que falhou, meses
+/// ilegíveis).
 class EventoMigracao extends EventoServico {
-  const EventoMigracao(this.texto);
+  const EventoMigracao(this.titulo, this.texto);
 
+  final String titulo;
   final String texto;
 }

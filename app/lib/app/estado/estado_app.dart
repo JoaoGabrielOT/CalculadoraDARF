@@ -484,7 +484,7 @@ class EstadoApp extends ChangeNotifier {
       case EventoAviso():
         avisar(e.titulo, semPrefixoException(e.texto));
       case EventoMigracao():
-        avisar(tituloBackupFalhou, e.texto);
+        avisar(e.titulo, e.texto);
       case EventoConfigIlegivel():
         erroConfig = e.mensagem;
         notifyListeners();

@@ -221,6 +221,10 @@ void main() {
       final semPosicao = marcado('2026-11', mod: 30)..posicaoInicial = null;
       expect(campos(mesclarMes(marcado('2026-11'), semPosicao)!), esperado);
       expect(campos(mesclarMes(semPosicao, marcado('2026-11'))!), esperado);
+      // posição vazia (marcador de um mês criado vazio) conta como sem posição
+      final vazia = marcado('2026-11', mod: 30)..posicaoInicial = {};
+      expect(campos(mesclarMes(marcado('2026-11'), vazia)!), esperado);
+      expect(campos(mesclarMes(vazia, marcado('2026-11'))!), esperado);
     });
 
     test('remoto com marcador corrompido não apaga a posição local', () {

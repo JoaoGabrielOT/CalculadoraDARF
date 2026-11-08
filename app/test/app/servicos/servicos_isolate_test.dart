@@ -594,6 +594,19 @@ void main() {
       expect(sync, 1);
     });
 
+    test('iniciar depois de cancelar não liga os timers', () async {
+      var sync = 0;
+      final t = TimersServicos(
+        sync: () async => sync++,
+        metas: () async {},
+        noticias: () async {},
+        intervaloSync: const Duration(milliseconds: 10),
+      )..cancelar();
+      t.iniciar();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(sync, 0);
+    });
+
     test('padrões: 60 s no Windows, 30 s no Android; metas 2,5 s/60 s; '
         'notícias 8 s/60 s', () {
       expect(intervaloSyncPadrao(windows: true), const Duration(seconds: 60));

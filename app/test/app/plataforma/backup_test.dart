@@ -42,14 +42,34 @@ void main() {
     expect(Directory(pasta).listSync().whereType<Directory>(), isEmpty);
   });
 
-  test('backup no mesmo segundo vai para outra pasta e não copia backups', () {
-    final agora = DateTime(2026, 11, 8, 9, 5, 3);
-    final p1 = fazerBackup(dados, agora);
-    final p2 = fazerBackup(dados, agora);
-    expect(p2, isNot(p1));
-    expect(p2.startsWith('$dados${sep}backup${sep}pre-$versaoApp-'), isTrue);
-    expect(conteudo(p2).keys.toSet(), conteudo(p1).keys.toSet());
-    expect(Directory(p2).listSync().whereType<Directory>(), isEmpty);
+  test('um backup por versão: o segundo devolve o primeiro sem copiar', () {
+    final p1 = fazerBackup(dados, DateTime(2026, 11, 8, 9, 5, 3));
+    final copia = conteudo(p1);
+    File('$dados${sep}2026-01.json').writeAsStringSync('{"mudou": true}');
+    final p2 = fazerBackup(dados, DateTime(2026, 11, 9, 10));
+    expect(p2, p1);
+    expect(conteudo(p1), copia);
+    expect(Directory('$dados${sep}backup').listSync().map((e) => e.path), [p1]);
+  });
+
+  test('backup de outra versão ou pasta temporária não conta', () {
+    Directory('$dados${sep}backup${sep}pre-0.0.1-20200101-000000')
+        .createSync(recursive: true);
+    // sobra de uma cópia interrompida: incompleta, não é backup
+    Directory('$dados${sep}backup$sep.pre-$versaoApp-20261108-090503.tmp')
+        .createSync(recursive: true);
+    final p = fazerBackup(dados, DateTime(2026, 11, 8, 9, 5, 3));
+    expect(p, '$dados${sep}backup${sep}pre-$versaoApp-20261108-090503');
+    expect(conteudo(p).keys.toSet(), {
+      '2026-01.json',
+      'config.json',
+      'token.json',
+    });
+    expect(
+      Directory('$dados${sep}backup$sep.pre-$versaoApp-20261108-090503.tmp')
+          .existsSync(),
+      isFalse,
+    );
   });
 
   test('pasta de dados inexistente lança FileSystemException', () {
