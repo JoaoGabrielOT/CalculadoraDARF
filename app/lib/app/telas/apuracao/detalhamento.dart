@@ -4,11 +4,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/cartao.dart';
 import '../../regras/textos.dart';
 import '../../tema/cores_app.dart';
+import 'controle_apuracao.dart';
+import 'painel_indicadores.dart';
 
 /// Largura da coluna lateral no layout expandido.
 const larguraDetalhamento = 340.0;
@@ -154,6 +157,65 @@ class _Corpo extends StatelessWidget {
             style: TextStyle(color: c.textoSuave, fontSize: 12),
           ),
         ),
+        const _IndicadoresVendidos(),
+      ],
+    );
+  }
+}
+
+/// Os indicadores de cada ativo vendido no mês, um por ativo, recolhidos.
+class _IndicadoresVendidos extends StatelessWidget {
+  const _IndicadoresVendidos();
+
+  @override
+  Widget build(BuildContext context) {
+    final controle = context.watch<ControleApuracao>();
+    final vendidos = [
+      for (final i in controle.indicadores)
+        if (i.vendeuNoMes) i,
+    ];
+    if (vendidos.isEmpty) return const SizedBox.shrink();
+    final c = CoresApp.de(context);
+    return Column(
+      key: const Key('indicadores-vendidos'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(height: 24, color: c.linha),
+        Text(
+          'INDICADORES POR ATIVO VENDIDO',
+          style: TextStyle(
+            color: c.textoSuave,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        for (final i in vendidos)
+          Material(
+            type: MaterialType.transparency,
+            child: Theme(
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                key: Key('indicadores-vendido-${i.ticker}'),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                title: Text(
+                  i.ticker,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                children: [
+                  PainelIndicadores(
+                    indicadores: i,
+                    corrente: controle.posicoes?.corrente ?? false,
+                    cotacoes: controle.cotacoes,
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }

@@ -162,6 +162,7 @@ class VisaoPosicoes {
     required this.dataCorte,
     required this.corrente,
     required this.posicoes,
+    this.indicadores = const [],
   });
 
   /// `AAAA-MM-DD`: o último dia do mês, ou hoje no mês de hoje.
@@ -170,6 +171,10 @@ class VisaoPosicoes {
   /// O corte é hoje: só então vale mostrar a cotação atual.
   final bool corrente;
   final List<PosicaoAtivo> posicoes;
+
+  /// Indicadores por ativo (saldo em [dataCorte] ou vendido no mês), sem
+  /// cotação: o mercado entra com `comCotacoes` quando a cotação chega.
+  final List<IndicadoresAtivo> indicadores;
 }
 
 class NovaCompra {

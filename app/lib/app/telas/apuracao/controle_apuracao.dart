@@ -240,9 +240,9 @@ class ControleApuracao extends ChangeNotifier {
   /// delas, ou o mês aberto e os preços dos lotes.
   void _atualizarModo({bool recarregarCarteira = false}) {
     if (_descartado || visao == null) return;
-    if (modoLista == ModoLista.posicao) {
-      unawaited(_carregarPosicoes());
-    } else {
+    // as posições também alimentam os indicadores do detalhamento
+    unawaited(_carregarPosicoes());
+    if (modoLista != ModoLista.posicao) {
       if (recarregarCarteira) unawaited(_carregarCarteira());
       unawaited(_buscarPrecos());
     }
@@ -266,6 +266,17 @@ class ControleApuracao extends ChangeNotifier {
     }
     notifyListeners();
     unawaited(_buscarCotacoes());
+  }
+
+  /// Indicadores por ativo; com o corte de hoje, já com as cotações atuais
+  /// que chegaram (a que falhou deixa o mercado e a exposição em "—").
+  List<IndicadoresAtivo> get indicadores {
+    final p = posicoes;
+    if (p == null) return const [];
+    if (!p.corrente) return p.indicadores;
+    return comCotacoes(p.indicadores, {
+      for (final e in cotacoes.entries) e.key: e.value?.preco,
+    });
   }
 
   /// Tickers cuja cotação atual a lista à vista mostra: os da posição de hoje

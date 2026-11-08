@@ -12,6 +12,7 @@ import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import 'controle_apuracao.dart';
 import 'lista_lotes.dart';
+import 'painel_indicadores.dart';
 
 const textoCotacaoHistorica = 'cotação histórica não disponível';
 const textoCustoPorCompra = 'custo por compra';
@@ -88,7 +89,9 @@ class ListaPosicoes extends StatelessWidget {
                 itemBuilder: (_, i) => _LinhaAtivo(
                   key: Key('ativo-${itens[i].ticker}'),
                   ativo: itens[i],
-                  cotacao: p!.corrente ? controle.cotacoes : null,
+                  indicadores: _indicadorDe(controle, itens[i].ticker),
+                  corrente: p!.corrente,
+                  cotacao: p.corrente ? controle.cotacoes : null,
                   compacto: true,
                 ),
               ),
@@ -122,6 +125,8 @@ class ListaPosicoes extends StatelessWidget {
                     _LinhaAtivo(
                       key: Key('ativo-${a.ticker}'),
                       ativo: a,
+                      indicadores: _indicadorDe(controle, a.ticker),
+                      corrente: p.corrente,
                       cotacao: p.corrente ? controle.cotacoes : null,
                       compacto: false,
                     ),
@@ -132,6 +137,13 @@ class ListaPosicoes extends StatelessWidget {
       ),
     );
   }
+}
+
+IndicadoresAtivo? _indicadorDe(ControleApuracao controle, String ticker) {
+  for (final i in controle.indicadores) {
+    if (i.ticker == ticker) return i;
+  }
+  return null;
 }
 
 /// Situação da cotação: histórica não existe; a atual leva fonte e hora.
@@ -204,9 +216,13 @@ class _LinhaAtivo extends StatefulWidget {
     required this.ativo,
     required this.cotacao,
     required this.compacto,
+    required this.indicadores,
+    required this.corrente,
   });
 
   final PosicaoAtivo ativo;
+  final IndicadoresAtivo? indicadores;
+  final bool corrente;
 
   /// Cotações atuais por ticker; nulo quando o corte não é hoje.
   final Map<String, CotacaoAtual?>? cotacao;
@@ -235,7 +251,19 @@ class _LinhaAtivoState extends State<_LinhaAtivo> {
     final tentou = cotacoes?.containsKey(a.ticker) ?? false;
     final medio = a.precoMedio;
     final custo = a.custoFiscal ?? a.custoGerencial;
-    final compras = _Compras(ativo: a, key: Key('compras-${a.ticker}'));
+    final compras = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
+      children: [
+        _Compras(ativo: a, key: Key('compras-${a.ticker}')),
+        if (widget.indicadores != null)
+          PainelIndicadores(
+            indicadores: widget.indicadores!,
+            corrente: widget.corrente,
+            cotacoes: widget.cotacao ?? const {},
+          ),
+      ],
+    );
     final seta = Icon(
       _aberto ? Icons.expand_less : Icons.expand_more,
       size: 20,

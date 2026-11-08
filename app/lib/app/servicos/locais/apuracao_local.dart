@@ -135,10 +135,16 @@ class ApuracaoLocal {
     final meses = amigo != null ? _dadosAmigo(amigo).meses : _carregarTodos();
     final hoje = ambiente.hoje();
     final corte = dataCorteDoMes(mes, hoje);
+    final posicoes = posicoesEm(meses, corte);
     return VisaoPosicoes(
       dataCorte: corte,
       corrente: corte == hoje,
-      posicoes: posicoesEm(meses, corte),
+      posicoes: posicoes,
+      indicadores: indicadoresPorAtivo(
+        meses: meses,
+        mes: mes,
+        posicao: posicoes,
+      ),
     );
   }
 

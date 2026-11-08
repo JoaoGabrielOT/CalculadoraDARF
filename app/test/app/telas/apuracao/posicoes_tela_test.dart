@@ -263,4 +263,122 @@ void main() {
     expect(find.text('Lotes do mês aberto (11/2026)'), findsOneWidget);
     expect(find.text('BBAS3'), findsWidgets);
   });
+  testWidgets('posição de mês passado: indicadores sem mercado, com os '
+      'rótulos de mês, acumulado e fiscal', (t) async {
+    await _montar(t, mes: '2026-09');
+    expect(find.byKey(const Key('indicadores-PETR4')), findsNothing);
+    await t.tap(find.byKey(const Key('ativo-PETR4')));
+    await t.pumpAndSettle();
+    final painel = find.byKey(const Key('indicadores-PETR4'));
+    expect(painel, findsOneWidget);
+    for (final r in [
+      'Quantidade em aberto',
+      'Custo remanescente (por compra)',
+      'Preço médio das compras (saldo)',
+      'Ponto de equilíbrio (R\$)',
+      'Resultado realizado no mês (fiscal, R\$)',
+      'Resultado realizado acumulado desde 09/2026 (fiscal, R\$)',
+      'Rentabilidade realizada no mês (%)',
+    ]) {
+      expect(
+        find.descendant(of: painel, matching: find.text(r)),
+        findsOneWidget,
+        reason: r,
+      );
+    }
+    expect(
+      find.descendant(of: painel, matching: find.textContaining('mercado')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: painel, matching: find.textContaining('Exposição')),
+      findsNothing,
+    );
+    // sem vendas de PETR4 em setembro: "—" e não zero
+    expect(
+      find.descendant(of: painel, matching: find.text('—')),
+      findsNWidgets(3),
+    );
+  });
+
+  testWidgets('posição de hoje: não realizado, valor de mercado e exposição '
+      'com cotação de todos os ativos', (t) async {
+    await _montar(t);
+    await _tocar(t, 'Posição em 28/10/2026');
+    await t.tap(find.byKey(const Key('ativo-PETR4')));
+    await t.pumpAndSettle();
+    final painel = find.byKey(const Key('indicadores-PETR4'));
+    expect(
+      find.descendant(
+        of: painel,
+        matching: find.text('Resultado não realizado (gerencial, R\$)'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: painel, matching: find.text('R\$ 2.172,00')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: painel,
+        matching: find.text('Exposição na carteira (%)'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: painel, matching: find.textContaining('%')),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('cotação que falhou deixa a exposição em "—"', (t) async {
+    final s = _falsos()..cotacoesAtuaisResp.remove('VALE3');
+    await _montar(t, servicos: s);
+    await _tocar(t, 'Posição em 28/10/2026');
+    await t.tap(find.byKey(const Key('ativo-PETR4')));
+    await t.pumpAndSettle();
+    final painel = find.byKey(const Key('indicadores-PETR4'));
+    final linha = find.ancestor(
+      of: find.text('Exposição na carteira (%)'),
+      matching: find.byType(Row),
+    );
+    expect(
+      find.descendant(of: linha.first, matching: find.text('—')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: painel, matching: find.text('R\$ 2.172,00')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('detalhamento do mês traz os indicadores do ativo vendido', (
+    t,
+  ) async {
+    await _montar(t, mes: '2026-09');
+    expect(find.byKey(const Key('indicadores-vendidos')), findsOneWidget);
+    expect(find.byKey(const Key('indicadores-ITUB4')), findsNothing);
+    await t.tap(find.byKey(const Key('indicadores-vendido-ITUB4')));
+    await t.pumpAndSettle();
+    final painel = find.byKey(const Key('indicadores-ITUB4'));
+    expect(painel, findsOneWidget);
+    expect(
+      find.descendant(of: painel, matching: find.text('R\$ 32,00')),
+      findsOneWidget,
+    ); // preço médio das vendas
+    expect(
+      find.descendant(of: painel, matching: find.text('Quantidade em aberto')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('celular: indicadores expandidos sem overflow', (t) async {
+    await _montar(t, tamanho: _celular, windows: false);
+    await _tocar(t, 'Posição em 28/10/2026');
+    await t.tap(find.byKey(const Key('ativo-PETR4')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('indicadores-PETR4')), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
 }

@@ -183,6 +183,11 @@ class ServicosFalsos implements ServicosApp {
         dataCorte: corte,
         corrente: corte == hoje,
         posicoes: posicoesEm(dados, corte),
+        indicadores: indicadoresPorAtivo(
+          meses: dados,
+          mes: mes,
+          posicao: posicoesEm(dados, corte),
+        ),
       );
     });
   }

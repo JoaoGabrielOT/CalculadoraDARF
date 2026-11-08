@@ -15,6 +15,7 @@ export 'datas.dart';
 export 'erros.dart';
 export 'fechamento.dart';
 export 'formatacao.dart';
+export 'indicadores_ativo.dart';
 export 'mercado/chart.dart';
 export 'mercado/dados_ativo.dart';
 export 'mercado/indicadores.dart';

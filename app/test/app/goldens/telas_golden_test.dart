@@ -331,12 +331,12 @@ void main() {
   group('telas', skip: motivoParaPularGoldens() ?? false, () {
     // Apuração de um mês fechado: a posição no último dia (padrão) e a
     // carteira atual (lotes do mês aberto) escolhida no seletor.
-    for (final carteira in [false, true]) {
+    // e a posição com os indicadores do PETR4 abertos.
+    for (final modo in ['posicao_historica', 'carteira_atual', 'indicadores']) {
+      final carteira = modo == 'carteira_atual';
       for (final tema in _temas.entries) {
         for (final tamanho in _tamanhos.entries) {
-          final nome =
-              'apuracao_${carteira ? 'carteira_atual' : 'posicao_historica'}_'
-              '${tema.key}_${tamanho.key}';
+          final nome = 'apuracao_${modo}_${tema.key}_${tamanho.key}';
           testWidgets(nome, (t) async {
             debugDisableShadows = false;
             try {
@@ -366,6 +366,10 @@ void main() {
               await t.pumpAndSettle();
               if (carteira) {
                 await t.tap(find.text('Carteira atual'));
+                await t.pumpAndSettle();
+              }
+              if (modo == 'indicadores') {
+                await t.tap(find.byKey(const Key('ativo-PETR4')));
                 await t.pumpAndSettle();
               }
               // no celular a lista fica abaixo dos indicadores
