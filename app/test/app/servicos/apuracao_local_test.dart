@@ -1103,9 +1103,17 @@ void main() {
   });
 
   group('custo médio', () {
-    /// 09/2026 fechado pelo custo médio; 10/2026 aberto com a cópia de 100.
+    /// 09/2026 fechado pelo custo médio com a compra L1 de 100 a 10,00 (posição
+    /// final 1000,30); 10/2026 aberto com a cópia dela.
     void gravarCorte({bool marcarOutubro = true}) {
-      repo.salvar(Mes(mes: '2026-09', fechado: true, metodo: metodoCustoMedio));
+      repo.salvar(
+        Mes(
+          mes: '2026-09',
+          fechado: true,
+          metodo: metodoCustoMedio,
+          lotes: [compra('L1', data: '2026-09-01')],
+        ),
+      );
       final out = Mes(
         mes: '2026-10',
         lotes: [compra('C1', origem: 'L1', data: '2026-09-01')],
@@ -1121,13 +1129,94 @@ void main() {
       expect(v.apuracao.metodo, metodoCustoMedio);
       final gravado = repo.carregar('2026-10');
       expect(gravado.metodo, metodoCustoMedio);
-      // derivada: arredondar(100 × 10 × 1,0003) = 1000,30
+      // herdada de 09: arredondar(100 × 10 × 1,0003) = 1000,30
       expect(gravado.posicaoInicial!['PETR4']!.qtd, 100);
       expect(gravado.posicaoInicial!['PETR4']!.custo, closeTo(1000.30, 1e-9));
       expect(await agendamentos(), 1);
       // já marcado: carregar de novo não grava
       final antes = disco.ler('2026-10.json');
       await servicos.carregarMes('2026-10');
+      expect(disco.ler('2026-10.json'), antes);
+    });
+
+    test(
+      'mês seguinte a mês fechado marcado herda posição e prejuízo ao carregar',
+      () async {
+        // 09: 100 a R$ 1.050,00 e prejuízo day trade de 2; venda de 40 a
+        // 9,00 baixa arredondar(40 × 1050 / 100) = 420 → 630,00 (60);
+        // resultado 360 − 420 − 360 × 0,0003 = −60,108 (prejuízo comum)
+        repo.salvar(
+          Mes(
+            mes: '2026-09',
+            fechado: true,
+            metodo: metodoCustoMedio,
+            posicaoInicial: {'PETR4': PosicaoFiscal(qtd: 100, custo: 1050)},
+            prejuizoAnterior: PrejuizoAcumulado(dayTrade: 2),
+            lotes: [
+              compra(
+                'C0',
+                origem: 'L0',
+                data: '2026-08-01',
+                vendas: [
+                  Venda(id: 'V1', data: '2026-09-15', qtd: 40, preco: 9),
+                ],
+              ),
+            ],
+          ),
+        );
+        // gravado por um aparelho 1.12, sem o marcador
+        gravarMes('2026-10', [
+          compra('C0~2026-10', origem: 'C0', data: '2026-08-01', qtd: 60),
+        ]);
+        final v = await servicos.carregarMes('2026-10');
+        expect(v.apuracao.inconsistentes, isEmpty);
+        final out = repo.carregar('2026-10');
+        expect(out.metodo, metodoCustoMedio);
+        expect(out.posicaoInicial!['PETR4']!.qtd, 60);
+        expect(out.posicaoInicial!['PETR4']!.custo, closeTo(630.00, 1e-9));
+        expect(out.prejuizoAnterior!.comum, closeTo(60.108, 1e-9));
+        expect(out.prejuizoAnterior!.dayTrade, 2.0);
+      },
+    );
+
+    test('primeira mutação de mês sem marcador grava uma vez', () async {
+      gravarCorte(marcarOutubro: false);
+      final v = await servicos.registrarCompra(
+        '2026-10',
+        const NovaCompra(
+          ticker: 'VALE3',
+          dataCompra: '2026-10-02',
+          qtd: 10,
+          preco: 50,
+        ),
+      );
+      expect(v.dados.metodo, metodoCustoMedio);
+      expect(repo.carregar('2026-10').metodo, metodoCustoMedio);
+      expect(await agendamentos(), 1);
+    });
+
+    test('cópia levada não é excluída nem trocada de ativo', () async {
+      gravarCorte();
+      final antes = disco.ler('2026-10.json');
+      await espera(
+        servicos.excluirCompra('2026-10', 'C1'),
+        'Esta compra veio do mês anterior e entra no custo médio; ela não '
+        'pode ser excluída. Para tirar ações da posição, registre uma venda.',
+      );
+      await espera(
+        servicos.editarCompra(
+          '2026-10',
+          'C1',
+          const NovaCompra(
+            ticker: 'VALE3',
+            dataCompra: '2026-09-01',
+            qtd: 100,
+            preco: 10,
+          ),
+        ),
+        'Esta compra veio do mês anterior e entra no custo médio; ela não '
+        'pode ser trocada de ativo.',
+      );
       expect(disco.ler('2026-10.json'), antes);
     });
 

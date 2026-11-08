@@ -36,6 +36,15 @@ String? erroCompraForaDoMes(Mes d, String dataCompra) {
       'mês, a partir de ${fmtData(inicio)}.';
 }
 
+/// A cópia levada de um mês anterior faz parte da posição inicial do mês [d]
+/// pelo custo médio e não pode ser excluída. Devolve a mensagem ou nulo.
+String? erroExclusaoLote(Lote lote, Mes d) =>
+    d.metodo == metodoCustoMedio &&
+        lote.origem != null &&
+        lote.origem!.isNotEmpty
+    ? textoCopiaSemExclusao
+    : null;
+
 /// Valida a edição de uma compra que já pode ter vendas. Devolve a mensagem de
 /// erro ou nulo. Em [mes] pelo custo médio, a cópia levada de um mês anterior
 /// não muda quantidade nem preço, e a compra do mês não sai do mês.
@@ -45,6 +54,7 @@ String? erroEdicaoLote(Lote lote, Lote novo, {Mes? mes}) {
       if (novo.qtd != lote.qtd || novo.preco != lote.preco) {
         return textoCopiaLevadaTravada;
       }
+      if (novo.ticker != lote.ticker) return textoCopiaSemTrocaDeAtivo;
     } else {
       final msg = erroCompraForaDoMes(mes, novo.dataCompra);
       if (msg != null) return msg;

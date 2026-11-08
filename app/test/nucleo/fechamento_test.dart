@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/apuracao.dart';
+import 'package:calculadoradarf/nucleo/apuracao_medio.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/erros.dart';
 import 'package:calculadoradarf/nucleo/fechamento.dart';
@@ -358,6 +359,59 @@ void main() {
       expect(repo.existeMes('2026-02'), isFalse);
     });
 
+    test('retroativa acima da posição inicial mostra o disponível', () {
+      repo.salvar(
+        marcado(
+          '2026-03',
+          [lote('P0', '2026-01-15', 100, 10, origem: 'P')],
+          (20, 200.06),
+        ),
+      );
+      final antes = jsonEncode(repo.carregar('2026-03').toJson());
+      expect(
+        () => registrarVendaRetroativa(repo, repo.carregar('2026-03'), 'P0', (
+          data: '2026-02-10',
+          qtd: 30,
+          preco: 12,
+        )),
+        throwsA(
+          isA<ErroValidacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            'Quantidade maior que a posição de PETR4 no início de 03/2026 '
+                '(20).',
+          ),
+        ),
+      );
+      expect(jsonEncode(repo.carregar('2026-03').toJson()), antes);
+      expect(repo.existeMes('2026-02'), isFalse);
+    });
+
+    test('mês seguinte a mês fechado marcado herda posição e prejuízo', () {
+      // a mesma conta do fechamento: 150 / 1575,25; prejuízo 35,23 e 5,00
+      final anterior = marco()..fechado = true;
+      final abril = Mes(
+        mes: '2026-04',
+        lotes: [lote('X~', '2026-03-05', 150, 11, origem: 'X')],
+      );
+      marcarAoCarregar(abril, anterior);
+      expect(abril.metodo, metodoCustoMedio);
+      expect(abril.posicaoInicial!['PETR4']!.qtd, 150);
+      expect(abril.posicaoInicial!['PETR4']!.custo, closeTo(1575.25, 1e-9));
+      expect(abril.prejuizoAnterior!.comum, closeTo(35.23, 1e-9));
+      expect(abril.prejuizoAnterior!.dayTrade, 5.0);
+      // sem antecessor fechado e marcado: posição derivada e prejuízo zero
+      final maio = Mes(
+        mes: '2026-05',
+        lotes: [lote('Y', '2026-04-05', 10, 10, origem: 'Z')],
+      );
+      marcarAoCarregar(maio, marco());
+      expect(maio.posicaoInicial!['PETR4']!.custo, closeTo(100.03, 1e-9));
+      expect(maio.prejuizoAnterior!.comum, 0.0);
+      marcarAoCarregar(maio..metodo = null, null);
+      expect(maio.posicaoInicial!['PETR4']!.qtd, 10);
+    });
+
     test('retroativa a partir do corte é recusada', () {
       repo.salvar(marcado('2026-03', [], null, fechado: true));
       repo.salvar(
@@ -397,6 +451,30 @@ void main() {
         expect(erroEdicaoLote(p0, novo(p0, qtd: 120), mes: d), msg);
         expect(erroEdicaoLote(p0, novo(p0, preco: 9.5), mes: d), msg);
         expect(erroEdicaoLote(p0, novo(p0), mes: d), isNull);
+        expect(
+          erroEdicaoLote(
+            p0,
+            Lote(
+              id: p0.id,
+              origem: p0.origem,
+              ticker: 'VALE3',
+              tipo: 'Ação',
+              dataCompra: p0.dataCompra,
+              qtd: p0.qtd,
+              preco: p0.preco,
+            ),
+            mes: d,
+          ),
+          'Esta compra veio do mês anterior e entra no custo médio; ela não '
+          'pode ser trocada de ativo.',
+        );
+        expect(
+          erroExclusaoLote(p0, d),
+          'Esta compra veio do mês anterior e entra no custo médio; ela não '
+          'pode ser excluída. Para tirar ações da posição, registre uma venda.',
+        );
+        expect(erroExclusaoLote(d.lotes.last, d), isNull);
+        expect(erroExclusaoLote(p0, Mes(mes: '2026-03')), isNull);
         // no método por compra continua editável
         expect(erroEdicaoLote(p0, novo(p0, qtd: 120)), isNull);
         expect(

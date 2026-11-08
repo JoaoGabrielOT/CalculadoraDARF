@@ -25,6 +25,14 @@ String bloqueioSaldoInconsistente(List<String> tickers) =>
     'O mês não pode ser fechado com saldo inconsistente.\n\n'
     '${avisosSaldoInconsistente(tickers)}';
 
+const textoCopiaSemTrocaDeAtivo =
+    'Esta compra veio do mês anterior e entra no custo médio; ela não pode '
+    'ser trocada de ativo.';
+
+const textoCopiaSemExclusao =
+    'Esta compra veio do mês anterior e entra no custo médio; ela não pode '
+    'ser excluída. Para tirar ações da posição, registre uma venda.';
+
 const textoCopiaLevadaTravada =
     'Compra levada de um mês anterior: quantidade e preço fazem parte da '
     'posição inicial e não podem ser editados.';
@@ -68,6 +76,28 @@ bool usaCustoMedio(Mes m, String? corte) {
   if (m.metodo == metodoCustoMedio) return true;
   if (m.fechado) return false;
   return corte != null && compararTexto(m.mes, corte) >= 0;
+}
+
+/// Marca o mês aberto [d], ainda sem marcador, ao carregar. Depois de um
+/// mês [anterior] fechado pelo custo médio (ex.: [d] gravado por um aparelho
+/// 1.12), herda o que o fechamento levaria: a posição final e os prejuízos
+/// finais dele. Sem esse antecessor (o primeiro mês do método), usa a
+/// posição derivada dos lotes levados e prejuízo zero.
+void marcarAoCarregar(Mes d, Mes? anterior) {
+  if (anterior != null &&
+      anterior.fechado &&
+      anterior.metodo == metodoCustoMedio) {
+    final r = apurarCustoMedio(anterior);
+    d
+      ..metodo = metodoCustoMedio
+      ..posicaoInicial = r.posicaoFinal
+      ..prejuizoAnterior = PrejuizoAcumulado(
+        comum: r.prejuizoComumFinal!,
+        dayTrade: r.prejuizoDtFinal!,
+      );
+    return;
+  }
+  marcarCustoMedio(d);
 }
 
 /// Marca [d] para o custo médio com a posição inicial derivada dos lotes

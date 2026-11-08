@@ -66,10 +66,10 @@ class ApuracaoLocal {
   };
 
   /// Mês aberto a partir do corte do custo médio ainda sem o marcador (§5.3):
-  /// marca com a posição inicial derivada dos lotes levados e grava, se o mês
-  /// já tem arquivo (sem arquivo, só em memória). Um mês anterior ilegível
-  /// não decide o corte.
-  Mes _marcado(Mes d) {
+  /// marca ([marcarAoCarregar]) e grava, se [gravar] e o mês já tem arquivo
+  /// (sem arquivo, só em memória; numa mutação, a gravação dela leva o
+  /// marcador). Um mês anterior ilegível não decide o corte.
+  Mes _marcado(Mes d, {bool gravar = true}) {
     if (d.fechado || d.metodo != null) return d;
     String? corte;
     for (final m in repo.listarMeses()) {
@@ -84,8 +84,17 @@ class ApuracaoLocal {
       }
     }
     if (!usaCustoMedio(d, corte)) return d;
-    marcarCustoMedio(d);
-    if (repo.existeMes(d.mes)) {
+    final ant = _mesAnterior(d.mes);
+    Mes? anterior;
+    if (repo.existeMes(ant)) {
+      try {
+        anterior = repo.carregar(ant);
+      } catch (e) {
+        if (!_erroDeLeitura(e)) rethrow;
+      }
+    }
+    marcarAoCarregar(d, anterior);
+    if (gravar && repo.existeMes(d.mes)) {
       repo.salvar(d);
       _gravou();
     }
@@ -98,9 +107,11 @@ class ApuracaoLocal {
       return d;
     }
     final copia = Mes.fromJson(d.toJson());
-    marcarCustoMedio(copia);
+    marcarAoCarregar(copia, meses[_mesAnterior(d.mes)]);
     return copia;
   }
+
+  String _mesAnterior(String mes) => somarDias('$mes-01', -1).substring(0, 7);
 
   DadosPlanilha _dadosAmigo(String email) {
     final a = amigoAtual?.call();
@@ -242,7 +253,7 @@ class ApuracaoLocal {
   Mes _mesEditavel(String mes) {
     final d = _lerMes(mes);
     if (d.fechado) throw ErroValidacao(_mesFechado);
-    return _marcado(d);
+    return _marcado(d, gravar: false);
   }
 
   void _gravou() {
@@ -311,7 +322,8 @@ class ApuracaoLocal {
 
   Future<VisaoMes> excluirCompra(String mes, String loteId) async {
     final d = _mesEditavel(mes);
-    _acharLote(d, loteId);
+    final msg = erroExclusaoLote(_acharLote(d, loteId), d);
+    if (msg != null) throw ErroValidacao(msg);
     d.lotes = [
       for (final l in d.lotes)
         if (l.id != loteId) l,

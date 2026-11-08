@@ -108,10 +108,16 @@ String registrarVendaRetroativa(
   }
   final custoMedio = d.metodo == metodoCustoMedio;
   final pos = custoMedio ? (d.posicaoInicial?[lote.ticker]) : null;
-  if (custoMedio && (pos == null || pos.qtd < venda.qtd)) {
+  if (custoMedio && pos == null) {
     throw ErroValidacao(
       'Não há posição de ${lote.ticker} no início de ${fmtMes(d.mes)} '
       'para essa venda.',
+    );
+  }
+  if (pos != null && pos.qtd < venda.qtd) {
+    throw ErroValidacao(
+      'Quantidade maior que a posição de ${lote.ticker} no início de '
+      '${fmtMes(d.mes)} (${pos.qtd}).',
     );
   }
   final dm = repo.carregar(mes);
