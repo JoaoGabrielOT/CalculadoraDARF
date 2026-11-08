@@ -465,8 +465,7 @@ void _confirmacao() {
           isA<ErroValidacao>().having(
             (e) => e.mensagem,
             'mensagem',
-            'A venda em várias compras vale só para o mês aberto; para mês '
-                'anterior, venda uma compra de cada vez.',
+            'A venda só pode ser registrada no mês aberto (2026-10).',
           ),
         ),
       );
@@ -501,7 +500,8 @@ void _confirmacao() {
           Meta(
             id: 'm1',
             ticker: 'PETR4',
-            tipo: 'stop',
+            tipo: 'Ação',
+            gatilho: 'stop',
             loteId: 'B',
             qtd: 60,
             criadaEm: '2026-10-10',
@@ -521,6 +521,28 @@ void _confirmacao() {
         avisoMetasReservadas(repo, cfg, d, [ItemAlocacao(d.lotes[0], 100)]),
         isNull,
       );
+    });
+
+    test('aviso: rótulo alvo, limite exato e mesma compra repetida', () {
+      final cfg = Config(
+        metas: [
+          Meta(
+            id: 'm1',
+            ticker: 'PETR4',
+            tipo: 'Ação',
+            loteId: 'B',
+            qtd: 60,
+            criadaEm: '2026-10-10',
+          ),
+        ],
+      );
+      final d = repo.carregar(mes);
+      final b = d.lotes[1];
+      String? av(List<ItemAlocacao> l) => avisoMetasReservadas(repo, cfg, d, l);
+      expect(av([ItemAlocacao(b, 40)]), isNull);
+      expect(av([ItemAlocacao(b, 41)]), contains('(meta alvo de 60)'));
+      expect(av([ItemAlocacao(b, 25), ItemAlocacao(b, 25)]), isNotNull);
+      expect(av([ItemAlocacao(b, 20), ItemAlocacao(b, 20)]), isNull);
     });
 
     test('mês fechado, data futura e quantidade zero recusam', () {

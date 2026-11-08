@@ -350,12 +350,7 @@ class ApuracaoLocal {
     }
     final livre =
         restante(lote) -
-        reservado(
-          repo,
-          lerConfigParaGravar(repo),
-          lote.id,
-          meses: _carregarTodos(),
-        );
+        reservado(repo, repo.lerConfig(), lote.id, meses: _carregarTodos());
     if (venda.qtd > livre) {
       throw ErroValidacao(
         'Há metas de venda ativas nessa compra. Quantidade livre: '
@@ -459,7 +454,7 @@ class ApuracaoLocal {
     final p = previa(d, itens, v.preco, v.data);
     final aviso = avisoMetasReservadas(
       repo,
-      lerConfigParaGravar(repo),
+      repo.lerConfig(),
       d,
       itens,
       meses: _carregarTodos(),

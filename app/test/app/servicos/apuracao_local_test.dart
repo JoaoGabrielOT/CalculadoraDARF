@@ -698,7 +698,8 @@ void main() {
             Meta(
               id: 'm1',
               ticker: 'PETR4',
-              tipo: 'stop',
+              tipo: 'Ação',
+              gatilho: 'stop',
               loteId: 'B',
               qtd: 60,
               criadaEm: '2026-10-10',
@@ -710,6 +711,13 @@ void main() {
       final p = await servicos.previaVenda('2026-10', venda(150));
       expect(p.aviso, contains('metas ativas em PETR4, compra de 02/10/2026'));
       expect(p.aviso, contains('meta stop de 60'));
+    });
+
+    test('previaVenda não falha com config.json ilegível', () async {
+      disco.gravar('config.json', '{ruim');
+      final p = await servicos.previaVenda('2026-10', venda(150));
+      expect(p.aviso, isNull);
+      expect(p.linhas, isNotEmpty);
     });
 
     test('editarVenda recusa linha de grupo com várias compras', () async {

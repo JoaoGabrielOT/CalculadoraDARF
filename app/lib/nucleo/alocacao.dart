@@ -253,10 +253,7 @@ List<ItemAlocacao> alocarPedido(Mes d, String mes, NovaVendaQtd v) {
   }
   if (!valida) throw ErroValidacao('Selecione a data da venda.');
   if (data.substring(0, 7) != mes) {
-    throw ErroValidacao(
-      'A venda em várias compras vale só para o mês aberto; para mês '
-      'anterior, venda uma compra de cada vez.',
-    );
+    throw ErroValidacao('A venda só pode ser registrada no mês aberto ($mes).');
   }
   if (data.compareTo(ambiente.hoje()) > 0) {
     throw ErroValidacao('Data da venda inválida para essa compra.');
@@ -372,18 +369,25 @@ String? avisoMetasReservadas(
 }) {
   final todos = meses ?? repo.carregarMeses();
   final r = raizes(todos);
-  final partes = <String>[];
+  final usado = <String, int>{};
+  final lotes = <String, Lote>{};
   for (final i in itens) {
-    final res = reservado(repo, cfg, i.lote.id, meses: todos);
-    if (res <= 0 || i.qtd <= restante(i.lote) - res) continue;
-    final raiz = r[i.lote.id] ?? i.lote.id;
+    usado[i.lote.id] = (usado[i.lote.id] ?? 0) + i.qtd;
+    lotes[i.lote.id] = i.lote;
+  }
+  final partes = <String>[];
+  for (final e in usado.entries) {
+    final lote = lotes[e.key]!;
+    final res = reservado(repo, cfg, lote.id, meses: todos);
+    if (res <= 0 || e.value <= restante(lote) - res) continue;
+    final raiz = r[lote.id] ?? lote.id;
     final metas = [
       for (final m in metasAtivas(cfg))
         if ((r[m.loteId] ?? m.loteId) == raiz)
-          'meta ${m.tipo.isEmpty ? 'de venda' : m.tipo} de ${m.qtd}',
+          'meta ${m.gatilho == 'stop' ? 'stop' : 'alvo'} de ${m.qtd}',
     ];
     partes.add(
-      '${i.lote.ticker}, compra de ${fmtData(i.lote.dataCompra)} '
+      '${lote.ticker}, compra de ${fmtData(lote.dataCompra)} '
       '(${metas.join(', ')})',
     );
   }
