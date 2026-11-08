@@ -9,6 +9,8 @@ import 'constantes.dart';
 import 'datas.dart';
 import 'erros.dart';
 import 'modelos/lote.dart';
+import 'metas/cadeia.dart';
+import 'modelos/config.dart';
 import 'modelos/mes.dart';
 import 'repositorio.dart';
 
@@ -132,6 +134,7 @@ class PreviaVenda {
     required this.fiscal,
     required this.qtdDt,
     required this.qtdComum,
+    this.aviso,
   });
 
   final List<LinhaPrevia> linhas;
@@ -139,6 +142,10 @@ class PreviaVenda {
   final double fiscal;
   final int qtdDt;
   final int qtdComum;
+
+  /// Aviso (sem bloquear) quando a venda usa quantidade reservada por metas
+  /// ativas; preenchido pelo serviço, nulo se não há.
+  final String? aviso;
 }
 
 PreviaVenda previa(
@@ -233,6 +240,7 @@ List<(Lote, Venda)> _vendasDoGrupo(Mes d, String grupo) => [
 /// Valida o pedido contra [d] (data, quantidade, preço, seleção) e devolve a
 /// alocação. Não altera [d].
 List<ItemAlocacao> alocarPedido(Mes d, String mes, NovaVendaQtd v) {
+  if (v.grupo.trim().isEmpty) throw ErroValidacao('Venda sem identificador.');
   if (d.fechado) throw ErroValidacao('O mês está fechado.');
   final data = v.data;
   var valida = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(data);
@@ -244,14 +252,20 @@ List<ItemAlocacao> alocarPedido(Mes d, String mes, NovaVendaQtd v) {
     }
   }
   if (!valida) throw ErroValidacao('Selecione a data da venda.');
-  if (data.compareTo(ambiente.hoje()) > 0 || data.substring(0, 7) != mes) {
+  if (data.substring(0, 7) != mes) {
+    throw ErroValidacao(
+      'A venda em várias compras vale só para o mês aberto; para mês '
+      'anterior, venda uma compra de cada vez.',
+    );
+  }
+  if (data.compareTo(ambiente.hoje()) > 0) {
     throw ErroValidacao('Data da venda inválida para essa compra.');
   }
   if (v.qtd <= 0) throw ErroValidacao('Quantidade inválida.');
   if (!(v.preco > 0) || v.preco.isInfinite) {
     throw ErroValidacao('Preço inválido.');
   }
-  final el = comprasElegiveis(d, v.ticker, data);
+  final el = comprasElegiveis(d, v.ticker.trim().toUpperCase(), data);
   final sel = v.selecao;
   if (sel == null) return alocarAutomatico(el, v.qtd, data);
   final porId = {for (final l in el) l.id: l};
@@ -302,7 +316,10 @@ void _acrescentar(
   NovaVendaQtd v,
 ) {
   final d = repo.carregar(mes);
-  if (_vendasDoGrupo(d, v.grupo).isNotEmpty) {
+  if (v.grupo.trim().isEmpty) throw ErroValidacao('Venda sem identificador.');
+  // grupo excluído depois (reenvio tardio) também conta: não ressuscita
+  if (_vendasDoGrupo(d, v.grupo).isNotEmpty ||
+      d.excluidos.keys.any((i) => grupoDe(i) == v.grupo)) {
     return (mes: d, duplicada: true);
   }
   final itens = alocarPedido(d, mes, v);
@@ -316,6 +333,7 @@ void _acrescentar(
 /// novas usam sufixos que o grupo nunca usou.
 Mes editarGrupo(Repositorio repo, String mes, String grupo, NovaVendaQtd v) {
   final d = repo.carregar(mes);
+  if (grupo.trim().isEmpty) throw ErroValidacao('Venda sem identificador.');
   final antigas = _vendasDoGrupo(d, grupo);
   if (antigas.isEmpty) throw ErroValidacao('Venda não encontrada.');
   final idsAntigos = {for (final (_, x) in antigas) x.id};
@@ -341,4 +359,35 @@ Mes editarGrupo(Repositorio repo, String mes, String grupo, NovaVendaQtd v) {
   _acrescentar(d, itens, novo, usados);
   repo.salvar(d);
   return d;
+}
+
+/// Aviso se a alocação [itens] consome quantidade reservada por metas ativas
+/// (stop, alvo, OCO), ou nulo. Não bloqueia a venda.
+String? avisoMetasReservadas(
+  Repositorio repo,
+  Config cfg,
+  Mes d,
+  List<ItemAlocacao> itens, {
+  Map<String, Mes>? meses,
+}) {
+  final todos = meses ?? repo.carregarMeses();
+  final r = raizes(todos);
+  final partes = <String>[];
+  for (final i in itens) {
+    final res = reservado(repo, cfg, i.lote.id, meses: todos);
+    if (res <= 0 || i.qtd <= restante(i.lote) - res) continue;
+    final raiz = r[i.lote.id] ?? i.lote.id;
+    final metas = [
+      for (final m in metasAtivas(cfg))
+        if ((r[m.loteId] ?? m.loteId) == raiz)
+          'meta ${m.tipo.isEmpty ? 'de venda' : m.tipo} de ${m.qtd}',
+    ];
+    partes.add(
+      '${i.lote.ticker}, compra de ${fmtData(i.lote.dataCompra)} '
+      '(${metas.join(', ')})',
+    );
+  }
+  if (partes.isEmpty) return null;
+  return 'Esta venda usa quantidade reservada por metas ativas em '
+      '${partes.join('; ')}; a meta ficará inválida se o saldo não bastar.';
 }

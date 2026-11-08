@@ -406,6 +406,18 @@ class ApuracaoLocal {
   Future<VisaoMes> editarVenda(String mes, String vendaId, NovaVenda v) async {
     final d = _mesEditavel(mes);
     final (lote, venda) = _acharVenda(d, vendaId);
+    final grupo = grupoDe(vendaId);
+    final linhas = [
+      for (final l in d.lotes)
+        for (final x in l.vendas)
+          if (grupoDe(x.id) == grupo) x,
+    ];
+    if (linhas.length > 1) {
+      throw ErroValidacao(
+        'Essa venda foi dividida em várias compras. Edite a venda inteira, '
+        'não uma linha só.',
+      );
+    }
     final r = _validarVenda(mes, semVenda(lote, vendaId), v, edicao: true);
     venda
       ..data = r.data
@@ -444,7 +456,22 @@ class ApuracaoLocal {
   Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) async {
     final d = _lerMes(mes);
     final itens = alocarPedido(d, mes, v);
-    return previa(d, itens, v.preco, v.data);
+    final p = previa(d, itens, v.preco, v.data);
+    final aviso = avisoMetasReservadas(
+      repo,
+      lerConfigParaGravar(repo),
+      d,
+      itens,
+      meses: _carregarTodos(),
+    );
+    return PreviaVenda(
+      linhas: p.linhas,
+      gerencial: p.gerencial,
+      fiscal: p.fiscal,
+      qtdDt: p.qtdDt,
+      qtdComum: p.qtdComum,
+      aviso: aviso,
+    );
   }
 
   Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v) async {

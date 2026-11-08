@@ -691,6 +691,40 @@ void main() {
       expect(await mudancas(), 2);
     });
 
+    test('previaVenda avisa de metas ativas sem bloquear', () async {
+      repo.gravarConfig(
+        Config(
+          metas: [
+            Meta(
+              id: 'm1',
+              ticker: 'PETR4',
+              tipo: 'stop',
+              loteId: 'B',
+              qtd: 60,
+              criadaEm: '2026-10-10',
+            ),
+          ],
+        ),
+      );
+      expect((await servicos.previaVenda('2026-10', venda(40))).aviso, isNull);
+      final p = await servicos.previaVenda('2026-10', venda(150));
+      expect(p.aviso, contains('metas ativas em PETR4, compra de 02/10/2026'));
+      expect(p.aviso, contains('meta stop de 60'));
+    });
+
+    test('editarVenda recusa linha de grupo com várias compras', () async {
+      await servicos.registrarVendaQtd('2026-10', venda(150));
+      await espera(
+        servicos.editarVenda(
+          '2026-10',
+          'g.1',
+          const NovaVenda(loteId: 'B', data: '2026-10-20', qtd: 10, preco: 15),
+        ),
+        'Essa venda foi dividida em várias compras. Edite a venda inteira, '
+        'não uma linha só.',
+      );
+    });
+
     test('excluir uma linha do grupo apaga o grupo inteiro', () async {
       await servicos.registrarVendaQtd('2026-10', venda(150));
       final v = await servicos.excluirVenda('2026-10', 'g.1');

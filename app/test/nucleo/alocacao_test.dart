@@ -5,6 +5,8 @@ import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/erros.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
+import 'package:calculadoradarf/nucleo/modelos/config.dart';
+import 'package:calculadoradarf/nucleo/modelos/meta.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
 import 'package:calculadoradarf/nucleo/repositorio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -441,6 +443,83 @@ void _confirmacao() {
           venda(10, grupo: 'h', selecao: [('Z', 10)]),
         ),
         throwsA(isA<ErroValidacao>()),
+      );
+    });
+
+    test('grupo excluído depois não ressuscita no reenvio', () {
+      confirmarVenda(repo, mes, venda(150));
+      final d = repo.carregar(mes);
+      for (final l in d.lotes) {
+        l.vendas = [];
+      }
+      repo.salvar(d);
+      final r = confirmarVenda(repo, mes, venda(150));
+      expect(r.duplicada, isTrue);
+      expect(vendaIds(), isEmpty);
+    });
+
+    test('data de outro mês tem mensagem própria', () {
+      expect(
+        () => confirmarVenda(repo, mes, venda(10, data: '2026-09-20')),
+        throwsA(
+          isA<ErroValidacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            'A venda em várias compras vale só para o mês aberto; para mês '
+                'anterior, venda uma compra de cada vez.',
+          ),
+        ),
+      );
+    });
+
+    test('ticker é normalizado e grupo vazio é recusado', () {
+      confirmarVenda(
+        repo,
+        mes,
+        const NovaVendaQtd(
+          ticker: ' petr4 ',
+          data: '2026-10-20',
+          qtd: 10,
+          preco: 15,
+          grupo: 'g',
+        ),
+      );
+      expect(vendaIds(), ['g']);
+      expect(
+        () => confirmarVenda(repo, mes, venda(10, grupo: ' ')),
+        throwsA(isA<ErroValidacao>()),
+      );
+      expect(
+        () => editarGrupo(repo, mes, ' ', venda(10)),
+        throwsA(isA<ErroValidacao>()),
+      );
+    });
+
+    test('aviso de metas reservadas lista compra e meta, sem bloquear', () {
+      final cfg = Config(
+        metas: [
+          Meta(
+            id: 'm1',
+            ticker: 'PETR4',
+            tipo: 'stop',
+            loteId: 'B',
+            qtd: 60,
+            criadaEm: '2026-10-10',
+          ),
+        ],
+      );
+      final d = repo.carregar(mes);
+      final b = d.lotes[1];
+      expect(avisoMetasReservadas(repo, cfg, d, [ItemAlocacao(b, 40)]), isNull);
+      expect(
+        avisoMetasReservadas(repo, cfg, d, [ItemAlocacao(b, 50)]),
+        'Esta venda usa quantidade reservada por metas ativas em PETR4, '
+        'compra de 02/10/2026 (meta stop de 60); a meta ficará inválida se '
+        'o saldo não bastar.',
+      );
+      expect(
+        avisoMetasReservadas(repo, cfg, d, [ItemAlocacao(d.lotes[0], 100)]),
+        isNull,
       );
     });
 
