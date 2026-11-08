@@ -528,6 +528,25 @@ class ServicosIsolate implements ServicosApp {
       _chamar((s) => s.excluirVenda(mes, vendaId));
 
   @override
+  Future<String> novoGrupoVenda() => _chamar((s) => s.novoGrupoVenda());
+
+  @override
+  Future<List<Lote>> comprasElegiveis(String mes, String ticker, String data) =>
+      _chamar((s) => s.comprasElegiveis(mes, ticker, data));
+
+  @override
+  Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) =>
+      _chamar((s) => s.previaVenda(mes, v));
+
+  @override
+  Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v) =>
+      _chamar((s) => s.registrarVendaQtd(mes, v));
+
+  @override
+  Future<VisaoMes> editarGrupoVenda(String mes, String grupo, NovaVendaQtd v) =>
+      _chamar((s) => s.editarGrupoVenda(mes, grupo, v));
+
+  @override
   Future<Set<String>> mesesSemVendaRetroativa(String mesAtual) =>
       _chamar((s) => s.mesesSemVendaRetroativa(mesAtual));
 

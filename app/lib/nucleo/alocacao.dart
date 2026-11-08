@@ -2,6 +2,7 @@
 // compra foi consumida; o resultado fiscal vem sempre de `apurar`. Compras do
 // mesmo dia são day trade e entram primeiro, travadas (regra da Receita).
 
+import 'ambiente.dart';
 import 'apuracao.dart';
 import 'compat/ordenacao.dart';
 import 'constantes.dart';
@@ -9,6 +10,7 @@ import 'datas.dart';
 import 'erros.dart';
 import 'modelos/lote.dart';
 import 'modelos/mes.dart';
+import 'repositorio.dart';
 
 /// Parte de uma venda tirada de uma compra. [travado]: compra do mesmo dia,
 /// parte obrigatória de day trade.
@@ -42,6 +44,7 @@ List<ItemAlocacao> alocarAutomatico(
   int qtd,
   String dataVenda,
 ) {
+  if (qtd <= 0) throw ErroValidacao('Quantidade inválida.');
   final disp = elegiveis.fold(0, (s, l) => s + restante(l));
   if (qtd > disp) {
     final ticker = elegiveis.isEmpty ? '' : elegiveis.first.ticker;
@@ -80,9 +83,10 @@ String? validarManual(
   final porId = {for (final l in elegiveis) l.id: l};
   final usado = <String, int>{};
   for (final i in selecao) {
-    if (!porId.containsKey(i.lote.id) || i.qtd < 0) {
+    if (!porId.containsKey(i.lote.id)) {
       return 'Compra fora das disponíveis nessa data.';
     }
+    if (i.qtd <= 0) return 'Quantidade inválida em uma das compras escolhidas.';
     usado[i.lote.id] = (usado[i.lote.id] ?? 0) + i.qtd;
   }
   for (final e in usado.entries) {
@@ -116,7 +120,9 @@ class LinhaPrevia {
   final double resultadoGerencial;
 }
 
-/// Prévia da venda: [gerencial] depende da alocação; [fiscal] é a variação do
+/// Prévia da venda: [gerencial] depende da alocação; usa a taxa da B3 de swing
+/// no custo efetivo e ignora a corretagem da venda (serve para comparar
+/// alocações, não para o imposto); [fiscal] é a variação do
 /// lucro líquido da apuração do mês e não depende de qual compra se escolheu
 /// além do regime (day trade ou comum).
 class PreviaVenda {
@@ -196,3 +202,143 @@ final _reGrupo = RegExp(r'^(.+)\.(\d+)$');
 /// Id do grupo de uma venda: o prefixo antes de `.k`, senão o próprio id.
 String grupoDe(String vendaId) =>
     _reGrupo.firstMatch(vendaId)?.group(1) ?? vendaId;
+
+/// Pedido de venda por quantidade. [grupo] é o id criado quando o formulário
+/// abre (chave de idempotência); [selecao] nulo = alocação automática.
+class NovaVendaQtd {
+  const NovaVendaQtd({
+    required this.ticker,
+    required this.data,
+    required this.qtd,
+    required this.preco,
+    required this.grupo,
+    this.selecao,
+  });
+
+  final String ticker;
+  final String data;
+  final int qtd;
+  final double preco;
+  final String grupo;
+  final List<(String loteId, int qtd)>? selecao;
+}
+
+/// Vendas do grupo [grupo] em [d], com a compra de cada uma.
+List<(Lote, Venda)> _vendasDoGrupo(Mes d, String grupo) => [
+  for (final l in d.lotes)
+    for (final v in l.vendas)
+      if (grupoDe(v.id) == grupo) (l, v),
+];
+
+/// Valida o pedido contra [d] (data, quantidade, preço, seleção) e devolve a
+/// alocação. Não altera [d].
+List<ItemAlocacao> alocarPedido(Mes d, String mes, NovaVendaQtd v) {
+  if (d.fechado) throw ErroValidacao('O mês está fechado.');
+  final data = v.data;
+  var valida = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(data);
+  if (valida) {
+    try {
+      somarDias(data, 0);
+    } on FormatException {
+      valida = false;
+    }
+  }
+  if (!valida) throw ErroValidacao('Selecione a data da venda.');
+  if (data.compareTo(ambiente.hoje()) > 0 || data.substring(0, 7) != mes) {
+    throw ErroValidacao('Data da venda inválida para essa compra.');
+  }
+  if (v.qtd <= 0) throw ErroValidacao('Quantidade inválida.');
+  if (!(v.preco > 0) || v.preco.isInfinite) {
+    throw ErroValidacao('Preço inválido.');
+  }
+  final el = comprasElegiveis(d, v.ticker, data);
+  final sel = v.selecao;
+  if (sel == null) return alocarAutomatico(el, v.qtd, data);
+  final porId = {for (final l in el) l.id: l};
+  final itens = <ItemAlocacao>[];
+  for (final (id, q) in sel) {
+    final l = porId[id];
+    if (l == null) {
+      throw ErroValidacao('Compra fora das disponíveis nessa data.');
+    }
+    itens.add(ItemAlocacao(l, q, travado: _doDia(l, data)));
+  }
+  final erro = validarManual(el, itens, v.qtd, data);
+  if (erro != null) throw ErroValidacao(erro);
+  return itens;
+}
+
+/// Acrescenta as linhas em [d]. Uma compra: id [NovaVendaQtd.grupo] (se não
+/// estiver em [usados]); várias: `grupo.k` com k fora de [usados]. Nascem com
+/// `mod` 0; `salvar` carimba todas com a mesma hora.
+void _acrescentar(
+  Mes d,
+  List<ItemAlocacao> itens,
+  NovaVendaQtd v,
+  Set<String> usados,
+) {
+  final vendas = montarVendas(itens, v.grupo, v.data, v.preco, 0);
+  final simples = itens.length == 1 && !usados.contains(v.grupo);
+  var k = 0;
+  for (final (i, item) in itens.indexed) {
+    if (!simples) {
+      do {
+        k++;
+      } while (usados.contains('${v.grupo}.$k'));
+      vendas[i].id = '${v.grupo}.$k';
+    } else {
+      vendas[i].id = v.grupo;
+    }
+    d.lotes.firstWhere((l) => l.id == item.lote.id).vendas.add(vendas[i]);
+  }
+}
+
+/// Confirma a venda: relê o mês do disco, devolve `duplicada` sem gravar se o
+/// grupo já existe (confirmação repetida) e senão valida contra o disco,
+/// acrescenta todas as linhas e grava uma única vez.
+({Mes mes, bool duplicada}) confirmarVenda(
+  Repositorio repo,
+  String mes,
+  NovaVendaQtd v,
+) {
+  final d = repo.carregar(mes);
+  if (_vendasDoGrupo(d, v.grupo).isNotEmpty) {
+    return (mes: d, duplicada: true);
+  }
+  final itens = alocarPedido(d, mes, v);
+  _acrescentar(d, itens, v, {...d.excluidos.keys});
+  repo.salvar(d);
+  return (mes: d, duplicada: false);
+}
+
+/// Refaz o grupo [grupo]: libera a quantidade dele, aloca de novo e grava uma
+/// vez. As linhas que somem vão para `excluidos` (carimbo de `salvar`) e as
+/// novas usam sufixos que o grupo nunca usou.
+Mes editarGrupo(Repositorio repo, String mes, String grupo, NovaVendaQtd v) {
+  final d = repo.carregar(mes);
+  final antigas = _vendasDoGrupo(d, grupo);
+  if (antigas.isEmpty) throw ErroValidacao('Venda não encontrada.');
+  final idsAntigos = {for (final (_, x) in antigas) x.id};
+  for (final (l, _) in antigas) {
+    l.vendas = [
+      for (final x in l.vendas)
+        if (!idsAntigos.contains(x.id)) x,
+    ];
+  }
+  final novo = NovaVendaQtd(
+    ticker: v.ticker,
+    data: v.data,
+    qtd: v.qtd,
+    preco: v.preco,
+    grupo: grupo,
+    selecao: v.selecao,
+  );
+  final itens = alocarPedido(d, mes, novo);
+  // o id simples do grupo pode voltar (é a mesma venda) se não foi excluído
+  final usados = {...d.excluidos.keys, ...idsAntigos}
+    ..remove(grupo)
+    ..addAll(d.excluidos.keys.where((i) => i == grupo));
+  _acrescentar(d, itens, novo, usados);
+  repo.salvar(d);
+  return d;
+}

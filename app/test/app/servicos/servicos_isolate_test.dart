@@ -82,6 +82,22 @@ void main() {
     expect(vr.aviso, '2026-10-02|4|5.0');
     expect((await s.editarVenda('2026-10', 'V1', venda)).mes, '2026-10/V1/4');
     expect((await s.excluirVenda('2026-10', 'V2')).mes, '2026-10/V2');
+    const vq = NovaVendaQtd(
+      ticker: 'PETR4',
+      data: '2026-10-02',
+      qtd: 4,
+      preco: 5,
+      grupo: 'g',
+      selecao: [('L1', 4)],
+    );
+    expect(await s.novoGrupoVenda(), 'grupo');
+    expect(await s.comprasElegiveis('2026-10', 'PETR4', '2026-10-02'), isEmpty);
+    expect((await s.previaVenda('2026-10', vq)).linhas, isEmpty);
+    expect(
+      (await s.registrarVendaQtd('2026-10', vq)).aviso,
+      'g|2026-10-02|4|5.0',
+    );
+    expect((await s.editarGrupoVenda('2026-10', 'g', vq)).mes, '2026-10/g/4');
     expect(await s.mesesSemVendaRetroativa('2026-07'), {'2026-07'});
     expect(await s.reservadoEmMetas('abcd'), 4);
     expect(

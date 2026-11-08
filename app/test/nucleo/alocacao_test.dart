@@ -1,9 +1,12 @@
 import 'package:calculadoradarf/nucleo/alocacao.dart';
+import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/apuracao.dart';
+import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/erros.dart';
 import 'package:calculadoradarf/nucleo/modelos/lote.dart';
 import 'package:calculadoradarf/nucleo/modelos/mes.dart';
+import 'package:calculadoradarf/nucleo/repositorio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Lote _lote(
@@ -26,6 +29,18 @@ Lote _lote(
 List<(String, int, bool)> _resumo(List<ItemAlocacao> l) => [
   for (final i in l) (i.lote.id, i.qtd, i.travado),
 ];
+
+class _Disco extends ArmazenamentoMemoria {
+  int gravacoes = 0;
+  bool falhar = false;
+
+  @override
+  void gravar(String nome, String conteudo) {
+    if (falhar) throw StateError('disco cheio');
+    gravacoes++;
+    super.gravar(nome, conteudo);
+  }
+}
 
 void main() {
   final a = _lote('A', '2026-01-05', 100, 12.0);
@@ -67,6 +82,21 @@ void main() {
       final r = alocarAutomatico([a, c], 130, '2026-02-10');
       expect(_resumo(r), [('C', 100, false), ('A', 30, false)]);
       expect(r.fold(0, (s, i) => s + i.qtd), 130);
+    });
+
+    test('quantidade zero ou negativa lança', () {
+      for (final q in [0, -5]) {
+        expect(
+          () => alocarAutomatico([a, c], q, '2026-02-10'),
+          throwsA(
+            isA<ErroValidacao>().having(
+              (e) => e.mensagem,
+              'mensagem',
+              'Quantidade inválida.',
+            ),
+          ),
+        );
+      }
     });
 
     test('quantidade insuficiente lança', () {
@@ -178,6 +208,14 @@ void main() {
       );
     });
 
+    test('item com quantidade zero não passa', () {
+      final sel = [ItemAlocacao(b, 100), ItemAlocacao(a, 0)];
+      expect(
+        validarManual(el, sel, 100, dv),
+        'Quantidade inválida em uma das compras escolhidas.',
+      );
+    });
+
     test('quantidade negativa não passa', () {
       final sel = [
         ItemAlocacao(b, 110),
@@ -278,6 +316,197 @@ void main() {
           1e-9,
         ),
       );
+    });
+  });
+
+  group('confirmação e edição de grupo', _confirmacao);
+}
+
+void _confirmacao() {
+  late _Disco disco;
+  late Repositorio repo;
+  const mes = '2026-10';
+
+  NovaVendaQtd venda(
+    int qtd, {
+    String grupo = 'g',
+    List<(String, int)>? selecao,
+    String data = '2026-10-20',
+  }) => NovaVendaQtd(
+    ticker: 'PETR4',
+    data: data,
+    qtd: qtd,
+    preco: 15.0,
+    grupo: grupo,
+    selecao: selecao,
+  );
+
+  List<String> vendaIds() => [
+    for (final l in repo.carregar(mes).lotes)
+      for (final v in l.vendas) v.id,
+  ];
+
+  setUp(() {
+    ambiente = Ambiente.fixo();
+    disco = _Disco();
+    repo = Repositorio(disco);
+    repo.salvar(
+      Mes(
+        mes: mes,
+        lotes: [
+          _lote('A', '2026-10-01', 100, 12.0),
+          _lote('B', '2026-10-02', 100, 10.0),
+          _lote('C', '2026-10-03', 100, 11.0),
+        ],
+      ),
+    );
+    disco.gravacoes = 0;
+  });
+
+  group('confirmarVenda', () {
+    test('automático grava uma vez e dá ids de grupo', () {
+      final r = confirmarVenda(repo, mes, venda(150));
+      expect(r.duplicada, isFalse);
+      expect(disco.gravacoes, 1);
+      final d = repo.carregar(mes);
+      expect(vendaIds(), ['g.1', 'g.2']);
+      expect(d.lotes[1].vendas.single.qtd, 100);
+      expect(d.lotes[2].vendas.single.qtd, 50);
+      final mods = {
+        for (final l in d.lotes)
+          for (final v in l.vendas) v.mod,
+      };
+      expect(mods, {ambiente.agora()});
+    });
+
+    test('venda de uma compra só tem id simples', () {
+      confirmarVenda(repo, mes, venda(40));
+      expect(vendaIds(), ['g']);
+    });
+
+    test('confirmação dupla grava uma vez', () {
+      confirmarVenda(repo, mes, venda(150));
+      final r = confirmarVenda(repo, mes, venda(150));
+      expect(r.duplicada, isTrue);
+      expect(disco.gravacoes, 1);
+      expect(vendaIds(), ['g.1', 'g.2']);
+    });
+
+    test('duplicada também vale para venda simples', () {
+      confirmarVenda(repo, mes, venda(40));
+      expect(confirmarVenda(repo, mes, venda(40)).duplicada, isTrue);
+      expect(disco.gravacoes, 1);
+    });
+
+    test('falha de gravação não deixa linhas parciais', () {
+      disco.falhar = true;
+      expect(() => confirmarVenda(repo, mes, venda(150)), throwsStateError);
+      disco.falhar = false;
+      expect(vendaIds(), isEmpty);
+    });
+
+    test('valida contra o mês recarregado', () {
+      confirmarVenda(repo, mes, venda(250, grupo: 'g1'));
+      expect(
+        () => confirmarVenda(repo, mes, venda(100, grupo: 'g2')),
+        throwsA(
+          isA<ErroValidacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            'Quantidade indisponível: só há 50 ações de PETR4 nessa data.',
+          ),
+        ),
+      );
+      expect(vendaIds().where((i) => i.startsWith('g2')), isEmpty);
+    });
+
+    test('seleção manual vale e é validada', () {
+      confirmarVenda(repo, mes, venda(60, selecao: [('A', 20), ('C', 40)]));
+      final d = repo.carregar(mes);
+      expect(d.lotes[0].vendas.single.qtd, 20);
+      expect(d.lotes[2].vendas.single.qtd, 40);
+      expect(vendaIds(), ['g.1', 'g.2']);
+      expect(
+        () => confirmarVenda(
+          repo,
+          mes,
+          venda(10, grupo: 'h', selecao: [('A', 0), ('B', 10)]),
+        ),
+        throwsA(isA<ErroValidacao>()),
+      );
+      expect(
+        () => confirmarVenda(
+          repo,
+          mes,
+          venda(10, grupo: 'h', selecao: [('Z', 10)]),
+        ),
+        throwsA(isA<ErroValidacao>()),
+      );
+    });
+
+    test('mês fechado, data futura e quantidade zero recusam', () {
+      expect(
+        () => confirmarVenda(repo, mes, venda(0)),
+        throwsA(isA<ErroValidacao>()),
+      );
+      expect(
+        () => confirmarVenda(repo, mes, venda(10, data: '2026-10-29')),
+        throwsA(isA<ErroValidacao>()),
+      );
+      repo.salvar(repo.carregar(mes)..fechado = true);
+      expect(
+        () => confirmarVenda(repo, mes, venda(10)),
+        throwsA(
+          isA<ErroValidacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            'O mês está fechado.',
+          ),
+        ),
+      );
+    });
+  });
+
+  group('editarGrupo', () {
+    test('editar grupo reusa índices novos', () {
+      confirmarVenda(repo, mes, venda(150));
+      editarGrupo(repo, mes, 'g', venda(250));
+      expect(vendaIds()..sort(), ['g.3', 'g.4', 'g.5']);
+      expect(repo.carregar(mes).excluidos.keys, containsAll(['g.1', 'g.2']));
+    });
+
+    test('editar para uma compra só volta ao id simples', () {
+      confirmarVenda(repo, mes, venda(150));
+      editarGrupo(repo, mes, 'g', venda(50));
+      expect(vendaIds(), ['g']);
+      expect(repo.carregar(mes).excluidos.keys, containsAll(['g.1', 'g.2']));
+    });
+
+    test('mantém o id simples quando continua uma compra', () {
+      confirmarVenda(repo, mes, venda(40));
+      editarGrupo(repo, mes, 'g', venda(60));
+      expect(vendaIds(), ['g']);
+      expect(repo.carregar(mes).excluidos, isEmpty);
+    });
+
+    test('libera a própria quantidade do grupo ao validar', () {
+      confirmarVenda(repo, mes, venda(300));
+      editarGrupo(repo, mes, 'g', venda(300));
+      expect(vendaIds().length, 3);
+    });
+
+    test('grupo inexistente e quantidade indisponível', () {
+      confirmarVenda(repo, mes, venda(150));
+      expect(
+        () => editarGrupo(repo, mes, 'nada', venda(10, grupo: 'nada')),
+        throwsA(isA<ErroValidacao>()),
+      );
+      final antes = disco.ler('$mes.json');
+      expect(
+        () => editarGrupo(repo, mes, 'g', venda(301)),
+        throwsA(isA<ErroValidacao>()),
+      );
+      expect(disco.ler('$mes.json'), antes);
     });
   });
 }

@@ -619,6 +619,100 @@ void main() {
     });
   });
 
+  group('venda em várias compras', () {
+    NovaVendaQtd venda(int qtd, {String grupo = 'g'}) => NovaVendaQtd(
+      ticker: 'PETR4',
+      data: '2026-10-20',
+      qtd: qtd,
+      preco: 15,
+      grupo: grupo,
+    );
+
+    setUp(() {
+      gravarMes('2026-10', [
+        compra('A', data: '2026-10-01', preco: 12),
+        compra('B', data: '2026-10-02', preco: 10),
+      ]);
+    });
+
+    Future<int> mudancas() async {
+      await Future<void>.delayed(Duration.zero);
+      return eventos.whereType<EventoDadosMudaram>().length;
+    }
+
+    test('novoGrupoVenda usa o gerador de ids', () async {
+      expect(await servicos.novoGrupoVenda(), 'id0001');
+    });
+
+    test('comprasElegiveis e previaVenda', () async {
+      final el = await servicos.comprasElegiveis(
+        '2026-10',
+        'PETR4',
+        '2026-10-20',
+      );
+      expect(el.map((l) => l.id), ['A', 'B']);
+      final p = await servicos.previaVenda('2026-10', venda(150));
+      expect(p.linhas.map((l) => l.item.qtd), [100, 50]);
+      expect(
+        repo.carregar('2026-10').lotes.every((l) => l.vendas.isEmpty),
+        isTrue,
+      );
+    });
+
+    test('registrarVendaQtd devolve a visão e dispara um evento', () async {
+      final r = await servicos.registrarVendaQtd('2026-10', venda(150));
+      expect(r.aviso, isNull);
+      final ids = [
+        for (final l in r.visao.dados.lotes)
+          for (final v in l.vendas) v.id,
+      ];
+      expect(ids, ['g.2', 'g.1']);
+      expect(await mudancas(), 1);
+      expect(await agendamentos(), 1);
+    });
+
+    test('registrarVendaQtd duplicada avisa e não grava', () async {
+      await servicos.registrarVendaQtd('2026-10', venda(150));
+      final depois = disco.ler('2026-10.json');
+      final r = await servicos.registrarVendaQtd('2026-10', venda(150));
+      expect(r.aviso, 'Essa venda já foi registrada.');
+      expect(disco.ler('2026-10.json'), depois);
+      expect(await mudancas(), 1);
+    });
+
+    test('editarGrupoVenda troca as linhas do grupo', () async {
+      await servicos.registrarVendaQtd('2026-10', venda(150));
+      final v = await servicos.editarGrupoVenda('2026-10', 'g', venda(50));
+      final ids = [
+        for (final l in v.dados.lotes)
+          for (final x in l.vendas) x.id,
+      ];
+      expect(ids, ['g']);
+      expect(await mudancas(), 2);
+    });
+
+    test('excluir uma linha do grupo apaga o grupo inteiro', () async {
+      await servicos.registrarVendaQtd('2026-10', venda(150));
+      final v = await servicos.excluirVenda('2026-10', 'g.1');
+      expect(v.dados.lotes.every((l) => l.vendas.isEmpty), isTrue);
+      expect(
+        repo.carregar('2026-10').excluidos.keys,
+        containsAll(['g.1', 'g.2']),
+      );
+    });
+
+    test('excluir venda simples não apaga outro grupo', () async {
+      await servicos.registrarVendaQtd('2026-10', venda(20, grupo: 'x'));
+      await servicos.registrarVendaQtd('2026-10', venda(30, grupo: 'x2'));
+      await servicos.excluirVenda('2026-10', 'x');
+      final ids = [
+        for (final l in repo.carregar('2026-10').lotes)
+          for (final v in l.vendas) v.id,
+      ];
+      expect(ids, ['x2']);
+    });
+  });
+
   group('mês', () {
     test('mês fechado recusa mutação', () async {
       gravarMes('2026-09', [compra('L1', data: '2026-09-01')], fechado: true);

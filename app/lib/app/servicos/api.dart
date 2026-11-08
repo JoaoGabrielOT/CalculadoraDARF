@@ -31,6 +31,11 @@ abstract interface class ServicosApp {
   Future<VendaRegistrada> registrarVenda(String mes, NovaVenda v);
   Future<VisaoMes> editarVenda(String mes, String vendaId, NovaVenda v);
   Future<VisaoMes> excluirVenda(String mes, String vendaId);
+  Future<String> novoGrupoVenda();
+  Future<List<Lote>> comprasElegiveis(String mes, String ticker, String data);
+  Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v);
+  Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v);
+  Future<VisaoMes> editarGrupoVenda(String mes, String grupo, NovaVendaQtd v);
   Future<Set<String>> mesesSemVendaRetroativa(String mesAtual);
   Future<int> reservadoEmMetas(String loteId);
   Future<PreparoFechamento> prepararFechamento(String mes);

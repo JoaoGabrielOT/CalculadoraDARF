@@ -278,6 +278,48 @@ class ServicosFalsos implements ServicosApp {
       _chamar('excluirVenda', [mes, vendaId], () => _visao(mes));
 
   @override
+  Future<String> novoGrupoVenda() =>
+      _chamar('novoGrupoVenda', [], () => 'grupo-${chamadas.length}');
+
+  @override
+  Future<List<Lote>> comprasElegiveis(String mes, String ticker, String data) =>
+      _chamar('comprasElegiveis', [mes, ticker, data], () => <Lote>[]);
+
+  @override
+  Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) => _chamar(
+    'previaVenda',
+    [mes, v.ticker, v.qtd],
+    () => const PreviaVenda(
+      linhas: [],
+      gerencial: 0,
+      fiscal: 0,
+      qtdDt: 0,
+      qtdComum: 0,
+    ),
+  );
+
+  @override
+  Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v) =>
+      _segurar(
+        _chamar('registrarVendaQtd', [
+          mes,
+          v.grupo,
+          v.data,
+          v.qtd,
+        ], () => VendaRegistrada(visao: _visao(mes))),
+        esperaGravacao,
+      );
+
+  @override
+  Future<VisaoMes> editarGrupoVenda(String mes, String grupo, NovaVendaQtd v) =>
+      _segurar(
+        _chamar('editarGrupoVenda', [mes, grupo, v.data, v.qtd], () {
+          return _visao(mes);
+        }),
+        esperaGravacao,
+      );
+
+  @override
   Future<Set<String>> mesesSemVendaRetroativa(String mesAtual) =>
       _chamar('mesesSemVendaRetroativa', [mesAtual], () => semVendaRetroativa);
 
@@ -354,11 +396,9 @@ class ServicosFalsos implements ServicosApp {
       chamadas.add('sugestoesMetas(${incluirRadar ? 'radar' : ''})');
       return fn(incluirRadar);
     }
-    return _chamar(
-      'sugestoesMetas',
-      [if (incluirRadar) 'radar'],
-      () => visaoSugestoes ?? const VisaoSugestoes(ativos: [], rodape: []),
-    );
+    return _chamar('sugestoesMetas', [
+      if (incluirRadar) 'radar',
+    ], () => visaoSugestoes ?? const VisaoSugestoes(ativos: [], rodape: []));
   }
 
   @override

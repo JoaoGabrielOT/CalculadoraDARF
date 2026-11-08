@@ -215,6 +215,25 @@ class ServicosLocais implements ServicosApp {
       _apuracao.excluirVenda(mes, vendaId);
 
   @override
+  Future<String> novoGrupoVenda() => _apuracao.novoGrupoVenda();
+
+  @override
+  Future<List<Lote>> comprasElegiveis(String mes, String ticker, String data) =>
+      _apuracao.comprasElegiveis(mes, ticker, data);
+
+  @override
+  Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) =>
+      _apuracao.previaVenda(mes, v);
+
+  @override
+  Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v) =>
+      _apuracao.registrarVendaQtd(mes, v);
+
+  @override
+  Future<VisaoMes> editarGrupoVenda(String mes, String grupo, NovaVendaQtd v) =>
+      _apuracao.editarGrupoVenda(mes, grupo, v);
+
+  @override
   Future<Set<String>> mesesSemVendaRetroativa(String mesAtual) =>
       _apuracao.mesesSemVendaRetroativa(mesAtual);
 

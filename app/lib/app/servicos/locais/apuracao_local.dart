@@ -419,13 +419,54 @@ class ApuracaoLocal {
   Future<VisaoMes> excluirVenda(String mes, String vendaId) async {
     final d = _mesEditavel(mes);
     _acharVenda(d, vendaId);
+    final grupo = grupoDe(vendaId);
     for (final l in d.lotes) {
       l.vendas = [
         for (final x in l.vendas)
-          if (x.id != vendaId) x,
+          if (grupoDe(x.id) != grupo) x,
       ];
     }
     repo.salvar(d);
+    _gravou();
+    return _visaoDe(mes, d);
+  }
+
+  // --- venda em várias compras (alocação por quantidade)
+
+  Future<String> novoGrupoVenda() async => ambiente.novoId();
+
+  Future<List<Lote>> comprasElegiveis(
+    String mes,
+    String ticker,
+    String data,
+  ) async => nc.comprasElegiveis(_lerMes(mes), ticker, data);
+
+  Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) async {
+    final d = _lerMes(mes);
+    final itens = alocarPedido(d, mes, v);
+    return previa(d, itens, v.preco, v.data);
+  }
+
+  Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v) async {
+    _lerMes(mes);
+    final r = confirmarVenda(repo, mes, v);
+    if (r.duplicada) {
+      return VendaRegistrada(
+        visao: _visaoDe(mes, r.mes),
+        aviso: 'Essa venda já foi registrada.',
+      );
+    }
+    _gravou();
+    return VendaRegistrada(visao: _visaoDe(mes, r.mes));
+  }
+
+  Future<VisaoMes> editarGrupoVenda(
+    String mes,
+    String grupo,
+    NovaVendaQtd v,
+  ) async {
+    _lerMes(mes);
+    final d = editarGrupo(repo, mes, grupo, v);
     _gravou();
     return _visaoDe(mes, d);
   }

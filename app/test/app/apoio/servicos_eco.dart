@@ -182,6 +182,40 @@ class ServicosEco implements ServicosApp {
       _visao('$mes/$vendaId');
 
   @override
+  Future<String> novoGrupoVenda() async => 'grupo';
+
+  @override
+  Future<List<Lote>> comprasElegiveis(
+    String mes,
+    String ticker,
+    String data,
+  ) async => <Lote>[];
+
+  @override
+  Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) async =>
+      const PreviaVenda(
+        linhas: [],
+        gerencial: 0,
+        fiscal: 0,
+        qtdDt: 0,
+        qtdComum: 0,
+      );
+
+  @override
+  Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v) async =>
+      VendaRegistrada(
+        visao: _visao(mes),
+        aviso: '${v.grupo}|${v.data}|${v.qtd}|${v.preco}',
+      );
+
+  @override
+  Future<VisaoMes> editarGrupoVenda(
+    String mes,
+    String grupo,
+    NovaVendaQtd v,
+  ) async => _visao('$mes/$grupo/${v.qtd}');
+
+  @override
   Future<Set<String>> mesesSemVendaRetroativa(String mesAtual) async => {
     mesAtual,
   };
