@@ -396,6 +396,27 @@ void main() {
       expect(await agendamentos(), 1);
     });
 
+    test('venda retroativa com config.json ilegível não grava', () async {
+      gravarMes('2026-10', [
+        compra('L1', data: '2026-09-01', qtd: 100, origem: 'O1'),
+      ]);
+      disco.gravar('config.json', '{ruim');
+      final antes = disco.listar().map((n) => (n, disco.ler(n))).toList();
+      await espera(
+        servicos.registrarVenda(
+          '2026-10',
+          const NovaVenda(
+            loteId: 'L1',
+            data: '2026-09-15',
+            qtd: 100,
+            preco: 12,
+          ),
+        ),
+        'O arquivo config.json está ilegível; nada foi alterado.',
+      );
+      expect(disco.listar().map((n) => (n, disco.ler(n))).toList(), antes);
+    });
+
     test(
       'venda retroativa grava no mês da venda e devolve o aviso do Python',
       () async {

@@ -10,6 +10,7 @@ import 'datas.dart';
 import 'erros.dart';
 import 'modelos/lote.dart';
 import 'metas/cadeia.dart';
+import 'metas/preco_alvo.dart';
 import 'modelos/config.dart';
 import 'modelos/mes.dart';
 import 'repositorio.dart';
@@ -253,7 +254,9 @@ List<ItemAlocacao> alocarPedido(Mes d, String mes, NovaVendaQtd v) {
   }
   if (!valida) throw ErroValidacao('Selecione a data da venda.');
   if (data.substring(0, 7) != mes) {
-    throw ErroValidacao('A venda só pode ser registrada no mês aberto ($mes).');
+    throw ErroValidacao(
+      'A venda só pode ser registrada no mês aberto (${fmtMes(mes)}).',
+    );
   }
   if (data.compareTo(ambiente.hoje()) > 0) {
     throw ErroValidacao('Data da venda inválida para essa compra.');
@@ -383,8 +386,7 @@ String? avisoMetasReservadas(
     final raiz = r[lote.id] ?? lote.id;
     final metas = [
       for (final m in metasAtivas(cfg))
-        if ((r[m.loteId] ?? m.loteId) == raiz)
-          'meta ${m.gatilho == 'stop' ? 'stop' : 'alvo'} de ${m.qtd}',
+        if ((r[m.loteId] ?? m.loteId) == raiz) 'meta ${gatilho(m)} de ${m.qtd}',
     ];
     partes.add(
       '${lote.ticker}, compra de ${fmtData(lote.dataCompra)} '

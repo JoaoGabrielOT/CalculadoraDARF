@@ -465,7 +465,7 @@ void _confirmacao() {
           isA<ErroValidacao>().having(
             (e) => e.mensagem,
             'mensagem',
-            'A venda só pode ser registrada no mês aberto (2026-10).',
+            'A venda só pode ser registrada no mês aberto (10/2026).',
           ),
         ),
       );
