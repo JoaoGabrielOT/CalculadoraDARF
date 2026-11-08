@@ -15,7 +15,7 @@ import '../apoio/dados_exemplo.dart';
 import '../apoio/fontes.dart';
 import '../apoio/servicos_falsos.dart';
 
-const _tamanhos = {'pc': Size(1366, 1150), 'celular': Size(360, 1250)};
+const _tamanhos = {'pc': Size(1366, 1500), 'celular': Size(360, 1250)};
 
 Lote _compra(String id, String data, int qtd, double preco) => Lote(
   id: id,
