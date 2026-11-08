@@ -38,6 +38,7 @@ export 'planilha/mesclagem.dart';
 export 'planilha/montagem.dart';
 export 'planilha/reconstrucao.dart';
 export 'planilha/sincronizacao.dart';
+export 'posicoes.dart';
 export 'radar.dart';
 export 'repositorio.dart';
 export 'sugestoes/patrimonio.dart';
