@@ -43,7 +43,7 @@ void main() {
       expect(find.text('Nova versão disponível'), findsOneWidget);
       expect(
         find.text(
-          'A versão 9.9.9 está disponível. Você está usando a 2.4.0.'
+          'A versão 9.9.9 está disponível. Você está usando a 2.4.1.'
           '\n\nNovidades:\nCorreções.',
         ),
         findsOneWidget,
@@ -54,7 +54,7 @@ void main() {
     testWidgets('sem notas não leva "Novidades"', (t) async {
       await _abrir(t, ServicosFalsos(), _info(notas: ''));
       expect(
-        find.text('A versão 9.9.9 está disponível. Você está usando a 2.4.0.'),
+        find.text('A versão 9.9.9 está disponível. Você está usando a 2.4.1.'),
         findsOneWidget,
       );
     });
