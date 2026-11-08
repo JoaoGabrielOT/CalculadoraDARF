@@ -154,13 +154,22 @@ class ControleMetas extends ChangeNotifier {
     agoraBr: ambiente.agoraBr(),
   );
 
-  /// Quantidade livre de uma compra para metas (0 se não há ou sumiu).
-  int livreDe(String loteId) {
-    for (final l in visao?.lotes ?? const <LoteLivre>[]) {
+  /// Quantidade livre de uma compra para metas: 0 se não há ou sumiu; nulo se
+  /// as metas ainda não foram lidas (relê uma vez antes de desistir).
+  Future<int?> _livre(String loteId) async {
+    if (visao == null) await recarregar();
+    final v = visao;
+    if (v == null) return null;
+    for (final l in v.lotes) {
       if (l.lote.id == loteId) return l.livre;
     }
     return 0;
   }
+
+  static const _semLeitura =
+      'Não foi possível ler as quantidades livres. Tente de novo.';
+  static const _semLivre =
+      'Não há quantidade livre nesta compra: cancele uma meta ativa antes.';
 
   // --- verificar agora
   bool verificando = false;
@@ -253,6 +262,19 @@ class ControleMetas extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Cenário com oportunidade e dados em dia; senão nulo.
+  CenarioMercado? _cenarioAcionavel(ResultadoAtivo r) {
+    final cen = r.cenario;
+    if (cen == null ||
+        !cen.oportunidade ||
+        r.ativo.estado != EstadoDados.ok ||
+        cen.alvo == null ||
+        cen.stop == null) {
+      return null;
+    }
+    return cen;
+  }
+
   /// "Criar meta de alvo e stop" de uma compra: usa o alvo e o stop do
   /// cenário de mercado, sobre a quantidade livre da compra, e só depois da
   /// confirmação. O stop nasce ligado (OCO) ao alvo.
@@ -262,23 +284,24 @@ class ControleMetas extends ChangeNotifier {
     CompraNaPosicao compra,
   ) async {
     if (criandoSug) return;
-    final cen = r.cenario;
-    if (cen == null ||
-        !cen.oportunidade ||
-        r.ativo.estado != EstadoDados.ok ||
-        cen.alvo == null ||
-        cen.stop == null) {
-      return;
-    }
+    final cen = _cenarioAcionavel(r);
+    if (cen == null) return;
     final alvo = cen.alvo!;
     final stop = cen.stop!;
-    final qtd = livreDe(compra.loteId);
-    if (qtd <= 0) {
+    final precoAtual = r.ativo.cotacao?.preco ?? cen.ancora;
+    if (precoAtual != null && stop >= precoAtual) {
       await avisar(
         c,
         'Meta',
-        'Não há quantidade livre nesta compra: cancele uma meta ativa antes.',
+        'O stop (${brl(stop)}) não está abaixo do preço atual '
+            '(${brl(precoAtual)}): nada foi criado.',
       );
+      return;
+    }
+    final qtd = await _livre(compra.loteId);
+    if (!c.mounted) return;
+    if (qtd == null || qtd <= 0) {
+      await avisar(c, 'Meta', qtd == null ? _semLeitura : _semLivre);
       return;
     }
     final sim = await confirmar(
@@ -289,9 +312,9 @@ class ControleMetas extends ChangeNotifier {
           'a ${brl(alvo)} e stop a ${brl(stop)}, ligadas em OCO (quando uma '
           'executar, a outra é cancelada).'
           '\n\n'
-          'A venda só é registrada quando '
-          'o preço for atingido. Alvo e stop vêm do cenário de mercado, uma '
-          'estimativa sem probabilidade associada.',
+          'A venda só é registrada quando o preço for atingido. Alvo e stop '
+          'vêm do cenário de mercado, uma estimativa sem probabilidade '
+          'associada.',
       sim: 'Criar metas',
       nao: 'Voltar',
     );
@@ -314,16 +337,105 @@ class ControleMetas extends ChangeNotifier {
           qtd,
           stop,
           ocoCom: meta.id,
-          precoAtual: r.ativo.cotacao?.preco ?? cen.ancora,
+          precoAtual: precoAtual,
         );
       } catch (e) {
-        if (e is! PedidoSuperado && c.mounted) {
+        if (c.mounted) {
+          final motivo = e is PedidoSuperado
+              ? 'o pedido foi superado por outro'
+              : textoErro(e);
           await avisar(
             c,
             'Meta',
-            'A meta de alvo foi criada, mas o stop não: ${textoErro(e)}',
+            'A meta de alvo foi criada, mas o stop não: $motivo.',
           );
         }
+      }
+    } finally {
+      criandoSug = false;
+      notifyListeners();
+    }
+    await recarregar();
+    unawaited(verificarAgora());
+  }
+
+  /// "Criar stop fixo" / "Criar stop móvel" de uma compra, com o stop do
+  /// cenário (o móvel só no swing; acompanha o Chandelier). Pergunta se liga
+  /// em OCO a uma meta de alvo ativa da compra, como antes.
+  Future<void> criarStopAvulso(
+    BuildContext c,
+    ResultadoAtivo r,
+    CompraNaPosicao compra, {
+    bool movel = false,
+  }) async {
+    if (criandoSug) return;
+    final cen = r.cenario;
+    final stop = cen?.stop;
+    if (cen == null || stop == null || !r.comDados) return;
+    final info = movel ? infoStopMovel(r, compra, ambiente.hoje()) : null;
+    if (movel && info == null) return;
+    final precoAtual = r.ativo.cotacao?.preco ?? cen.ancora;
+    if (precoAtual != null && stop >= precoAtual) return;
+    criandoSug = true;
+    notifyListeners();
+    try {
+      final Meta? parceira;
+      try {
+        parceira = await _servicos.parceiraOco(compra.loteId, 'stop');
+      } catch (e) {
+        if (e is! PedidoSuperado && c.mounted) {
+          await avisar(c, 'Meta', textoErro(e));
+        }
+        return;
+      }
+      int? qtd = parceira?.qtd;
+      qtd ??= await _livre(compra.loteId);
+      if (!c.mounted) return;
+      if (qtd == null || qtd <= 0) {
+        await avisar(c, 'Meta', qtd == null ? _semLeitura : _semLivre);
+        return;
+      }
+      String? oco;
+      if (parceira != null) {
+        final nome =
+            (visao?.descricoes[parceira.id] ?? descricao(parceira)).titulo;
+        final sim = await confirmar(
+          c,
+          'Ligar em OCO',
+          'Será ligado (OCO) à meta $nome.\n\nQuando uma das duas executar, '
+              'a outra é cancelada automaticamente. Quantidade: $qtd un.',
+          sim: 'Criar com OCO',
+          nao: 'Voltar',
+        );
+        if (!sim || !c.mounted) return;
+        oco = parceira.id;
+      } else {
+        final sim = await confirmar(
+          c,
+          movel ? 'Criar stop móvel' : 'Criar stop fixo',
+          'Será criada uma venda automática de $qtd un. de '
+          '${r.ativo.ticker} se o preço cair até ${brl(stop)}. A venda '
+          'só é registrada quando o preço for atingido.',
+          sim: 'Criar stop',
+          nao: 'Voltar',
+        );
+        if (!sim || !c.mounted) return;
+      }
+      try {
+        await _servicos.criarStop(
+          compra.loteId,
+          qtd,
+          stop,
+          movel: movel,
+          ocoCom: oco,
+          precoAtual: precoAtual,
+          sugestao: info,
+        );
+      } catch (e) {
+        if (e is! PedidoSuperado && c.mounted) {
+          await avisar(c, 'Meta', textoErro(e));
+        }
+        return;
       }
     } finally {
       criandoSug = false;

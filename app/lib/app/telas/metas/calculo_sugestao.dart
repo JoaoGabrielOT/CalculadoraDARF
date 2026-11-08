@@ -210,3 +210,31 @@ List<ResultadoAtivo> prepararLista(
     return compararTexto(x.ativo.ticker, y.ativo.ticker);
   });
 }
+
+/// Dados que o stop móvel guarda na meta (`modo`, ATR de 14 e de 22 pregões e
+/// o preço da compra), como na versão anterior. Nulo fora do swing ou sem
+/// Chandelier (menos de 23 pregões fechados).
+Map<String, Object?>? infoStopMovel(
+  ResultadoAtivo r,
+  CompraNaPosicao compra,
+  String hoje,
+) {
+  if (r.horizonte != Horizonte.swing || r.cenario?.stop == null) return null;
+  final f = [
+    for (final b in r.ativo.barras)
+      if (compararTexto(b.data, hoje) < 0) b,
+  ];
+  if (calcularChandelier(f) == null) return null;
+  final altas = [for (final b in f) b.alta];
+  final baixas = [for (final b in f) b.baixa];
+  final fechs = [for (final b in f) b.fech];
+  final atr14 = calcularAtr(altas, baixas, fechs, atrPeriodo);
+  final atr22 = calcularAtr(altas, baixas, fechs, 22);
+  if (atr14 == null || atr22 == null) return null;
+  return {
+    'modo': 'swing',
+    'atr14': arredondar(atr14, 4),
+    'atr22': arredondar(atr22, 4),
+    'compra': compra.preco,
+  };
+}

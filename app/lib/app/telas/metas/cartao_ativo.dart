@@ -182,11 +182,16 @@ Widget _nota(
   String texto, {
   Color? cor,
   double tamanho = 12,
+  bool negrito = false,
 }) {
   final c = CoresApp.de(context);
   return Text(
     texto,
-    style: TextStyle(fontSize: tamanho, color: cor ?? c.textoSuave),
+    style: TextStyle(
+      fontSize: tamanho,
+      color: cor ?? c.textoSuave,
+      fontWeight: negrito ? FontWeight.w600 : null,
+    ),
   );
 }
 
@@ -241,7 +246,7 @@ List<Widget> _meta(BuildContext context, ResultadoAtivo r) {
       ),
     ],
     if (avisos.contains(textoMetaAcima))
-      _nota(context, textoMetaAcima, cor: c.aviso),
+      _nota(context, textoMetaAcima, cor: c.aviso, negrito: true),
   ];
 }
 
@@ -289,7 +294,8 @@ List<Widget> _cenario(BuildContext context, ResultadoAtivo r) {
     if (cen.baseData != null)
       _par(context, 'Último pregão fechado usado:', fmtData(cen.baseData!)),
     for (final a in cen.avisos)
-      if (a != textoMetaAcima) _nota(context, a, cor: c.aviso, tamanho: 11),
+      if (a != textoMetaAcima)
+        _nota(context, a, cor: c.aviso, tamanho: 12, negrito: true),
   ];
 }
 
@@ -377,6 +383,20 @@ class _Resumo extends StatelessWidget {
                   EstadoDados.desatualizado => 'Desatualizado',
                   _ => 'Falha',
                 },
+                // fundo próprio: o do chip some no tema Terminal
+                cor: switch (a.estado) {
+                  EstadoDados.falha => c.queda,
+                  EstadoDados.desatualizado => c.aviso,
+                  _ => c.textoSuave,
+                },
+                fundo: Color.alphaBlend(
+                  (switch (a.estado) {
+                    EstadoDados.falha => c.queda,
+                    EstadoDados.desatualizado => c.aviso,
+                    _ => c.textoSuave,
+                  }).withValues(alpha: .18),
+                  c.cartao,
+                ),
               ),
           ],
         ),
@@ -494,6 +514,15 @@ class _LinhaCompra extends StatelessWidget {
         cen.oportunidade &&
         resultado.ativo.estado == EstadoDados.ok &&
         !controle.criandoSug;
+    // o stop avulso só precisa de stop abaixo do preço atual e dados em dia
+    final stop = cen?.stop;
+    final preco = resultado.ativo.cotacao?.preco ?? cen?.ancora;
+    final podeStop =
+        stop != null &&
+        resultado.comDados &&
+        (preco == null || stop < preco) &&
+        !controle.criandoSug;
+    final movel = infoStopMovel(resultado, compra, ambiente.hoje()) != null;
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Column(
@@ -506,13 +535,45 @@ class _LinhaCompra extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: OutlinedButton(
-              onPressed: pode
-                  ? () => unawaited(
-                      controle.criarMetasDoCenario(context, resultado, compra),
-                    )
-                  : null,
-              child: const Text('Criar meta de alvo e stop'),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                OutlinedButton(
+                  onPressed: pode
+                      ? () => unawaited(
+                          controle.criarMetasDoCenario(
+                            context,
+                            resultado,
+                            compra,
+                          ),
+                        )
+                      : null,
+                  child: const Text('Criar meta de alvo e stop'),
+                ),
+                OutlinedButton(
+                  onPressed: podeStop
+                      ? () => unawaited(
+                          controle.criarStopAvulso(context, resultado, compra),
+                        )
+                      : null,
+                  child: const Text('Criar stop fixo'),
+                ),
+                if (resultado.horizonte == Horizonte.swing)
+                  OutlinedButton(
+                    onPressed: podeStop && movel
+                        ? () => unawaited(
+                            controle.criarStopAvulso(
+                              context,
+                              resultado,
+                              compra,
+                              movel: true,
+                            ),
+                          )
+                        : null,
+                    child: const Text('Criar stop móvel'),
+                  ),
+              ],
             ),
           ),
         ],

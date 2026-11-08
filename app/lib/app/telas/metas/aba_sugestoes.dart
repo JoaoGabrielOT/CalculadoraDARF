@@ -103,20 +103,13 @@ class _Corpo extends StatelessWidget {
         ),
       );
     }
-    if (v.ativos.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 20),
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: Text(
-            'Nenhuma compra em aberto.',
-            style: TextStyle(color: c.textoSuave),
-          ),
-        ),
-      );
-    }
     final lista = controle.listaSugestoes;
-    final vazia = controle.horizonte == Horizonte.dayTrade
+    final vazia = v.ativos.isEmpty
+        ? (controle.soPosicoes
+              ? "Nenhuma compra em aberto. Desligue 'Só posições abertas' "
+                    'para ver o radar.'
+              : 'Nenhuma compra em aberto nem ticker no radar.')
+        : controle.horizonte == Horizonte.dayTrade
         ? 'Nenhum ativo com compra de hoje para o filtro escolhido.'
         : 'Nenhum ativo para o filtro escolhido.';
     return ListView(

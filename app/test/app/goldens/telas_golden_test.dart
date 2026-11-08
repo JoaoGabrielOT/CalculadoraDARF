@@ -472,13 +472,13 @@ void main() {
     }
 
     // Aba Sugestões (janela de metas): os três estados fechados e, no tema
-    // claro, o ativo com oportunidade aberto.
-    for (final expandido in [false, true]) {
+    // claro, o ativo com oportunidade aberto (topo e fim).
+    for (final variante in ['', 'expandido', 'saida']) {
       for (final tema in _temas.entries) {
-        if (expandido && tema.key != 'claro') continue;
+        if (variante != '' && tema.key != 'claro') continue;
         for (final tamanho in _tamanhos.entries) {
           final nome =
-              'metas_sugestoes${expandido ? '_expandido' : ''}'
+              'metas_sugestoes${variante.isEmpty ? '' : '_$variante'}'
               '_${tema.key}_${tamanho.key}';
           testWidgets(nome, (t) async {
             debugDisableShadows = false;
@@ -492,13 +492,18 @@ void main() {
               await t.pumpAndSettle();
               await t.tap(find.textContaining('Meta de lucro').first);
               await t.pumpAndSettle();
-              if (expandido) {
+              if (variante.isNotEmpty) {
                 await t.tap(find.byKey(const ValueKey('abrir-PETR4')));
                 await t.pumpAndSettle();
-                // desce até a simulação de saída e as compras
+                // 'expandido': o topo do cartão (os três números);
+                // 'saida': a simulação de saída e as compras
                 await Scrollable.ensureVisible(
-                  t.element(find.text('Compras (gerencial)')),
-                  alignment: 0.7,
+                  t.element(
+                    variante == 'saida'
+                        ? find.text('Compras (gerencial)')
+                        : find.byKey(const ValueKey('abrir-PETR4')),
+                  ),
+                  alignment: variante == 'saida' ? 0.7 : 0.0,
                 );
                 await t.pumpAndSettle();
               }

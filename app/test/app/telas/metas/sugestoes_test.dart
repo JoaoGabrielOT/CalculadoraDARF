@@ -201,9 +201,21 @@ void main() {
     expect(find.text(avisoGap), findsOneWidget);
   });
 
-  testWidgets("sem posições: 'Nenhuma compra em aberto.'", (t) async {
-    await _abrir(t, ServicosFalsos());
-    expect(find.text('Nenhuma compra em aberto.'), findsOneWidget);
+  testWidgets('sem posições os filtros ficam à vista e desligar '
+      "'Só posições abertas' busca o radar", (t) async {
+    final s = ServicosFalsos()
+      ..sugestoesMetasFn = (radar) async =>
+          _visao([if (radar) _ativo('WEGE3', semPosicao: true)]);
+    await _abrir(t, s);
+    expect(
+      find.textContaining("Nenhuma compra em aberto. Desligue 'Só posições"),
+      findsOneWidget,
+    );
+    expect(find.text('Só posições abertas'), findsOneWidget);
+    await t.tap(find.text('Só posições abertas'));
+    await t.pumpAndSettle();
+    expect(s.chamadas, contains('sugestoesMetas(radar)'));
+    expect(find.byKey(const ValueKey('sug-WEGE3')), findsOneWidget);
   });
 
   testWidgets('agrupa por ativo e expande as compras', (t) async {
@@ -450,6 +462,62 @@ void main() {
       expect(s.ultimoStop?.ocoCom, isNotNull);
     });
 
+    testWidgets('stop que não fica abaixo do preço atual não cria nem o '
+        'alvo', (t) async {
+      // âncora no fechamento (cotação antiga) acima do preço da cotação
+      final a = _ativo(
+        'PETR4',
+        cotacao: CotacaoInfo(
+          preco: 9,
+          hora: DataHora.parse('2026-10-28T11:55:00-03:00'),
+          fonte: 'Yahoo',
+          atual: false,
+        ),
+      );
+      final s = ServicosFalsos()..visaoSugestoes = _visao([a]);
+      await _abrir(t, s);
+      await _expandir(t, 'PETR4');
+      await _tocar(t, find.text('Criar meta de alvo e stop'));
+      expect(
+        find.textContaining('não está abaixo do preço atual'),
+        findsOneWidget,
+      );
+      expect(s.ultimaMetaAlvo, isNull);
+    });
+
+    testWidgets('falha no stop depois do alvo avisa', (t) async {
+      final s = ServicosFalsos()
+        ..visaoSugestoes = _visao([_ativo('PETR4')])
+        ..erros['criarStop'] = ArgumentError('stop inválido');
+      await _abrir(t, s);
+      await _expandir(t, 'PETR4');
+      await _tocar(t, find.text('Criar meta de alvo e stop'));
+      await t.tap(find.text('Criar metas'));
+      await t.pumpAndSettle();
+      expect(s.ultimaMetaAlvo, isNotNull);
+      expect(
+        find.textContaining('A meta de alvo foi criada, mas o stop não'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('metas ainda não lidas: mensagem própria, não "sem '
+        'quantidade livre"', (t) async {
+      final s = ServicosFalsos()
+        ..erros['metas'] = ArgumentError('falhou')
+        ..visaoSugestoes = _visao([_ativo('PETR4')]);
+      s.visaoMetas = null;
+      await abrirNoTeste<void>(t, s, abrirMetas, tamanho: _pc);
+      await _expandir(t, 'PETR4');
+      await _tocar(t, find.text('Criar meta de alvo e stop'));
+      expect(
+        find.textContaining('Não foi possível ler as quantidades'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Não há quantidade livre'), findsNothing);
+      expect(s.ultimaMetaAlvo, isNull);
+    });
+
     testWidgets('sem quantidade livre avisa e não cria', (t) async {
       final s = ServicosFalsos()
         ..visaoMetas = const VisaoMetas(
@@ -464,6 +532,68 @@ void main() {
       await _tocar(t, find.text('Criar meta de alvo e stop'));
       expect(find.textContaining('Não há quantidade livre'), findsOneWidget);
       expect(s.ultimaMetaAlvo, isNull);
+    });
+  });
+
+  group('stops avulsos (fixo e móvel)', () {
+    testWidgets('stop fixo e móvel usam o stop do cenário; o móvel leva o '
+        'dicionário sugestao e pede confirmação', (t) async {
+      final a = _ativo('PETR4');
+      final c = _cenario(a);
+      final s = ServicosFalsos()..visaoSugestoes = _visao([a]);
+      await _abrir(t, s);
+      await _expandir(t, 'PETR4');
+      await _tocar(t, find.text('Criar stop móvel'));
+      await t.tap(find.text('Voltar'));
+      await t.pumpAndSettle();
+      expect(s.ultimoStop, isNull);
+      await _tocar(t, find.text('Criar stop móvel'));
+      await t.tap(find.text('Criar stop'));
+      await t.pumpAndSettle();
+      final st = s.ultimoStop!;
+      expect(st.movel, isTrue);
+      expect(st.preco, c.stop);
+      expect(st.qtd, 100);
+      expect(st.precoAtual, 10);
+      expect(st.sugestao!.keys, containsAll(['modo', 'atr14', 'atr22']));
+      expect(st.sugestao!['modo'], 'swing');
+      expect(st.sugestao!['compra'], 9);
+      expect(s.ultimaMetaAlvo, isNull);
+      await _tocar(t, find.text('Criar stop fixo'));
+      await t.tap(find.text('Criar stop'));
+      await t.pumpAndSettle();
+      expect(s.ultimoStop!.movel, isFalse);
+      expect(s.ultimoStop!.sugestao, isNull);
+    });
+
+    testWidgets("com parceira OCO pergunta 'Ligar em OCO' e usa a "
+        'quantidade dela', (t) async {
+      final parceira = metasExemplo().first;
+      final s = ServicosFalsos()
+        ..visaoSugestoes = _visao([_ativo('PETR4')])
+        ..parceirasOco['stop'] = parceira;
+      await _abrir(t, s);
+      await _expandir(t, 'PETR4');
+      await _tocar(t, find.text('Criar stop fixo'));
+      expect(find.text('Ligar em OCO'), findsOneWidget);
+      await t.tap(find.text('Criar com OCO'));
+      await t.pumpAndSettle();
+      expect(s.ultimoStop?.ocoCom, parceira.id);
+      expect(s.ultimoStop?.qtd, parceira.qtd);
+    });
+
+    testWidgets('stop móvel só no swing', (t) async {
+      final s = ServicosFalsos()
+        ..visaoSugestoes = _visao([
+          _ativo('PETR4', compras: [_compra('L1', data: hojeExemplo)]),
+        ]);
+      await _abrir(t, s);
+      await _expandir(t, 'PETR4');
+      expect(find.text('Criar stop móvel'), findsOneWidget);
+      await _aoTopo(t);
+      await t.tap(find.text('Day trade'));
+      await t.pumpAndSettle();
+      expect(find.text('Criar stop móvel'), findsNothing);
     });
   });
 
