@@ -159,6 +159,7 @@ class CacheDiarias {
     final altas = _lista(q['high']);
     final baixas = _lista(q['low']);
     final fechadas = _lista(q['close']);
+    final volumes = _lista(q['volume']);
     final barras = <BarraDiaria>[];
     for (final (i, ts) in _lista(res['timestamp']).indexed) {
       final alta = _campo(altas, i);
@@ -172,6 +173,7 @@ class CacheDiarias {
           alta: alta,
           baixa: baixa,
           fech: fech,
+          volume: _campo(volumes, i),
         ),
       );
     }

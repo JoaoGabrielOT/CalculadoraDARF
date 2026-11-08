@@ -160,4 +160,43 @@ void main() {
     await cache.barrasDiarias('PETR4', obterChart: obter);
     expect(chamadas, hasLength(2));
   });
+
+  test('o volume das barras diárias é lido; ausente vira nulo', () async {
+    final resposta = {
+      'meta': <String, Object?>{},
+      'timestamp': [1761051600, 1761138000, 1761224400],
+      'indicators': {
+        'quote': [
+          {
+            'high': [11, 11, 11],
+            'low': [9, 9, 9],
+            'close': [10, 10, 10],
+            'volume': [1500, null],
+          },
+        ],
+      },
+    };
+    final obter = _falso({'*': resposta}, <Object?>[]);
+    final r = await CacheDiarias().barrasDiarias('PETR4', obterChart: obter);
+    expect([for (final b in r.barras) b.volume], [1500.0, null, null]);
+  });
+
+  test('sem a lista de volume todas as barras ficam sem volume', () async {
+    final resposta = {
+      'meta': <String, Object?>{},
+      'timestamp': [1761051600],
+      'indicators': {
+        'quote': [
+          {
+            'high': [11],
+            'low': [9],
+            'close': [10],
+          },
+        ],
+      },
+    };
+    final obter = _falso({'*': resposta}, <Object?>[]);
+    final r = await CacheDiarias().barrasDiarias('PETR4', obterChart: obter);
+    expect(r.barras.single.volume, isNull);
+  });
 }

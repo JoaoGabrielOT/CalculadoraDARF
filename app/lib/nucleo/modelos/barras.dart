@@ -26,6 +26,7 @@ class BarraDiaria {
     required this.alta,
     required this.baixa,
     required this.fech,
+    this.volume,
   });
 
   final String data;
@@ -33,6 +34,9 @@ class BarraDiaria {
   final double alta;
   final double baixa;
   final double fech;
+
+  /// Volume negociado no pregão; `null` quando o Yahoo não o informa.
+  final double? volume;
 }
 
 /// Barras diárias, com a data do último pregão em andamento e o preço atual.
