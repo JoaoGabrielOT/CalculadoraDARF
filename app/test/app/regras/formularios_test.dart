@@ -425,4 +425,125 @@ void main() {
       expect(textoIsencao(acima), 'Acima do limite · lucro tributado em 15%');
     });
   });
+
+  group('venda por quantidade', () {
+    Lote compra(String id, String data, int qtd, double preco) => Lote(
+      id: id,
+      ticker: 'PETR4',
+      tipo: 'Ação',
+      dataCompra: data,
+      qtd: qtd,
+      preco: preco,
+    );
+    final a = compra('A', '2026-10-02', 100, 30);
+    final b = compra('B', '2026-10-05', 100, 20);
+    final c = compra('C', '2026-10-28', 10, 40);
+
+    Validacao<NovaVendaQtd> validar({
+      String ticker = 'PETR4',
+      String? data = '2026-10-28',
+      String qtd = '150',
+      String preco = '35,10',
+      List<Lote>? elegiveis,
+      Map<String, int>? selecao,
+      bool permitida = true,
+    }) => validarVendaQtd(
+      ticker: ticker,
+      data: data,
+      qtd: qtd,
+      preco: preco,
+      inicioMes: '2026-10-01',
+      permitida: permitida,
+      elegiveis: elegiveis ?? [a, b],
+      grupo: 'G1',
+      selecao: selecao,
+    );
+
+    test('automático devolve o pedido sem seleção', () {
+      final v = valor(validar());
+      expect(v.ticker, 'PETR4');
+      expect(v.data, '2026-10-28');
+      expect(v.qtd, 150);
+      expect(v.preco, 35.1);
+      expect(v.grupo, 'G1');
+      expect(v.selecao, isNull);
+    });
+
+    test('manual leva só as compras com quantidade', () {
+      final v = valor(validar(selecao: {'A': 50, 'B': 100, 'C': 0}));
+      expect(v.selecao, [('A', 50), ('B', 100)]);
+    });
+
+    test('mensagens', () {
+      expect(
+        erro(validar(elegiveis: [])),
+        'Escolha o ticker e a compra que foi vendida.',
+      );
+      expect(erro(validar(data: null)), 'Selecione a data da venda.');
+      expect(
+        erro(validar(permitida: false)),
+        'Data da venda inválida para essa compra.',
+      );
+      expect(
+        erro(validar(data: '2026-09-30')),
+        'Data da venda inválida para essa compra.',
+      );
+      expect(erro(validar(qtd: 'x')), 'Quantidade inválida.');
+      expect(erro(validar(qtd: '0')), 'Quantidade inválida.');
+      expect(erro(validar(preco: '')), 'Preço inválido.');
+      expect(
+        erro(validar(qtd: '300')),
+        'Quantidade indisponível: só há 200 ações de PETR4 nessa data.',
+      );
+    });
+
+    test('manual: soma diferente, acima do disponível e day trade travado', () {
+      expect(
+        erro(validar(selecao: {'A': 50, 'B': 50})),
+        'A soma das compras escolhidas (100) é diferente da quantidade da '
+        'venda (150).',
+      );
+      expect(
+        erro(validar(qtd: '120', selecao: {'A': 120})),
+        'A compra de 02/10/2026 tem só 100 ações disponíveis.',
+      );
+      expect(
+        erro(validar(qtd: '50', elegiveis: [a, c], selecao: {'A': 50})),
+        'As compras de hoje entram primeiro (day trade, regra da Receita).',
+      );
+    });
+
+    test('textos fixos do painel', () {
+      expect(textoSelecionado(120, 150), 'Selecionado 120 de 150');
+      expect(
+        textoResultadoGerencial(1234.5),
+        'Resultado pelas compras escolhidas (gerencial): R\$ 1.234,50',
+      );
+      expect(
+        textoResultadoFiscal(-10),
+        'Resultado fiscal da operação (custo médio): -R\$ 10,00',
+      );
+      expect(
+        textoResultadoFiscal(5, custoMedio: false),
+        'Resultado fiscal da operação (por compra): R\$ 5,00',
+      );
+      expect(
+        textoDayTradeComum(10, 140),
+        'Day trade: 10 ações; comum: 140 ações',
+      );
+      expect(
+        textoRegraAutomatico,
+        'Primeiro as compras de hoje (day trade, regra da Receita). Depois as '
+        'de menor custo por ação, incluindo as taxas de compra; em empate, a '
+        'mais antiga.',
+      );
+      expect(
+        textoEscolhaDasCompras,
+        'A escolha das compras organiza o seu controle, mas não muda o '
+        'imposto: a Receita usa o custo médio. Vender agora as compras mais '
+        'baratas aumenta o resultado desta venda e reduz o das próximas; o '
+        'resultado da posição inteira não muda.',
+      );
+    });
+  });
 }

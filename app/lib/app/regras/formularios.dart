@@ -127,6 +127,108 @@ Validacao<NovaVenda> validarVenda({
   return Valido(NovaVenda(loteId: lote.id, data: data, qtd: q, preco: p));
 }
 
+/// Venda por quantidade: [selecao] nulo é o modo automático; no manual é a
+/// quantidade por compra (id -> quantidade, zeros ficam de fora do pedido).
+/// [elegiveis] são as compras do ticker já existentes na data da venda. Só
+/// a venda no mês aberto usa esse fluxo (a retroativa segue com uma compra).
+Validacao<NovaVendaQtd> validarVendaQtd({
+  required String ticker,
+  required String? data,
+  required String qtd,
+  required String preco,
+  required String inicioMes,
+  required bool permitida,
+  required List<Lote> elegiveis,
+  required String grupo,
+  Map<String, int>? selecao,
+}) {
+  final t = ticker.trim().toUpperCase();
+  if (t.isEmpty) {
+    return const Invalido('Escolha o ticker e a compra que foi vendida.');
+  }
+  if (data == null || data.isEmpty) {
+    return const Invalido('Selecione a data da venda.');
+  }
+  if (elegiveis.isEmpty) {
+    return const Invalido('Escolha o ticker e a compra que foi vendida.');
+  }
+  if (!permitida || data.compareTo(inicioMes) < 0) {
+    return const Invalido('Data da venda inválida para essa compra.');
+  }
+  final int q;
+  try {
+    q = parseQtd(qtd);
+  } on FormatException {
+    return const Invalido('Quantidade inválida.');
+  }
+  final double p;
+  try {
+    p = parseNum(preco);
+  } on FormatException {
+    return const Invalido('Preço inválido.');
+  }
+  List<(String, int)>? pares;
+  if (selecao == null) {
+    try {
+      alocarAutomatico(elegiveis, q, data);
+    } on ErroValidacao catch (e) {
+      return Invalido(e.mensagem);
+    }
+  } else {
+    // na ordem das compras, para o pedido não depender da ordem dos toques
+    final itens = <ItemAlocacao>[
+      for (final l in elegiveis)
+        if ((selecao[l.id] ?? 0) > 0) ItemAlocacao(l, selecao[l.id]!),
+    ];
+    if (selecao.entries.any(
+      (e) => e.value > 0 && !elegiveis.any((l) => l.id == e.key),
+    )) {
+      return const Invalido('Compra fora das disponíveis nessa data.');
+    }
+    final erro = validarManual(elegiveis, itens, q, data);
+    if (erro != null) return Invalido(erro);
+    pares = [for (final i in itens) (i.lote.id, i.qtd)];
+  }
+  return Valido(
+    NovaVendaQtd(
+      ticker: t,
+      data: data,
+      qtd: q,
+      preco: p,
+      grupo: grupo,
+      selecao: pares,
+    ),
+  );
+}
+
+/// Regra do modo automático (spec 6.2).
+const textoRegraAutomatico =
+    'Primeiro as compras de hoje (day trade, regra da Receita). Depois as de '
+    'menor custo por ação, incluindo as taxas de compra; em empate, a mais '
+    'antiga.';
+
+/// Aviso fixo do painel fiscal x gerencial (spec 6.2).
+const textoEscolhaDasCompras =
+    'A escolha das compras organiza o seu controle, mas não muda o imposto: a '
+    'Receita usa o custo médio. Vender agora as compras mais baratas aumenta '
+    'o resultado desta venda e reduz o das próximas; o resultado da posição '
+    'inteira não muda.';
+
+/// Contador do modo manual.
+String textoSelecionado(int escolhido, int total) =>
+    'Selecionado $escolhido de $total';
+
+String textoResultadoGerencial(double v) =>
+    'Resultado pelas compras escolhidas (gerencial): ${brl(v)}';
+
+/// [custoMedio] falso nos meses anteriores ao corte (custo por compra).
+String textoResultadoFiscal(double v, {bool custoMedio = true}) =>
+    'Resultado fiscal da operação (${custoMedio ? 'custo médio' : 'por compra'}): '
+    '${brl(v)}';
+
+String textoDayTradeComum(int dt, int comum) =>
+    'Day trade: $dt ações; comum: $comum ações';
+
 /// Saldo, aporte ou retirada digitados (calculadora_darf.py:570-580).
 Validacao<(ModoSaldo, double)> validarSaldo(ModoSaldo modo, String valor) {
   final double v;

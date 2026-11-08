@@ -44,6 +44,20 @@ class ServicosFalsos implements ServicosApp {
   /// Últimos argumentos recebidos pelas gravações, para os testes conferirem.
   NovaCompra? ultimaCompra;
   NovaVenda? ultimaVenda;
+
+  /// Último pedido de `registrarVendaQtd`, `editarGrupoVenda` e `previaVenda`.
+  NovaVendaQtd? ultimaVendaQtd;
+  NovaVendaQtd? ultimaPrevia;
+
+  /// Resposta de `previaVenda`; [previaFn] tem precedência (erro ou espera).
+  PreviaVenda previaResp = const PreviaVenda(
+    linhas: [],
+    gerencial: 0,
+    fiscal: 0,
+    qtdDt: 0,
+    qtdComum: 0,
+  );
+  Future<PreviaVenda> Function(NovaVendaQtd v)? previaFn;
   ({ModoSaldo modo, double valor})? ultimoSaldo;
 
   /// Quando preenchido, as gravações (compra e venda) só respondem depois dele;
@@ -286,27 +300,23 @@ class ServicosFalsos implements ServicosApp {
       _chamar('comprasElegiveis', [mes, ticker, data], () => <Lote>[]);
 
   @override
-  Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) => _chamar(
-    'previaVenda',
-    [mes, v.ticker, v.qtd],
-    () => const PreviaVenda(
-      linhas: [],
-      gerencial: 0,
-      fiscal: 0,
-      qtdDt: 0,
-      qtdComum: 0,
-    ),
-  );
+  Future<PreviaVenda> previaVenda(String mes, NovaVendaQtd v) {
+    ultimaPrevia = v;
+    final fn = previaFn;
+    return _chamar('previaVenda', [
+      mes,
+      v.ticker,
+      v.qtd,
+    ], () => previaResp).then((r) => fn == null ? r : fn(v));
+  }
 
   @override
   Future<VendaRegistrada> registrarVendaQtd(String mes, NovaVendaQtd v) =>
       _segurar(
-        _chamar('registrarVendaQtd', [
-          mes,
-          v.grupo,
-          v.data,
-          v.qtd,
-        ], () => VendaRegistrada(visao: _visao(mes))),
+        _chamar('registrarVendaQtd', [mes, v.grupo, v.data, v.qtd], () {
+          ultimaVendaQtd = v;
+          return vendaRegistrada ?? VendaRegistrada(visao: _visao(mes));
+        }),
         esperaGravacao,
       );
 
@@ -314,6 +324,7 @@ class ServicosFalsos implements ServicosApp {
   Future<VisaoMes> editarGrupoVenda(String mes, String grupo, NovaVendaQtd v) =>
       _segurar(
         _chamar('editarGrupoVenda', [mes, grupo, v.data, v.qtd], () {
+          ultimaVendaQtd = v;
           return _visao(mes);
         }),
         esperaGravacao,

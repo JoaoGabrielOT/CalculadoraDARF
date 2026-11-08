@@ -1,5 +1,9 @@
 // Formulário de venda: nova e edição (calculadora_darf.py:314-535;
-// android/main.py:1302-1548).
+// android/main.py:1302-1548). A venda do mês aberto é por quantidade, em modo
+// automático ou manual, e pode usar várias compras; a retroativa e a edição de
+// uma linha só seguem com uma compra.
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +17,14 @@ import '../../regras/textos.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import 'abrir_formulario.dart';
+import 'painel_previa_venda.dart';
 import 'painel_resumo_ordem.dart';
+
+/// Como as compras da venda são escolhidas.
+enum ModoVenda { automatico, manual }
+
+/// Espera após a última tecla antes de recalcular a prévia.
+const _esperaPrevia = Duration(milliseconds: 300);
 
 /// Nulo quando o usuário cancela ou o mês não aceita alterações. [lote] e
 /// [ticker] são a escolha inicial; [editar] é a compra com a venda editada
@@ -75,10 +86,19 @@ class _FormVendaState extends State<FormVenda>
   final TextEditingController _qtd = TextEditingController();
   final TextEditingController _preco = TextEditingController();
   final FocusNode _focoPreco = FocusNode();
+  final Map<String, TextEditingController> _ctrlsSel = {};
   late final List<Lote> _abertos;
+  late final Mes _dados;
   late final String _inicioMes;
   late final String _fimMes;
   late final bool _editando;
+
+  /// Id do grupo editado (venda em várias compras) ou nulo.
+  late final String? _grupoEdicao;
+
+  /// Id da venda nova, pedido quando o formulário abre: é a chave que torna a
+  /// confirmação repetida inofensiva.
+  Future<String>? _grupoNovo;
 
   List<String> _sugestoes = const [];
   Set<String> _semRetroativa = const {};
@@ -91,35 +111,87 @@ class _FormVendaState extends State<FormVenda>
   String? _minimo;
   String? _maximo;
 
+  ModoVenda _modo = ModoVenda.automatico;
+
+  /// Quantidade escolhida por compra no modo manual.
+  Map<String, int> _sel = {};
+
+  PreviaVenda? _previa;
+  String _erroPrevia = '';
+  int _seqPrevia = 0;
+  Timer? _timerPrevia;
+
   /// Último preço preenchido pela cotação e a busca em andamento.
   String _precoAuto = '';
   (String, String)? _pedido;
   String _infoPreco = '';
+
+  bool get _editandoGrupo => _grupoEdicao != null;
+
+  /// Venda de mês anterior: uma compra só, como na versão anterior.
+  bool get _retro =>
+      !_editando && _data != null && _data!.compareTo(_inicioMes) < 0;
+
+  /// Fluxo de uma compra só: venda retroativa e edição de uma linha.
+  bool get _legado => _retro || (_editando && !_editandoGrupo);
 
   @override
   void initState() {
     super.initState();
     final e = widget.editar;
     _editando = e != null;
-    _abertos = e != null
+    final grupo = e == null ? null : grupoDe(e.$2.id);
+    final linhas = [
+      if (grupo != null)
+        for (final l in widget.visao.dados.lotes)
+          for (final v in l.vendas)
+            if (grupoDe(v.id) == grupo) (l, v),
+    ];
+    _grupoEdicao = linhas.length > 1 ? grupo : null;
+    if (_editandoGrupo) {
+      // as vendas do grupo saem: a quantidade delas volta a ficar disponível
+      _dados = Mes.fromJson(widget.visao.dados.toJson());
+      for (final l in _dados.lotes) {
+        l.vendas = [
+          for (final v in l.vendas)
+            if (grupoDe(v.id) != grupo) v,
+        ];
+      }
+    } else {
+      _dados = widget.visao.dados;
+    }
+    _abertos = e != null && !_editandoGrupo
         ? [semVenda(e.$1, e.$2.id)]
         : [
-            for (final l in widget.visao.dados.lotes)
+            for (final l in _dados.lotes)
               if (restante(l) > 0) l,
           ];
     final (inicio, fim) = limitesMes(widget.visao.mes);
     _inicioMes = inicio;
     _fimMes = fim;
-    final inicial = e != null ? _abertos.first : widget.lote;
+    final inicial = e != null && !_editandoGrupo
+        ? _abertos.first
+        : (e != null ? e.$1 : widget.lote);
     final t = inicial?.ticker ?? widget.ticker;
     if (t.isNotEmpty) _ticker.text = t;
+    if (!_editando && widget.lote != null) _modo = ModoVenda.manual;
     _selecionarTicker(t, loteInicial: inicial, aoIniciar: true);
     if (e != null) {
       _data = e.$2.data;
-      _qtd.text = '${e.$2.qtd}';
       _preco.text = fmtNum(e.$2.preco);
+      if (_editandoGrupo) {
+        _qtd.text = '${linhas.fold(0, (soma, x) => soma + x.$2.qtd)}';
+        _modo = ModoVenda.manual;
+        _aplicarSel({for (final (l, v) in linhas) l.id: v.qtd});
+      } else {
+        _qtd.text = '${e.$2.qtd}';
+      }
     }
-    if (!_editando) _carregar();
+    if (!_editando) {
+      _carregar();
+      _grupoNovo = context.read<ServicosApp>().novoGrupoVenda()..ignore();
+    }
+    _agendarPrevia();
   }
 
   /// Atalhos "Em carteira" e meses que recusam venda retroativa.
@@ -154,10 +226,14 @@ class _FormVendaState extends State<FormVenda>
 
   @override
   void dispose() {
+    _timerPrevia?.cancel();
     _ticker.dispose();
     _qtd.dispose();
     _preco.dispose();
     _focoPreco.dispose();
+    for (final c in _ctrlsSel.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -167,6 +243,127 @@ class _FormVendaState extends State<FormVenda>
     if (iso.compareTo(_inicioMes) >= 0) return true;
     if (_editando || !_mesesCarregados) return false;
     return !_semRetroativa.contains(iso.substring(0, 7));
+  }
+
+  // --- compras elegíveis e seleção manual
+
+  /// Compras do ticker que existiam na data da venda e ainda têm saldo, da
+  /// mais antiga para a mais nova.
+  List<Lote> get _elegiveis {
+    final d = _data;
+    final t = _tickerAtual;
+    if (d == null || t == null || t.isEmpty) return const [];
+    return ordenadoPor(
+      comprasElegiveis(_dados, t, d),
+      (l) => [l.dataCompra, l.id],
+    );
+  }
+
+  int? get _qtdValida {
+    try {
+      return parseQtd(_qtd.text);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Muda quando o conjunto de compras (ou o que é do dia) muda.
+  String _assinatura() =>
+      [for (final l in _elegiveis) '${l.id}:${l.dataCompra == _data}']
+          .join('|');
+
+  /// Compras do dia: parte de day trade obrigatória, preenchida sozinha.
+  Map<String, int> _travadas(List<Lote> el, int qtd) {
+    final dia = [
+      for (final l in el)
+        if (l.dataCompra == _data) l,
+    ];
+    final disp = dia.fold(0, (soma, l) => soma + restante(l));
+    final forcado = disp < qtd ? disp : qtd;
+    if (forcado <= 0) return {};
+    return {
+      for (final i in alocarAutomatico(dia, forcado, _data!)) i.lote.id: i.qtd,
+    };
+  }
+
+  /// Ponto de partida do modo manual: a alocação automática, ou, ao abrir por
+  /// uma compra, essa compra com o que falta além do day trade.
+  void _reiniciarSelecao({Lote? inicial}) {
+    final el = _elegiveis;
+    final q = _qtdValida;
+    final m = <String, int>{};
+    if (q != null && el.isNotEmpty && _data != null) {
+      try {
+        if (inicial == null) {
+          for (final i in alocarAutomatico(el, q, _data!)) {
+            m[i.lote.id] = i.qtd;
+          }
+        } else {
+          m.addAll(_travadas(el, q));
+          final resto = q - m.values.fold(0, (soma, n) => soma + n);
+          if (!m.containsKey(inicial.id) &&
+              el.any((l) => l.id == inicial.id) &&
+              resto > 0) {
+            final max = restante(inicial);
+            m[inicial.id] = (resto < max ? resto : max).toInt();
+          }
+        }
+      } on ErroValidacao {
+        // quantidade acima do disponível: começa vazio e o aviso explica
+        m.clear();
+      }
+    }
+    _aplicarSel(m);
+  }
+
+  /// Quantidade total mudou: as compras do dia seguem a parte obrigatória.
+  void _atualizarTravadas() {
+    final el = _elegiveis;
+    final q = _qtdValida;
+    final m = {..._sel};
+    for (final l in el) {
+      if (l.dataCompra == _data) m.remove(l.id);
+    }
+    if (q != null && _data != null) {
+      try {
+        m.addAll(_travadas(el, q));
+      } on ErroValidacao {
+        // sem compras do dia consumíveis
+      }
+    }
+    _aplicarSel(m);
+  }
+
+  void _aplicarSel(Map<String, int> m) {
+    _sel = m;
+    for (final e in _ctrlsSel.entries) {
+      final n = m[e.key] ?? 0;
+      e.value.text = n > 0 ? '$n' : '';
+    }
+  }
+
+  TextEditingController _ctrlSel(String id) => _ctrlsSel.putIfAbsent(id, () {
+    final n = _sel[id] ?? 0;
+    return TextEditingController(text: n > 0 ? '$n' : '');
+  });
+
+  List<ItemAlocacao> _itensSel(List<Lote> el) => [
+    for (final l in el)
+      if ((_sel[l.id] ?? 0) > 0) ItemAlocacao(l, _sel[l.id]!),
+  ];
+
+  /// Mensagem da seleção manual; nulo quando a soma e os limites valem.
+  String? _erroManual(List<Lote> el) {
+    final q = _qtdValida;
+    if (q == null) return null;
+    return validarManual(el, _itensSel(el), q, _data ?? '');
+  }
+
+  bool get _podeSalvar {
+    if (_legado || _modo == ModoVenda.automatico) return true;
+    final q = _qtdValida;
+    if (q == null) return false;
+    return _erroManual(_elegiveis) == null;
   }
 
   // --- ticker e compra
@@ -196,26 +393,42 @@ class _FormVendaState extends State<FormVenda>
         (o) => loteInicial != null && o.$2.id == loteInicial.id,
         orElse: () => opcoes.first,
       );
-      _selecionarLote(alvo.$1, aoIniciar: aoIniciar);
+      _definirLote(alvo.$1);
+      _ajustarData();
+      _qtd.text = '${_qtdPadrao(loteInicial)}';
+      _reiniciarSelecao(inicial: loteInicial);
+      _sugerirPreco();
     } else {
       _rotulo = null;
       _lote = null;
       _minimo = _maximo = null;
-      if (!aoIniciar) setState(() {});
+      _reiniciarSelecao();
     }
+    _agendarPrevia();
+    if (!aoIniciar) setState(() {});
   }
 
-  void _selecionarLote(String rotulo, {bool aoIniciar = false}) {
+  /// Compra do dropdown (fluxo de uma compra só) e os limites da data: da
+  /// compra mais antiga do ticker até hoje ou o fim do mês.
+  void _definirLote(String rotulo) {
     final l = _opcoes.firstWhere((o) => o.$1 == rotulo).$2;
-    final hoje = ambiente.hoje();
-    var minimo = l.dataCompra;
+    var minimo = _opcoes
+        .map((o) => o.$2.dataCompra)
+        .reduce((a, b) => a.compareTo(b) <= 0 ? a : b);
     if (_editando && _inicioMes.compareTo(minimo) > 0) minimo = _inicioMes;
-    final maximo = _fimMes.compareTo(hoje) < 0 ? _fimMes : hoje;
     _rotulo = rotulo;
     _lote = l;
     _minimo = minimo;
-    _maximo = maximo;
-    _qtd.text = '${restante(l)}';
+    _maximo = _fimMes.compareTo(ambiente.hoje()) < 0
+        ? _fimMes
+        : ambiente.hoje();
+  }
+
+  /// Mantém a data se couber nos limites; senão hoje, se couber.
+  void _ajustarData() {
+    final hoje = ambiente.hoje();
+    final minimo = _minimo!;
+    final maximo = _maximo!;
     var d = _data;
     if (d != null && (d.compareTo(minimo) < 0 || d.compareTo(maximo) > 0)) {
       d = null;
@@ -226,8 +439,52 @@ class _FormVendaState extends State<FormVenda>
       d = hoje;
     }
     _data = d;
+  }
+
+  /// Quantidade inicial: a da compra aberta pelo usuário ou o fluxo de uma
+  /// compra só; senão tudo o que há disponível do ticker na data.
+  int _qtdPadrao(Lote? inicial) {
+    if (inicial != null && _opcoes.any((o) => o.$2.id == inicial.id)) {
+      return restante(inicial);
+    }
+    if (_legado) return restante(_lote!);
+    final el = _elegiveis;
+    final base = el.isNotEmpty ? el : [for (final o in _opcoes) o.$2];
+    return base.fold(0, (soma, l) => soma + restante(l));
+  }
+
+  void _escolherCompra(String rotulo) {
+    _definirLote(rotulo);
+    _qtd.text = '${restante(_lote!)}';
     _sugerirPreco();
-    if (!aoIniciar) setState(() {});
+    setState(() {});
+  }
+
+  void _mudouData(String? d) {
+    final eraLegado = _legado;
+    final antes = _assinatura();
+    _data = d;
+    if (_legado != eraLegado && _lote != null && !_editando) {
+      _qtd.text = '${_qtdPadrao(null)}';
+    }
+    if (_assinatura() != antes || _legado != eraLegado) _reiniciarSelecao();
+    _sugerirPreco();
+    _agendarPrevia();
+    setState(() {});
+  }
+
+  void _mudouModo(ModoVenda m) {
+    if (m == _modo) return;
+    // só muda o formulário: nada é gravado
+    if (m == ModoVenda.manual) _reiniciarSelecao();
+    setState(() => _modo = m);
+    _agendarPrevia();
+  }
+
+  void _mudouQtd() {
+    if (_modo == ModoVenda.manual) _atualizarTravadas();
+    _agendarPrevia();
+    setState(() {});
   }
 
   // --- preço sugerido
@@ -260,6 +517,7 @@ class _FormVendaState extends State<FormVenda>
               _preco.text = _precoAuto;
               _infoPreco = '${r.$2} · pode alterar';
             });
+            _agendarPrevia();
           },
           onError: (Object e) {
             if (!mounted || _pedido != pedido || _precoManual) return;
@@ -271,6 +529,68 @@ class _FormVendaState extends State<FormVenda>
             });
           },
         );
+  }
+
+  // --- prévia (fiscal x gerencial)
+
+  /// Pedido válido para a prévia ou nulo (campos incompletos). A confirmação
+  /// usa o mesmo pedido, com o id da venda.
+  Validacao<NovaVendaQtd> _pedidoVenda(String grupo) {
+    final d = _data;
+    return validarVendaQtd(
+      ticker: _ticker.text,
+      data: d,
+      qtd: _qtd.text,
+      preco: _preco.text,
+      inicioMes: _inicioMes,
+      permitida: d != null && _permitida(d),
+      elegiveis: _elegiveis,
+      grupo: grupo,
+      selecao: _modo == ModoVenda.manual ? _sel : null,
+    );
+  }
+
+  void _agendarPrevia() {
+    _timerPrevia?.cancel();
+    _seqPrevia++;
+    // o serviço não libera a quantidade do grupo editado: sem prévia lá
+    if (_legado || _editandoGrupo) {
+      _previa = null;
+      _erroPrevia = '';
+      return;
+    }
+    _timerPrevia = Timer(_esperaPrevia, _calcularPrevia);
+  }
+
+  Future<void> _calcularPrevia() async {
+    final v = _pedidoVenda('previa');
+    if (v is! Valido<NovaVendaQtd>) {
+      if (_previa != null || _erroPrevia.isNotEmpty) {
+        setState(() {
+          _previa = null;
+          _erroPrevia = '';
+        });
+      }
+      return;
+    }
+    final seq = ++_seqPrevia;
+    try {
+      final r = await context.read<ServicosApp>().previaVenda(
+        widget.visao.mes,
+        v.valor,
+      );
+      if (!mounted || seq != _seqPrevia) return;
+      setState(() {
+        _previa = r;
+        _erroPrevia = '';
+      });
+    } catch (e) {
+      if (!mounted || seq != _seqPrevia || e is PedidoSuperado) return;
+      setState(() {
+        _previa = null;
+        _erroPrevia = textoErro(e);
+      });
+    }
   }
 
   // --- resumo e salvar
@@ -295,6 +615,28 @@ class _FormVendaState extends State<FormVenda>
 
   Future<void> _salvar() => salvarCom(() async {
     final s = context.read<ServicosApp>();
+    if (_legado) return _salvarUmaCompra(s);
+    final mes = widget.visao.mes;
+    // tudo é lido antes do await: o que foi validado é o que vai ao serviço
+    final novo = _grupoNovo;
+    final grupo = _grupoEdicao ?? await novo!;
+    final v = _pedidoVenda(grupo);
+    switch (v) {
+      case Invalido(:final mensagem):
+        erro = mensagem;
+        return null;
+      case Valido(:final valor):
+        final g = _grupoEdicao;
+        if (g != null) {
+          return VendaRegistrada(
+            visao: await s.editarGrupoVenda(mes, g, valor),
+          );
+        }
+        return s.registrarVendaQtd(mes, valor);
+    }
+  });
+
+  Future<VendaRegistrada?> _salvarUmaCompra(ServicosApp s) async {
     final l = _lote;
     final d = _data;
     // lidos antes do await: o que foi validado é o que vai ao serviço
@@ -323,15 +665,140 @@ class _FormVendaState extends State<FormVenda>
         if (e == null) return s.registrarVenda(mes, valor);
         return VendaRegistrada(visao: await s.editarVenda(mes, e.$2.id, valor));
     }
-  });
+  }
+
+  // --- tela
+
+  Widget _modos() => SegmentedButton<ModoVenda>(
+    key: const ValueKey('modo-venda'),
+    showSelectedIcon: false,
+    segments: const [
+      ButtonSegment(value: ModoVenda.automatico, label: Text('Automático')),
+      ButtonSegment(value: ModoVenda.manual, label: Text('Manual')),
+    ],
+    selected: {_modo},
+    onSelectionChanged: salvando ? null : (s) => _mudouModo(s.first),
+  );
+
+  /// Compras escolhidas pelo serviço, com custo e resultado gerencial.
+  Widget _linhasAutomatico(CoresApp c) {
+    final p = _previa;
+    final suave = TextStyle(color: c.textoSuave, fontSize: 12);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 2,
+      children: [
+        Text(textoRegraAutomatico, style: suave),
+        if (p != null)
+          for (final l in p.linhas)
+            Text(
+              '${fmtData(l.item.lote.dataCompra)}  ·  ${l.item.qtd} ações  ·  '
+              'custo ${brl(l.custoEfetivo)}  ·  resultado '
+              '${brl(l.resultadoGerencial)}'
+              '${l.item.travado ? '  ·  day trade' : ''}',
+              style: TextStyle(color: c.texto, fontSize: 12),
+            ),
+      ],
+    );
+  }
+
+  /// Só dígitos e no máximo [max] (o disponível da compra): reescreve o campo
+  /// quando o texto passa do limite.
+  int _limitar(String id, String texto, int max) {
+    final digitos = texto.replaceAll(RegExp(r'\D'), '');
+    var n = digitos.isEmpty
+        ? 0
+        : (digitos.length > 9 ? max : int.parse(digitos));
+    if (n > max) n = max;
+    final novo = digitos.isEmpty ? '' : '$n';
+    if (novo != texto) {
+      _ctrlSel(id).value = TextEditingValue(
+        text: novo,
+        selection: TextSelection.collapsed(offset: novo.length),
+      );
+    }
+    return n;
+  }
+
+  Widget _listaManual(CoresApp c) {
+    final el = _elegiveis;
+    final suave = TextStyle(color: c.textoSuave, fontSize: 12);
+    final q = _qtdValida;
+    final soma = _sel.values.fold(0, (a, b) => a + b);
+    final msg = _erroManual(el);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 8,
+      children: [
+        if (q != null)
+          Text(
+            textoSelecionado(soma, q),
+            style: TextStyle(
+              color: soma == q ? c.alta : c.texto,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        if (msg != null)
+          Semantics(
+            liveRegion: true,
+            child: Text(msg, style: TextStyle(color: c.queda, fontSize: 12)),
+          ),
+        for (final l in el)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            spacing: 12,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${fmtData(l.dataCompra)}  ·  original ${l.qtd}  ·  '
+                      'disp. ${restante(l)}  ·  custo '
+                      '${brl(custoUnitarioEfetivo(l))}',
+                      style: TextStyle(color: c.texto, fontSize: 12),
+                    ),
+                    if (l.dataCompra == _data)
+                      Text('Compra de hoje (day trade)', style: suave),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 110,
+                child: TextField(
+                  key: ValueKey('sel-${l.id}'),
+                  controller: _ctrlSel(l.id),
+                  enabled: l.dataCompra != _data,
+                  readOnly: salvando,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantidade',
+                    isDense: true,
+                  ),
+                  onChanged: (t) {
+                    final n = _limitar(l.id, t, restante(l));
+                    _sel = {..._sel}..remove(l.id);
+                    if (n > 0) _sel[l.id] = n;
+                    _agendarPrevia();
+                    setState(() {});
+                  },
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     final l = _lote;
     final suave = TextStyle(color: c.textoSuave, fontSize: 12);
+    final legado = _legado;
     var info = '';
-    if (l != null) {
+    if (legado && l != null) {
       info =
           '${l.tipo}  ·  Custo ${brl(l.preco)}  ·  Disponível: ${restante(l)}';
       if ((_minimo ?? '').compareTo(_maximo ?? '') > 0) {
@@ -341,13 +808,20 @@ class _FormVendaState extends State<FormVenda>
     final semOpcao = _tickerAtual == null || _tickerAtual!.isEmpty
         ? 'Escolha um ticker'
         : 'Nenhuma compra em aberto desse ticker';
-    final r = _resumo();
+    final r = legado ? _resumo() : null;
+    final disp = legado
+        ? (l == null ? null : restante(l))
+        : (_elegiveis.isEmpty
+              ? null
+              : _elegiveis.fold(0, (soma, x) => soma + restante(x)));
     return QuadroFormulario(
       dialogo: widget.dialogo,
       titulo: _editando ? 'Editar venda' : 'Registrar venda',
       erro: erro,
       salvando: salvando,
       aoSalvar: _salvar,
+      podeSalvar: _podeSalvar,
+      indicador: true,
       children: [
         Text('Mês ${fmtMes(widget.visao.mes)}', style: suave),
         TextField(
@@ -372,36 +846,35 @@ class _FormVendaState extends State<FormVenda>
             _selecionarTicker(t);
           },
         ),
-        DropdownButtonFormField<String>(
-          // novo valor inicial quando a lista de opções muda
-          key: ValueKey('compra-${_tickerAtual ?? ''}-$_rotulo'),
-          initialValue: _rotulo,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Compra'),
-          disabledHint: Text(semOpcao),
-          items: [
-            for (final (rot, _) in _opcoes)
-              DropdownMenuItem(value: rot, child: Text(rot)),
-          ],
-          onChanged: _editando || _opcoes.isEmpty
-              ? null
-              : (rot) {
-                  if (rot != null) _selecionarLote(rot);
-                },
-        ),
+        if (legado)
+          DropdownButtonFormField<String>(
+            // novo valor inicial quando a lista de opções muda
+            key: ValueKey('compra-${_tickerAtual ?? ''}-$_rotulo'),
+            initialValue: _rotulo,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Compra'),
+            disabledHint: Text(semOpcao),
+            items: [
+              for (final (rot, _) in _opcoes)
+                DropdownMenuItem(value: rot, child: Text(rot)),
+            ],
+            onChanged: _editando || _opcoes.isEmpty
+                ? null
+                : (rot) {
+                    if (rot != null) _escolherCompra(rot);
+                  },
+          )
+        else if (_opcoes.isEmpty)
+          Text(semOpcao, style: suave),
         if (info.isNotEmpty) Text(info, style: suave),
         CampoData(
-          // data recriada quando muda a compra (limites diferentes)
-          key: ValueKey('data-${l?.id}'),
+          // recriada quando muda o ticker (limites diferentes)
+          key: ValueKey('data-${_tickerAtual ?? ''}'),
           valor: _data,
           minimo: _minimo,
           maximo: _maximo,
           permitido: _permitida,
-          aoMudar: (d) {
-            _data = d;
-            _sugerirPreco();
-            setState(() {});
-          },
+          aoMudar: _mudouData,
         ),
         TextField(
           key: const ValueKey('qtd'),
@@ -409,11 +882,9 @@ class _FormVendaState extends State<FormVenda>
           readOnly: salvando,
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
-            labelText: l == null
-                ? 'Quantidade'
-                : 'Quantidade (máx. ${restante(l)})',
+            labelText: disp == null ? 'Quantidade' : 'Quantidade (máx. $disp)',
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => _mudouQtd(),
         ),
         TextField(
           key: const ValueKey('preco'),
@@ -426,14 +897,26 @@ class _FormVendaState extends State<FormVenda>
             labelText: 'Preço unitário (R\$)',
             hintText: 'Ex.: 35,10',
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) {
+            _agendarPrevia();
+            setState(() {});
+          },
         ),
         if (_infoPreco.isNotEmpty)
           Text(_infoPreco, style: TextStyle(color: c.textoSuave, fontSize: 11)),
-        PainelResumoOrdem(
-          resumo: r,
-          nota: r == null ? '' : notaResumoVenda(_data == l?.dataCompra),
-        ),
+        if (legado)
+          PainelResumoOrdem(
+            resumo: r,
+            nota: r == null ? '' : notaResumoVenda(_data == l?.dataCompra),
+          )
+        else if (_opcoes.isNotEmpty) ...[
+          _modos(),
+          if (_modo == ModoVenda.automatico)
+            _linhasAutomatico(c)
+          else
+            _listaManual(c),
+          PainelPreviaVenda(previa: _previa, erro: _erroPrevia),
+        ],
       ],
     );
   }

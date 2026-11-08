@@ -48,6 +48,8 @@ class QuadroFormulario extends StatelessWidget {
     required this.erro,
     required this.salvando,
     required this.aoSalvar,
+    this.podeSalvar = true,
+    this.indicador = false,
   }) : super(key: const ValueKey('quadro-formulario'));
 
   final bool dialogo;
@@ -56,6 +58,12 @@ class QuadroFormulario extends StatelessWidget {
   final String erro;
   final bool salvando;
   final VoidCallback aoSalvar;
+
+  /// Falso desativa o Salvar (formulário ainda inválido).
+  final bool podeSalvar;
+
+  /// Mostra um indicador de progresso no Salvar enquanto grava.
+  final bool indicador;
 
   @override
   Widget build(BuildContext context) {
@@ -96,8 +104,20 @@ class QuadroFormulario extends StatelessWidget {
               ),
               FilledButton(
                 style: FilledButton.styleFrom(minimumSize: Size(110, alvo)),
-                onPressed: salvando ? null : aoSalvar,
-                child: const Text('Salvar'),
+                onPressed: salvando || !podeSalvar ? null : aoSalvar,
+                child: indicador && salvando
+                    ? const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 8,
+                        children: [
+                          SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          Text('Salvar'),
+                        ],
+                      )
+                    : const Text('Salvar'),
               ),
             ],
           ),
@@ -149,7 +169,7 @@ class QuadroFormulario extends StatelessWidget {
   }
 
   void _salvar() {
-    if (!salvando) aoSalvar();
+    if (!salvando && podeSalvar) aoSalvar();
   }
 }
 
