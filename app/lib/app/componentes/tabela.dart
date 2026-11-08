@@ -82,6 +82,8 @@ class Tabela<T> extends StatefulWidget {
     this.selecionado,
     this.id,
     this.reiniciarOrdem,
+    this.filhas,
+    this.expandidas = const {},
   }) : assert(
          selecionado == null || id != null,
          'Tabela: para marcar uma linha selecionada informe `id`.',
@@ -105,6 +107,12 @@ class Tabela<T> extends StatefulWidget {
   /// descartada (a rolagem fica): quem ordena por outro meio (chip) passa aqui
   /// a ordem escolhida.
   final Object? reiniciarOrdem;
+
+  /// Linhas de detalhe de uma linha (exige [id]): aparecem logo abaixo dela,
+  /// depois da ordenação, enquanto o id dela estiver em [expandidas]. O id
+  /// delas também precisa ser único.
+  final List<T> Function(T)? filhas;
+  final Set<String> expandidas;
 
   @override
   State<Tabela<T>> createState() => _TabelaState<T>();
@@ -214,7 +222,17 @@ class _TabelaState<T> extends State<Tabela<T>> {
       }
       return true;
     }());
-    final linhas = _ordenadas();
+    final ordenadas = _ordenadas();
+    final filhas = widget.filhas;
+    final ids = widget.id;
+    final linhas = filhas == null || ids == null || widget.expandidas.isEmpty
+        ? ordenadas
+        : [
+            for (final l in ordenadas) ...[
+              l,
+              if (widget.expandidas.contains(ids(l))) ...filhas(l),
+            ],
+          ];
     final cabecalho = Row(
       children: [
         for (final (i, col) in widget.colunas.indexed)

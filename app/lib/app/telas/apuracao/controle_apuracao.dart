@@ -233,7 +233,13 @@ class ControleApuracao extends ChangeNotifier {
     );
     if (!lotes.any((l) => l.id == loteSelecionado)) loteSelecionado = null;
     final ops = filtrarVendas(v.apuracao.ops, filtroVendas);
-    if (!ops.any((o) => o.vendaId == vendaSelecionada)) vendaSelecionada = null;
+    if (!ops.any(
+      (o) =>
+          o.vendaId == vendaSelecionada ||
+          grupoDe(o.vendaId) == vendaSelecionada,
+    )) {
+      vendaSelecionada = null;
+    }
   }
 
   /// Busca o que o modo da lista precisa: as posições e a cotação atual
@@ -500,6 +506,12 @@ class ControleApuracao extends ChangeNotifier {
     for (final l in visao?.dados.lotes ?? const <Lote>[]) {
       for (final v in l.vendas) {
         if (v.id == id) return (l, v);
+      }
+    }
+    // id de grupo (linha agrupada da lista): a primeira venda do grupo
+    for (final l in visao?.dados.lotes ?? const <Lote>[]) {
+      for (final v in l.vendas) {
+        if (grupoDe(v.id) == id) return (l, v);
       }
     }
     return null;

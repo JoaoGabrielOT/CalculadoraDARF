@@ -196,6 +196,69 @@ List<Operacao> filtrarVendas(List<Operacao> ops, FiltroVendas f) {
   return ordenadoPor(itens, (o) => [chave(o)], reverso: f.desc);
 }
 
+/// Linha da lista de vendas: uma venda simples ou o grupo de vendas feitas de
+/// várias compras (ids `<grupo>.<k>`). [op] é a própria venda ou a soma das
+/// [partes], com o id do grupo.
+class GrupoVenda {
+  GrupoVenda(this.op, this.partes, {this.filha = false});
+
+  final Operacao op;
+  final List<Operacao> partes;
+
+  /// Linha de detalhe mostrada sob o grupo expandido.
+  final bool filha;
+
+  bool get agrupado => partes.length > 1;
+}
+
+/// Junta as vendas de um mesmo grupo numa linha só, na posição da primeira
+/// delas; a quantidade, o resultado e o imposto são somados e o preço é o da
+/// venda. Venda simples fica como está.
+List<GrupoVenda> agruparVendas(List<Operacao> ops) {
+  final grupos = <String, List<Operacao>>{};
+  for (final o in ops) {
+    (grupos[grupoDe(o.vendaId)] ??= []).add(o);
+  }
+  return [
+    for (final e in grupos.entries)
+      if (e.value.length == 1)
+        GrupoVenda(e.value.first, e.value)
+      else
+        GrupoVenda(_somar(e.key, e.value), e.value),
+  ];
+}
+
+Operacao _somar(String grupo, List<Operacao> partes) {
+  double soma(double Function(Operacao) f) =>
+      partes.fold(0.0, (s, o) => s + f(o));
+  final primeira = partes.first;
+  final regimes = <String>[
+    for (final o in partes)
+      if (!partes.take(partes.indexOf(o)).any((x) => x.regime == o.regime))
+        o.regime,
+  ];
+  return Operacao(
+      c: ResultadoVenda(
+        dt: partes.any((o) => o.dt),
+        compra: soma((o) => o.compra),
+        venda: soma((o) => o.venda),
+        taxas: soma((o) => o.taxas),
+        corretagem: soma((o) => o.corretagem),
+        bruto: soma((o) => o.bruto),
+        liquido: soma((o) => o.liquido),
+      ),
+      ticker: primeira.ticker,
+      tipo: primeira.tipo,
+      data: primeira.data,
+      qtd: partes.fold(0, (s, o) => s + o.qtd),
+      preco: primeira.preco,
+      loteId: primeira.loteId,
+      vendaId: grupo,
+    )
+    ..regime = regimes.join(' + ')
+    ..imposto = soma((o) => o.imposto);
+}
+
 /// Lançamentos do caixa pelo filtro da agenda (calculadora_darf.py:1873):
 /// "A liquidar" = Pendente, "Liquidados" = Liquidado, o resto mostra tudo.
 List<LancamentoCaixa> filtrarAgenda(

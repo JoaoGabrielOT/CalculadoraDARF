@@ -457,6 +457,75 @@ void main() {
     });
   }
 
+  Mes mesComGrupo() {
+    final base = mesAbertoExemplo();
+    Lote lote(String id, int qtd, double preco, List<Venda> v) => Lote(
+      id: id,
+      ticker: 'ITUB4',
+      tipo: 'Ação',
+      dataCompra: '2026-10-02',
+      qtd: qtd,
+      preco: preco,
+      vendas: v,
+    );
+    return Mes(
+      mes: base.mes,
+      lotes: [
+        ...base.lotes,
+        lote('G-A', 10, 30, [
+          Venda(id: 'G1.1', data: '2026-10-03', qtd: 10, preco: 31),
+        ]),
+        lote('G-B', 6, 28, [
+          Venda(id: 'G1.2', data: '2026-10-03', qtd: 6, preco: 31),
+        ]),
+        lote('S-A', 5, 30, [
+          Venda(id: 'V9', data: '2026-10-04', qtd: 5, preco: 31),
+        ]),
+      ],
+    );
+  }
+
+  testWidgets('grupo aparece numa linha e expande', (t) async {
+    final s = ServicosFalsos();
+    s.visoes['2026-10'] = visaoExemplo(mesComGrupo());
+    await _montar(t, servicos: s);
+    expect(t.widget<Text>(find.byKey(const Key('contagem-vendas'))).data, '3');
+    expect(find.byKey(const Key('linha-G1')), findsOneWidget);
+    expect(find.byKey(const Key('linha-G1.1')), findsNothing);
+    expect(_textoCelula(t, 'G1', 0), '▸ ITUB4');
+    expect(_textoCelula(t, 'G1', 3), '16');
+    await t.tap(find.byKey(const Key('linha-G1')));
+    // o toque único espera o prazo do duplo toque
+    await t.pump(const Duration(milliseconds: 400));
+    await t.pumpAndSettle();
+    expect(_textoCelula(t, 'G1', 0), '▾ ITUB4');
+    expect(_textoCelula(t, 'G1.1', 3), '10');
+    expect(_textoCelula(t, 'G1.2', 3), '6');
+  });
+
+  testWidgets('venda simples continua igual', (t) async {
+    final s = ServicosFalsos();
+    s.visoes['2026-10'] = visaoExemplo(mesComGrupo());
+    await _montar(t, servicos: s);
+    expect(_textoCelula(t, 'V9', 0), 'ITUB4');
+    expect(_textoCelula(t, 'V9', 3), '5');
+  });
+
+  testWidgets('compacto: grupo num cartão com as compras ao expandir', (
+    t,
+  ) async {
+    final s = ServicosFalsos();
+    s.visoes['2026-10'] = visaoExemplo(mesComGrupo());
+    await _montar(t, servicos: s, tamanho: _celular, windows: false);
+    expect(find.byKey(const Key('cartao-venda-G1')), findsOneWidget);
+    expect(find.byKey(const Key('parte-venda-G1.1')), findsNothing);
+    await t.tap(find.byKey(const Key('expandir-venda-G1')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('parte-venda-G1.1')), findsOneWidget);
+    expect(find.byKey(const Key('parte-venda-G1.2')), findsOneWidget);
+    expect(find.byKey(const Key('expandir-venda-V9')), findsNothing);
+  });
+
   testWidgets('compacto: cartões com menu de item nas compras e vendas', (
     t,
   ) async {

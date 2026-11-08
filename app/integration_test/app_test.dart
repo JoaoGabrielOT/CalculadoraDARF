@@ -158,6 +158,16 @@ void main() {
     expect(find.text('WEGE3'), findsOneWidget);
     expect(repo.carregar(mes).lotes.map((l) => l.ticker), contains('WEGE3'));
 
+    // formulário de venda por quantidade, em Automático
+    await t.tap(find.text('PETR4').first);
+    await t.pump(const Duration(milliseconds: 400));
+    await t.tap(find.text('Registrar venda').first);
+    await ate(t, find.byKey(const ValueKey('modo-venda')));
+    await assentar(t);
+    await capturar(t, 'form_venda_automatico');
+    await t.tap(find.text('Cancelar'));
+    await assentar(t);
+
     // radar rolando enquanto as cotações falham: a mensagem fica na linha
     await t.tap(_naLateral('Radar'));
     await ate(t, find.text('+  Adicionar'));

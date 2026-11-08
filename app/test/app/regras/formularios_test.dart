@@ -547,6 +547,56 @@ void main() {
       );
     });
 
+    test('resumoVendaPrevia aplica o limite de R\$ 1 do IRRF à soma', () {
+      PreviaVenda previa(List<ItemAlocacao> itens) => PreviaVenda(
+        linhas: [for (final i in itens) LinhaPrevia(i, 0, 0)],
+        gerencial: 0,
+        fiscal: 0,
+        qtdDt: 0,
+        qtdComum: 0,
+      );
+      // swing: 2 x 15.000 -> 0,75 por linha (abaixo do limite), 1,50 na soma
+      final s = resumoVendaPrevia(
+        previa([ItemAlocacao(a, 100), ItemAlocacao(b, 100)]),
+        150,
+        '2026-10-28',
+      )!;
+      expect(s.irrf, closeTo(1.5, 1e-9));
+      expect(s.liquido, closeTo(s.bruto - s.taxas - 1.5, 1e-9));
+      // day trade: ganho e perda se abatem antes do 1%
+      final ganho = compra('G', '2026-10-28', 2000, 100);
+      final perda = compra('P', '2026-10-28', 500, 200);
+      final d = resumoVendaPrevia(
+        previa([
+          ItemAlocacao(ganho, 2000, travado: true),
+          ItemAlocacao(perda, 500, travado: true),
+        ]),
+        150,
+        '2026-10-28',
+      )!;
+      final r1 = resumoOrdem(
+        'venda',
+        2000,
+        150,
+        '2026-10-28',
+        precoCompra: 100,
+        dayTrade: true,
+      );
+      final r2 = resumoOrdem(
+        'venda',
+        500,
+        150,
+        '2026-10-28',
+        precoCompra: 200,
+        dayTrade: true,
+      );
+      final liquidoDia = r1.liquido + r1.irrf + r2.liquido + r2.irrf;
+      expect(r2.liquido, lessThan(0));
+      expect(d.irrf, closeTo(liquidoDia * 0.01, 1e-9));
+      expect(d.liquido, closeTo(liquidoDia * 0.99, 1e-9));
+      expect(d.dayTrade, isTrue);
+    });
+
     test('textos fixos do painel', () {
       expect(textoSelecionado(120, 150), 'Selecionado 120 de 150');
       expect(

@@ -1,5 +1,6 @@
 // Caixa e liquidação (D+2) na B3 (nucleo.py:538-739).
 
+import 'alocacao.dart' show grupoDe;
 import 'ambiente.dart';
 import 'apuracao.dart';
 import 'compat/numeros.dart';
@@ -7,6 +8,7 @@ import 'compat/ordenacao.dart';
 import 'constantes.dart';
 import 'datas.dart';
 import 'modelos/config.dart';
+import 'modelos/lote.dart';
 import 'modelos/mes.dart';
 
 const diasSemana = [
@@ -213,6 +215,9 @@ List<LancamentoCaixa> lancamentosCaixa(Map<String, Mes> meses) {
   final itens = <LancamentoCaixa>[];
   final irrfStDia = <String, double>{};
   final resDtDia = <String, double>{};
+  // venda em várias compras (ids `<grupo>.<k>`): um lançamento por grupo e
+  // regime, na posição da primeira linha; o IRRF do dia segue por linha
+  final posicaoGrupo = <String, int>{};
 
   void adicionar(
     String id,
@@ -232,6 +237,37 @@ List<LancamentoCaixa> lancamentosCaixa(Map<String, Mes> meses) {
       liquidacao: calcularDataLiquidacao(data),
     ),
   );
+
+  void adicionarVenda(Venda v, String ticker, String tipo, double valor) {
+    final grupo = grupoDe(v.id);
+    final chave = '$grupo|$tipo';
+    final i = posicaoGrupo[chave];
+    if (i == null) {
+      final outro = posicaoGrupo.containsKey(
+        '$grupo|${tipo == 'Venda' ? 'Day trade' : 'Venda'}',
+      );
+      posicaoGrupo[chave] = itens.length;
+      adicionar(
+        outro ? 'v:$grupo:${tipo == 'Venda' ? 'st' : 'dt'}' : 'v:$grupo',
+        v.data,
+        ticker,
+        tipo,
+        v.qtd,
+        valor,
+      );
+      return;
+    }
+    final x = itens[i];
+    itens[i] = LancamentoCaixa(
+      id: x.id,
+      data: x.data,
+      ticker: x.ticker,
+      tipo: x.tipo,
+      qtd: x.qtd + v.qtd,
+      valor: x.valor + valor,
+      liquidacao: x.liquidacao,
+    );
+  }
 
   for (final chave in ordenadoPor(meses.keys, (m) => [m])) {
     for (final l in meses[chave]!.lotes) {
@@ -257,24 +293,10 @@ List<LancamentoCaixa> lancamentosCaixa(Map<String, Mes> meses) {
         final c = calcularVenda(l, v);
         if (c.dt) {
           resDtDia[v.data] = (resDtDia[v.data] ?? 0.0) + c.liquido;
-          adicionar(
-            'v:${v.id}',
-            v.data,
-            l.ticker,
-            'Day trade',
-            v.qtd,
-            c.liquido,
-          );
+          adicionarVenda(v, l.ticker, 'Day trade', c.liquido);
         } else {
           irrfStDia[v.data] = (irrfStDia[v.data] ?? 0.0) + c.venda * irrfSwing;
-          adicionar(
-            'v:${v.id}',
-            v.data,
-            l.ticker,
-            'Venda',
-            v.qtd,
-            c.venda - c.venda * taxaB3Swing,
-          );
+          adicionarVenda(v, l.ticker, 'Venda', c.venda - c.venda * taxaB3Swing);
         }
       }
     }

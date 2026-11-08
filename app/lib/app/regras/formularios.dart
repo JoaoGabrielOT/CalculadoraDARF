@@ -202,11 +202,14 @@ Validacao<NovaVendaQtd> validarVendaQtd({
 }
 
 /// Resumo financeiro da venda em várias compras: soma de `resumoOrdem` por
-/// linha da prévia (preço de compra e day trade de cada compra), como o Caixa
-/// soma por linha. Nulo sem linhas.
+/// linha da prévia (preço de compra e day trade de cada compra). O IRRF segue
+/// o Caixa: soma do dia por categoria (day trade com ganhos e perdas
+/// abatidos) e o limite de R$ 1 vale uma vez por categoria, não por linha.
+/// Nulo sem linhas.
 ResumoOrdem? resumoVendaPrevia(PreviaVenda p, double preco, String data) {
   if (p.linhas.isEmpty) return null;
-  var bruto = 0.0, taxas = 0.0, irrf = 0.0, liquido = 0.0;
+  var bruto = 0.0, taxas = 0.0, liquido = 0.0;
+  var irrfSwingBruto = 0.0, resultadoDt = 0.0;
   var dayTrade = false;
   String? liquidacao;
   for (final l in p.linhas) {
@@ -220,16 +223,25 @@ ResumoOrdem? resumoVendaPrevia(PreviaVenda p, double preco, String data) {
     );
     bruto += r.bruto;
     taxas += r.taxas;
-    irrf += r.irrf;
-    liquido += r.liquido;
+    // valores antes do limite de R$ 1, que se aplica à soma
+    liquido += r.liquido + r.irrf;
+    if (r.dayTrade) {
+      resultadoDt += r.liquido + r.irrf;
+    } else {
+      irrfSwingBruto += r.bruto * irrfSwing;
+    }
     dayTrade = dayTrade || r.dayTrade;
     liquidacao ??= r.liquidacao;
   }
+  final irrfSt = irrfSwingBruto > 1 ? irrfSwingBruto : 0.0;
+  final irrfDt = resultadoDt * irrfDaytrade > 1
+      ? resultadoDt * irrfDaytrade
+      : 0.0;
   return ResumoOrdem(
     bruto: bruto,
     taxas: taxas,
-    irrf: irrf,
-    liquido: liquido,
+    irrf: irrfSt + irrfDt,
+    liquido: liquido - irrfSt - irrfDt,
     dayTrade: dayTrade,
     liquidacao: liquidacao!,
   );

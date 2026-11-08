@@ -4,7 +4,10 @@ import 'package:calculadoradarf/nucleo/ambiente.dart';
 import 'package:calculadoradarf/nucleo/armazenamento.dart';
 import 'package:calculadoradarf/nucleo/caixa.dart';
 import 'package:calculadoradarf/nucleo/compat/ordenacao.dart';
+import 'package:calculadoradarf/nucleo/constantes.dart';
 import 'package:calculadoradarf/nucleo/modelos/config.dart';
+import 'package:calculadoradarf/nucleo/modelos/lote.dart';
+import 'package:calculadoradarf/nucleo/modelos/mes.dart';
 import 'package:calculadoradarf/nucleo/repositorio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -243,6 +246,43 @@ void main() {
       resumoCaixa(_cfg({'saldo': 10.0}), {}, hoje: '2026-10-28').definido,
       isFalse,
     );
+  });
+
+  test('caixa soma o grupo num lançamento', () {
+    Lote lote(String id, String data, int qtd, double preco, List<Venda> v) =>
+        Lote(
+          id: id,
+          ticker: 'PETR4',
+          tipo: 'Ação',
+          dataCompra: data,
+          qtd: qtd,
+          preco: preco,
+          vendas: v,
+        );
+    final a = lote('A', '2026-10-02', 100, 30, [
+      Venda(id: 'G1.1', data: '2026-10-28', qtd: 100, preco: 35),
+    ]);
+    final b = lote('B', '2026-10-05', 100, 20, [
+      Venda(id: 'G1.2', data: '2026-10-28', qtd: 60, preco: 35),
+    ]);
+    final c = lote('C', '2026-10-06', 10, 20, [
+      Venda(id: 'S1', data: '2026-10-28', qtd: 10, preco: 35),
+    ]);
+    final itens = lancamentosCaixa({
+      '2026-10': Mes(mes: '2026-10', lotes: [a, b, c]),
+    });
+    final vendas = itens.where((i) => i.tipo == 'Venda').toList();
+    expect(vendas.map((i) => i.id), ['v:G1', 'v:S1']);
+    final g = vendas.first;
+    expect(g.qtd, 160);
+    final soma = [
+      for (final l in [a, b])
+        for (final v in l.vendas) v,
+    ].fold<double>(0, (s, v) => s + v.qtd * v.preco * (1 - taxaB3Swing));
+    expect(g.valor, closeTo(soma, 1e-9));
+    // venda simples continua igual
+    expect(vendas.last.qtd, 10);
+    expect(vendas.last.valor, closeTo(350 * (1 - taxaB3Swing), 1e-9));
   });
 
   test('diasSemana', () {
