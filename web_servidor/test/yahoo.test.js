@@ -65,3 +65,13 @@ test('fetch que passa de 8 s -> 502', async () => {
   assert.equal(r.status, 502);
   assert.ok(Date.now() - t0 >= 7900);
 });
+
+test('3xx do destino não é seguido nem repassado -> 502', async () => {
+  const f = fetchFalso(302, '', { location: 'https://outro.example/x' });
+  const { GET } = criar({ fetch: f, env, agora: () => 0 });
+  const r = await GET(pedido('/api/yahoo/chart/PETR4.SA'));
+  assert.equal(r.status, 502);
+  assert.deepEqual(await r.json(), { erro: 'indisponivel' });
+  assert.equal(f.chamadas.length, 1);
+  assert.equal(f.chamadas[0].redirect, 'manual');
+});

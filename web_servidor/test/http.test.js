@@ -93,3 +93,16 @@ test('exceção interna vira 502 sem detalhes', async () => {
   assert.equal(r.status, 502);
   assert.equal(await r.text(), '{"erro":"indisponivel"}');
 });
+
+test('Vary: Origin em toda resposta (sem Origin, 403, 405, 429)', async () => {
+  const { GET, POST } = nova();
+  assert.equal((await GET(pedido(URL_OK, { origem: null, cabecalhos: { referer: 'https://calculadora-darf.vercel.app/' } }))).headers.get('vary'), 'Origin');
+  assert.equal((await GET(pedido(URL_OK, { origem: null }))).headers.get('vary'), 'Origin');
+  assert.equal((await POST(pedido(URL_OK, { metodo: 'POST' }))).status, 405);
+  assert.equal((await POST(pedido(URL_OK, { metodo: 'POST' }))).headers.get('vary'), 'Origin');
+  const lim = nova();
+  let ultima;
+  for (let i = 0; i < 241; i++) ultima = await lim.GET(pedido(URL_OK));
+  assert.equal(ultima.status, 429);
+  assert.equal(ultima.headers.get('vary'), 'Origin');
+});

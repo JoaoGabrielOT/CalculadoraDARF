@@ -72,7 +72,7 @@ export function criarRota({ metodos, limite, cache, exigirOrigem = true }, dep) 
   }
 
   function tratar(metodo) {
-    return async (request) => {
+    const executar = async (request) => {
       try {
         const origem = origemDoPedido(request);
         if (exigirOrigem && (!origem || !permitida(origem, permitidas))) {
@@ -103,6 +103,12 @@ export function criarRota({ metodos, limite, cache, exigirOrigem = true }, dep) 
       } catch {
         return json(502, { erro: 'indisponivel' });
       }
+    };
+    // Vary: Origin em toda resposta, para o cache de borda não misturar origens.
+    return async (request) => {
+      const r = await executar(request);
+      r.headers.set('vary', 'Origin');
+      return r;
     };
   }
 

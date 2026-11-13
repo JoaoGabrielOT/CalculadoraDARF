@@ -28,7 +28,11 @@ export async function repassar(
   try {
     const headers = { 'User-Agent': USER_AGENT, 'Accept-Language': 'pt-BR,pt;q=0.9' };
     if (tipo) headers['Content-Type'] = tipo;
-    const r = await fetch(url, { method: metodo, headers, body: corpo, signal: controle.signal });
+    const r = await fetch(url, { method: metodo, headers, body: corpo, signal: controle.signal,
+      redirect: 'manual',
+    });
+    // Redirecionamento poderia levar a host fora da lista: não seguimos (502).
+    if (r.status >= 300 && r.status < 400) return falha();
     const dados = SEM_CORPO.has(r.status) ? null : await r.arrayBuffer();
     const saida = {};
     const tipoResp = r.headers.get('content-type');
