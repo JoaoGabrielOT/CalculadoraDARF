@@ -132,14 +132,14 @@ void main() {
     }
   });
 
-  test('a 2.0.0 é mais nova que a 1.12.1 e o app já sai na 2.4.1', () {
+  test('a 2.0.0 é mais nova que a 1.12.1 e o app já sai na 2.5.0', () {
     expect(versaoMaisNova('v2.0.0', '1.12.1'), isTrue);
     expect(versaoMaisNova('v2.0.0', '2.0.0'), isFalse);
     expect(versaoMaisNova('v1.12.1', '2.0.0'), isFalse);
     expect(versaoMaisNova('v1.12.1', '1.12.0'), isTrue);
     expect(versaoMaisNova('2.0.10', '2.0.9'), isTrue);
     expect(versaoMaisNova('2.0.9', '2.0.10'), isFalse);
-    expect(versaoApp, '2.4.1');
+    expect(versaoApp, '2.5.0');
   });
 
   test('constantes e asset da plataforma', () {

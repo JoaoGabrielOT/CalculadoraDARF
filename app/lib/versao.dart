@@ -1,2 +1,2 @@
 /// Versão do aplicativo (comparada com a do GitHub pelo atualizador).
-const String versaoApp = '2.4.1';
+const String versaoApp = '2.5.0';
