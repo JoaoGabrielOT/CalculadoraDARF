@@ -38,6 +38,7 @@ dependencies:
   meta: ^1.19.0
   unorm_dart: 0.3.3
   http: 1.6.0
+  web: 1.1.2
   crypto: 3.0.7
   xml: 6.6.1
   image: 4.12.0
