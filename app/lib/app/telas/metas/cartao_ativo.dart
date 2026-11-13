@@ -108,8 +108,8 @@ class _CartaoAtivoState extends State<CartaoAtivo> {
   void initState() {
     super.initState();
     // o ativo do foco (menu da Apuração) já abre, e a lista rola até ele
-    final foco = widget.controle.foco;
-    if (foco == null || foco.ticker != widget.resultado.ativo.ticker) return;
+    final foco = widget.controle.consumirFoco(widget.resultado.ativo.ticker);
+    if (foco == null) return;
     _aberto = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;

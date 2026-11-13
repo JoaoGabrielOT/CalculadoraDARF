@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:calculadoradarf/app/servicos/api.dart';
+import 'package:calculadoradarf/app/telas/metas/controle_metas.dart';
 import 'package:calculadoradarf/app/telas/metas/tela_metas.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import '../../apoio/abrir_formulario.dart';
 import '../../apoio/dados_exemplo.dart';
@@ -782,6 +784,49 @@ void main() {
       await abrirCom(t, s, 'WEGE3');
       expect(s.chamadas, contains('sugestoesMetas(radar)'));
       expect(find.byKey(const ValueKey('abas-WEGE3')), findsOneWidget);
+    });
+
+    testWidgets('a recarga com o radar mantém "carregando" até terminar', (
+      t,
+    ) async {
+      final radar = Completer<VisaoSugestoes>();
+      final s = ServicosFalsos()
+        ..sugestoesMetasFn = (comRadar) =>
+            comRadar ? radar.future : Future.value(_visao([_ativo('PETR4')]));
+      await abrirCom(t, s, 'WEGE3');
+      final controle = Provider.of<ControleMetas>(
+        t.element(find.byKey(const ValueKey('metas-dialogo'))),
+        listen: false,
+      );
+      expect(s.chamadas, contains('sugestoesMetas(radar)'));
+      expect(controle.carregandoSug, isTrue);
+      radar.complete(_visao([_ativo('WEGE3', semPosicao: true)]));
+      await t.pumpAndSettle();
+      expect(controle.carregandoSug, isFalse);
+    });
+
+    testWidgets('o foco vale uma vez: voltar à aba não reabre o cartão', (
+      t,
+    ) async {
+      final s = ServicosFalsos()
+        ..visaoSugestoes = _visao([
+          for (final k in tickers) _ativo(k, compras: [_compra('L-$k')]),
+          _ativo('ZZZZ3', compras: [_compra('L1')]),
+        ]);
+      await abrirCom(t, s, 'ZZZZ3');
+      expect(find.byKey(const ValueKey('abas-ZZZZ3')), findsOneWidget);
+      await t.tap(find.text('Calculadora'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Sugestões'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('abas-ZZZZ3')), findsNothing);
+    });
+
+    testWidgets('ticker que não aparece nas sugestões: aviso curto', (t) async {
+      final s = ServicosFalsos()
+        ..sugestoesMetasFn = (radar) => Future.value(_visao([_ativo('PETR4')]));
+      await abrirCom(t, s, 'WEGE3');
+      expect(find.textContaining('WEGE3 não aparece'), findsOneWidget);
     });
   });
 }

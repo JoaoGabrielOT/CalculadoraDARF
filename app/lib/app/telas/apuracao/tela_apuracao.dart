@@ -107,57 +107,61 @@ class _Expandido extends StatelessWidget {
   Widget build(BuildContext context) {
     final visao = controle.visao;
     // botão direito fora das linhas: só as ações gerais
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onSecondaryTapUp: (d) =>
-          unawaited(abrirMenuApuracao(context, d.globalPosition)),
-      child: Column(
-        children: [
-          _Progresso(controle.carregando || controle.verificando),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-            child: _Barra(controle: controle, compacto: false),
-          ),
-          _Avisos(controle),
-          if (visao == null)
-            Expanded(
-              child: controle.erro == null
-                  ? const Carregando()
-                  : const SizedBox.shrink(),
-            )
-          else
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                child: Column(
-                  children: [
-                    Indicadores(
-                      apuracao: visao.apuracao,
-                      mes: visao.mes,
-                      compacto: false,
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: conteudo?.call(context) ?? const SizedBox(),
-                          ),
-                          const SizedBox(width: 16),
-                          Detalhamento(
-                            apuracao: visao.apuracao,
-                            mes: visao.mes,
-                            compacto: false,
-                          ),
-                        ],
+    return ContextoMenuApuracao(
+      contexto: context,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onSecondaryTapUp: (d) =>
+            unawaited(abrirMenuApuracao(context, d.globalPosition)),
+        child: Column(
+          children: [
+            _Progresso(controle.carregando || controle.verificando),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: _Barra(controle: controle, compacto: false),
+            ),
+            _Avisos(controle),
+            if (visao == null)
+              Expanded(
+                child: controle.erro == null
+                    ? const Carregando()
+                    : const SizedBox.shrink(),
+              )
+            else
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Column(
+                    children: [
+                      Indicadores(
+                        apuracao: visao.apuracao,
+                        mes: visao.mes,
+                        compacto: false,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child:
+                                  conteudo?.call(context) ?? const SizedBox(),
+                            ),
+                            const SizedBox(width: 16),
+                            Detalhamento(
+                              apuracao: visao.apuracao,
+                              mes: visao.mes,
+                              compacto: false,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

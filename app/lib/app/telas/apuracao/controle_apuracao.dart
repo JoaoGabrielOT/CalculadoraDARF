@@ -682,6 +682,9 @@ class ControleApuracao extends ChangeNotifier {
 
   // --- radar (menu do botão direito)
 
+  /// O menu do botão direito está abrindo ou aberto.
+  bool menuAbrindo = false;
+
   /// Tickers do meu radar; null se a leitura falhou ou na visão de amigo.
   Future<VisaoRadar?> meuRadar() async {
     if (_estado.amigo != null) return null;

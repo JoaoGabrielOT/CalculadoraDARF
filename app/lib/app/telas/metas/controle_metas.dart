@@ -69,6 +69,18 @@ class ControleMetas extends ChangeNotifier {
   /// O foco fora das posições já ligou o radar uma vez.
   bool _focoNoRadar = false;
 
+  /// O foco já abriu e rolou até o cartão (vale uma vez só).
+  bool _focoAplicado = false;
+  bool _focoAvisado = false;
+
+  /// O foco, se for do [ticker] e ainda não aplicado; consome na 1ª vez.
+  FocoMetas? consumirFoco(String ticker) {
+    final f = foco;
+    if (f == null || _focoAplicado || f.ticker != ticker) return null;
+    _focoAplicado = true;
+    return f;
+  }
+
   late int _versao;
   int _geracao = 0;
   int _geracaoCalculo = 0;
@@ -276,7 +288,15 @@ class ControleMetas extends ChangeNotifier {
           !nova.ativos.any((a) => a.ticker == f.ticker && a.posicao != null)) {
         _focoNoRadar = true;
         soPosicoes = false;
+        // a recarga assume o estado de "carregando" e o texto
         unawaited(recarregarSugestoes());
+        return;
+      }
+      if (f != null &&
+          !_focoAvisado &&
+          !nova.ativos.any((a) => a.ticker == f.ticker)) {
+        _focoAvisado = true;
+        textoSug = '${f.ticker} não aparece nas sugestões.';
       }
     } catch (e) {
       if (geracao != _geracaoSug) return;

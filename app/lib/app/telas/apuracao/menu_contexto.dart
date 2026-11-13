@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../estado/estado_app.dart';
 import '../../plataforma/plataforma.dart';
+import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import '../grafico/tela_grafico.dart';
 import '../metas/tela_metas.dart';
@@ -51,6 +52,25 @@ enum _Acao {
   fecharMes,
 }
 
+/// Contexto da tela da Apuração, para o menu: a linha clicada pode sumir
+/// (a lista troca, os dados recarregam) enquanto o menu está aberto.
+class ContextoMenuApuracao extends InheritedWidget {
+  const ContextoMenuApuracao({
+    super.key,
+    required this.contexto,
+    required super.child,
+  });
+
+  final BuildContext contexto;
+
+  /// O contexto da tela; sem ela, o próprio [c].
+  static BuildContext de(BuildContext c) =>
+      c.getInheritedWidgetOfExactType<ContextoMenuApuracao>()?.contexto ?? c;
+
+  @override
+  bool updateShouldNotify(ContextoMenuApuracao antigo) => false;
+}
+
 /// Abre o menu em [posicao] (global, a do cursor). Sem [alvo], só as ações
 /// gerais.
 Future<void> abrirMenuApuracao(
@@ -58,15 +78,29 @@ Future<void> abrirMenuApuracao(
   Offset posicao, {
   AlvoMenu? alvo,
 }) async {
+  c = ContextoMenuApuracao.de(c);
   final controle = c.read<ControleApuracao>();
+  // um clique direito por vez: o seguinte espera o menu anterior (e a
+  // leitura do radar) terminar
+  if (controle.menuAbrindo) return;
+  controle.menuAbrindo = true;
   final estado = c.read<EstadoApp>();
   final amigo = estado.amigo != null;
   final t = alvo?.ticker;
   final overlay = Overlay.of(c).context.findRenderObject()! as RenderBox;
   final ponto = overlay.globalToLocal(posicao);
   // o radar decide entre "Adicionar ao Radar" e "Já está no Radar"
-  final radar = t == null || amigo ? null : await controle.meuRadar();
-  if (!c.mounted) return;
+  final VisaoRadar? radar;
+  try {
+    radar = t == null || amigo ? null : await controle.meuRadar();
+  } catch (_) {
+    controle.menuAbrindo = false;
+    rethrow;
+  }
+  if (!c.mounted) {
+    controle.menuAbrindo = false;
+    return;
+  }
   final noRadar = radar?.itens.any((i) => i.ticker == t) ?? false;
   final nome = radar?.itens.where((i) => i.ticker == t).firstOrNull?.nome;
 
@@ -165,7 +199,8 @@ Future<void> abrirMenuApuracao(
       const PopupMenuDivider(),
       if (!amigo && emCarteira)
         item(_Acao.criarMeta, Icons.flag_outlined, 'Criar meta de alvo e stop'),
-      if (!amigo)
+      // fora da carteira e do Radar, o ativo não aparece nas sugestões
+      if (!amigo && (emCarteira || noRadar))
         item(
           _Acao.verSugestao,
           Icons.lightbulb_outline,
@@ -204,14 +239,19 @@ Future<void> abrirMenuApuracao(
       ),
   ];
 
-  final acao = await showMenu<_Acao>(
-    context: c,
-    position: RelativeRect.fromRect(
-      Rect.fromPoints(ponto, ponto),
-      Offset.zero & overlay.size,
-    ),
-    items: itens,
-  );
+  final _Acao? acao;
+  try {
+    acao = await showMenu<_Acao>(
+      context: c,
+      position: RelativeRect.fromRect(
+        Rect.fromPoints(ponto, ponto),
+        Offset.zero & overlay.size,
+      ),
+      items: itens,
+    );
+  } finally {
+    controle.menuAbrindo = false;
+  }
   if (acao == null || !c.mounted) return;
 
   void comprarAtivo() => unawaited(controle.novaCompra(c, ticker: t));
@@ -252,10 +292,16 @@ Future<void> abrirMenuApuracao(
     case _Acao.radar:
       unawaited(controle.adicionarRadar(c, t!));
     case _Acao.copiar:
-      await c.read<Plataforma>().copiarTexto(t!);
+      String aviso;
+      try {
+        await c.read<Plataforma>().copiarTexto(t!);
+        aviso = '$t copiado';
+      } catch (_) {
+        aviso = 'Não foi possível copiar $t.';
+      }
       if (c.mounted) {
         ScaffoldMessenger.maybeOf(c)
-            ?.showSnackBar(SnackBar(content: Text('$t copiado')));
+            ?.showSnackBar(SnackBar(content: Text(aviso)));
       }
     case _Acao.comprar:
       unawaited(controle.novaCompra(c));

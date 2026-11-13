@@ -3,6 +3,7 @@
 
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
+import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/gestures.dart';
@@ -23,9 +24,10 @@ Future<(ServicosFalsos, PlataformaFalsa)> _montar(
   WidgetTester t, {
   ServicosFalsos? servicos,
   Size tamanho = _pc,
+  PlataformaFalsa? plataforma,
 }) async {
   final s = servicos ?? ServicosFalsos();
-  final p = PlataformaFalsa();
+  final p = plataforma ?? PlataformaFalsa();
   await montarApp(
     t,
     servicos: s,
@@ -109,6 +111,12 @@ VisaoSugestoes _sugestoes() => VisaoSugestoes(
   rodape: const [],
 );
 
+class _PlataformaSemCopia extends PlataformaFalsa {
+  @override
+  Future<void> copiarTexto(String texto) async =>
+      throw Exception('sem área de transferência');
+}
+
 void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: hojeExemplo));
 
@@ -171,7 +179,12 @@ void main() {
       await _direito(t, _linha('L9'));
       _esperaItens(
         ['Nova compra de ITUB4', 'Editar compra', 'Excluir ativo'],
-        ['Registrar venda', 'Criar meta de alvo e stop'],
+        [
+          'Registrar venda',
+          'Criar meta de alvo e stop',
+          // sem posição e fora do Radar, o foco não teria o que mostrar
+          'Ver sugestão de saída',
+        ],
       );
     });
 
@@ -405,6 +418,45 @@ void main() {
       await _escolher(t, 'Copiar ticker');
       expect(p.copias, ['PETR4']);
       expect(find.text('PETR4 copiado'), findsOneWidget);
+    });
+
+    testWidgets('Copiar ticker com falha avisa e não diz "copiado"', (t) async {
+      await _montar(t, plataforma: _PlataformaSemCopia());
+      await _direito(t, _linha('L1'));
+      await _escolher(t, 'Copiar ticker');
+      expect(find.text('PETR4 copiado'), findsNothing);
+      expect(find.text('Não foi possível copiar PETR4.'), findsOneWidget);
+    });
+
+    testWidgets('dois cliques direitos seguidos abrem um só menu', (t) async {
+      await _montar(t);
+      final centro = t.getCenter(_linha('L1'));
+      for (var i = 0; i < 2; i++) {
+        final g = await t.startGesture(centro, buttons: kSecondaryButton);
+        await g.up();
+      }
+      await t.pumpAndSettle();
+      expect(_item('Copiar ticker'), findsOneWidget);
+      await t.sendKeyEvent(LogicalKeyboardKey.escape);
+      await t.pumpAndSettle();
+      expect(_item('Copiar ticker'), findsNothing);
+    });
+
+    testWidgets('a linha some com o menu aberto: a ação segue na tela', (
+      t,
+    ) async {
+      await _montar(t);
+      await t.tap(find.text('Posição em 28/10/2026'));
+      await t.pumpAndSettle();
+      await _direito(t, find.byKey(const Key('ativo-PETR4')));
+      // a lista troca (e a linha é descartada) com o menu aberto
+      Provider.of<ControleApuracao>(
+        t.element(find.byKey(const Key('lista-posicoes'))),
+        listen: false,
+      ).escolherModo(ModoLista.carteira);
+      await t.pump();
+      await _escolher(t, 'Trocar mês…');
+      expect(find.text('Mês atual'), findsOneWidget);
     });
 
     testWidgets('Trocar mês… abre a grade de meses', (t) async {
