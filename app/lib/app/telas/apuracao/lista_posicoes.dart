@@ -4,6 +4,8 @@
 // resultado nem imposto. A cotação atual só aparece no corte de hoje, com
 // fonte e hora; num mês passado não há cotação.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,6 +17,7 @@ import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import 'controle_apuracao.dart';
 import 'lista_lotes.dart';
+import 'menu_contexto.dart';
 import 'painel_indicadores.dart';
 
 const textoCotacaoHistorica = 'cotação histórica não disponível';
@@ -352,6 +355,18 @@ class _LinhaAtivoState extends State<_LinhaAtivo> {
         Divider(height: 1, color: c.linha),
         InkWell(
           onTap: () => setState(() => _aberto = !_aberto),
+          onSecondaryTapUp: (d) => unawaited(
+            abrirMenuApuracao(
+              context,
+              d.globalPosition,
+              alvo: AlvoMenu(
+                ticker: a.ticker,
+                cabecalho:
+                    '${a.ticker} · ${a.qtd} un.'
+                    '${medio == null ? '' : ' · PM ${brl(medio)}'}',
+              ),
+            ),
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             child: Row(

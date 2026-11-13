@@ -1,4 +1,5 @@
 import 'package:calculadoradarf/app/componentes/tabela.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,6 +41,7 @@ void main() {
     List<_L> dados = linhas,
     ValueChanged<_L>? aoSelecionar,
     ValueChanged<_L>? aoDuploClique,
+    void Function(_L, Offset)? aoClicarDireito,
     String? selecionado,
   }) => SizedBox(
     width: 500,
@@ -50,6 +52,7 @@ void main() {
       vazio: 'Nada aqui',
       aoSelecionar: aoSelecionar,
       aoDuploClique: aoDuploClique,
+      aoClicarDireito: aoClicarDireito,
       selecionado: selecionado,
       id: (l) => l.nome,
     ),
@@ -60,6 +63,25 @@ void main() {
     for (final w in t.widgetList<Text>(find.byKey(const Key('coluna-0'))))
       w.data!,
   ];
+
+  testWidgets('Tabela: botão direito entrega a linha e a posição do cursor, '
+      'sem selecionar', (t) async {
+    (_L, Offset)? direito;
+    _L? selecionada;
+    await montarComponente(
+      t,
+      tabela(
+        aoSelecionar: (l) => selecionada = l,
+        aoClicarDireito: (l, p) => direito = (l, p),
+      ),
+    );
+    final centro = t.getCenter(find.text('c'));
+    await t.tapAt(centro, buttons: kSecondaryButton);
+    await t.pumpAndSettle();
+    expect(direito?.$1.nome, 'c');
+    expect(direito?.$2, centro);
+    expect(selecionada, isNull);
+  });
 
   testWidgets(
     'Tabela: clique no título ordena e o segundo inverte; vazio mostra o texto; duplo clique chama a ação',

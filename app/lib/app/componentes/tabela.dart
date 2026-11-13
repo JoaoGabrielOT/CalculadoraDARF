@@ -79,6 +79,7 @@ class Tabela<T> extends StatefulWidget {
     required this.vazio,
     this.aoSelecionar,
     this.aoDuploClique,
+    this.aoClicarDireito,
     this.selecionado,
     this.id,
     this.reiniciarOrdem,
@@ -94,6 +95,10 @@ class Tabela<T> extends StatefulWidget {
   final String vazio;
   final ValueChanged<T>? aoSelecionar;
   final ValueChanged<T>? aoDuploClique;
+
+  /// Botão direito numa linha, com a posição global do cursor (menu de
+  /// contexto); quem recebe decide se marca a linha.
+  final void Function(T dados, Offset posicao)? aoClicarDireito;
 
   /// [id] da linha selecionada; exige [id].
   final String? selecionado;
@@ -270,6 +275,7 @@ class _TabelaState<T> extends State<Tabela<T>> {
         selecionada: id != null && widget.selecionado == id,
         aoSelecionar: widget.aoSelecionar,
         aoDuploClique: widget.aoDuploClique,
+        aoClicarDireito: widget.aoClicarDireito,
       );
     }
 
@@ -317,6 +323,7 @@ class _Linha<T> extends StatelessWidget {
     required this.selecionada,
     required this.aoSelecionar,
     required this.aoDuploClique,
+    required this.aoClicarDireito,
   });
 
   final List<ColunaTabela<T>> colunas;
@@ -326,6 +333,7 @@ class _Linha<T> extends StatelessWidget {
   final bool selecionada;
   final ValueChanged<T>? aoSelecionar;
   final ValueChanged<T>? aoDuploClique;
+  final void Function(T dados, Offset posicao)? aoClicarDireito;
 
   @override
   Widget build(BuildContext context) {
@@ -347,6 +355,9 @@ class _Linha<T> extends StatelessWidget {
           onDoubleTap: aoDuploClique == null
               ? null
               : () => aoDuploClique!(dados),
+          onSecondaryTapUp: aoClicarDireito == null
+              ? null
+              : (d) => aoClicarDireito!(dados, d.globalPosition),
           child: Row(
             children: [
               for (final (i, col) in colunas.indexed)

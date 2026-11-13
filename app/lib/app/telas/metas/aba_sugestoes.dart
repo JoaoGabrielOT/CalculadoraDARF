@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
@@ -126,7 +127,9 @@ class _Corpo extends StatelessWidget {
     return ListView(
       // com foco, todos os cartões montam: o do foco precisa existir para a
       // rolagem chegar até ele
-      cacheExtent: controle.foco == null ? null : 1e6,
+      scrollCacheExtent: controle.foco == null
+          ? null
+          : const ScrollCacheExtent.pixels(1e6),
       children: [
         _Filtros(controle: controle),
         const SizedBox(height: 8),

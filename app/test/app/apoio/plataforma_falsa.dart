@@ -1,5 +1,5 @@
-// Plataforma falsa para os testes de tela: grava URLs abertas, notificações e
-// instalações; a resposta de `abrirUrl` é programável.
+// Plataforma falsa para os testes de tela: grava URLs abertas, notificações,
+// instalações e textos copiados; a resposta de `abrirUrl` é programável.
 
 import 'package:calculadoradarf/app/plataforma/plataforma.dart';
 
@@ -21,6 +21,9 @@ class PlataformaFalsa implements Plataforma {
   final List<Uri> urlsAbertas = [];
   final List<NotificacaoGravada> notificacoes = [];
   final List<String> instalacoes = [];
+
+  /// Textos enviados à área de transferência.
+  final List<String> copias = [];
 
   /// Resposta de `abrirUrl` (false = o navegador não abriu).
   bool respostaAbrirUrl = true;
@@ -79,4 +82,7 @@ class PlataformaFalsa implements Plataforma {
     if (falhaPlugin != null) throw falhaPlugin!;
     instalacoes.add(caminho);
   }
+
+  @override
+  Future<void> copiarTexto(String texto) async => copias.add(texto);
 }

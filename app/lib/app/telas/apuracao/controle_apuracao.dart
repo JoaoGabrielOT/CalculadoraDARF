@@ -431,14 +431,28 @@ class ControleApuracao extends ChangeNotifier {
   }
 
   /// Nova compra; numa compra nova pergunta se a venda já aconteceu
-  /// (android/main.py:1304).
-  Future<void> novaCompra(BuildContext c) => _unica(() => _novaCompra(c));
+  /// (android/main.py:1304). Com [ticker] (menu do botão direito), o
+  /// formulário já vem com ele e com o preço atual, como no Radar.
+  Future<void> novaCompra(BuildContext c, {String? ticker}) =>
+      _unica(() => _novaCompra(c, ticker));
 
-  Future<void> _novaCompra(BuildContext c) async {
+  Future<void> _novaCompra(BuildContext c, String? ticker) async {
     final atual = visaoLotes;
     if (atual == null || !atual.editavel) return;
     final antes = {for (final l in atual.dados.lotes) l.id};
-    final nova = await abrirFormCompra(c, atual);
+    final preco = ticker == null
+        ? null
+        : (precos[ticker] ?? cotacoes[ticker]?.preco);
+    final nova = await abrirFormCompra(
+      c,
+      atual,
+      iniciais: ticker == null
+          ? null
+          : {
+              'ticker': ticker,
+              if (preco != null && preco > 0) 'preco': precoTexto(preco),
+            },
+    );
     if (nova == null) return;
     _aceitar(nova);
     final lote = nova.dados.lotes.where((l) => !antes.contains(l.id));
@@ -537,20 +551,26 @@ class ControleApuracao extends ChangeNotifier {
     }
   }
 
-  /// Registrar venda; sem [lote] usa a compra marcada, se ainda tiver saldo.
-  /// Os avisos (sem compra em aberto, venda retroativa) são do formulário.
-  Future<void> registrarVenda(BuildContext c, {Lote? lote}) =>
-      _unica(() => _registrarVenda(c, lote: lote));
+  /// Registrar venda; sem [lote] nem [ticker] usa a compra marcada, se ainda
+  /// tiver saldo. Os avisos (sem compra em aberto, venda retroativa) são do
+  /// formulário.
+  Future<void> registrarVenda(BuildContext c, {Lote? lote, String? ticker}) =>
+      _unica(() => _registrarVenda(c, lote: lote, ticker: ticker));
 
-  Future<void> _registrarVenda(BuildContext c, {Lote? lote}) async {
+  Future<void> _registrarVenda(
+    BuildContext c, {
+    Lote? lote,
+    String? ticker,
+  }) async {
     final atual = visaoLotes;
     if (atual == null || !atual.editavel) return;
-    var alvo = lote ?? _lote(loteSelecionado);
+    var alvo = lote ?? (ticker == null ? _lote(loteSelecionado) : null);
     if (alvo != null && restante(alvo) == 0) alvo = null;
     final r = await abrirFormVenda(
       c,
       atual,
       lote: alvo,
+      ticker: ticker ?? '',
       fecharMesAberto: _fecharPeloFormulario,
     );
     if (r != null) _aceitar(r.visao);
@@ -658,6 +678,43 @@ class ControleApuracao extends ChangeNotifier {
       if (e is PedidoSuperado || _mudou(mes) || !c.mounted) return;
       await avisar(c, 'Não foi possível excluir', textoErro(e));
     }
+  }
+
+  // --- radar (menu do botão direito)
+
+  /// Tickers do meu radar; null se a leitura falhou ou na visão de amigo.
+  Future<VisaoRadar?> meuRadar() async {
+    if (_estado.amigo != null) return null;
+    try {
+      return await _servicos.radar();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Põe [ticker] no meu radar, como o campo de adicionar do Radar.
+  Future<void> adicionarRadar(BuildContext c, String ticker) async {
+    if (_estado.amigo != null) return;
+    try {
+      await _servicos.adicionarRadar(ticker);
+    } catch (e) {
+      if (e is! PedidoSuperado && c.mounted) {
+        await avisar(c, 'Radar', textoErro(e));
+      }
+      return;
+    }
+    _estado.radarMudou(buscar: true);
+    if (c.mounted) {
+      ScaffoldMessenger.maybeOf(
+        c,
+      )?.showSnackBar(SnackBar(content: Text('$ticker adicionado ao Radar.')));
+    }
+  }
+
+  /// O botão "Fechar mês" da tela está disponível.
+  bool get podeFechar {
+    final v = visao;
+    return v != null && v.editavel && !carregando && !fechando;
   }
 
   /// Antes de fechar, verifica as metas do mês: uma meta já atingida é

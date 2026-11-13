@@ -2,6 +2,7 @@
 // 1541-1576) e cartões com menu de item no compacto (android/main.py:
 // 828-846, 957-1017).
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
+import 'menu_contexto.dart';
 
 /// Altura da tabela: até 8 linhas à vista, na altura real delas (sem faixa
 /// vazia nem última linha cortada); com mais, o corpo rola e só monta as
@@ -434,6 +436,20 @@ class _Expandido extends StatelessWidget {
               id: (l) => l.id,
               selecionado: controle.loteSelecionado,
               aoSelecionar: (l) => controle.selecionarLote(l.id),
+              aoClicarDireito: (l, posicao) {
+                controle.selecionarLote(l.id);
+                unawaited(
+                  abrirMenuApuracao(
+                    context,
+                    posicao,
+                    alvo: AlvoMenu(
+                      ticker: l.ticker,
+                      cabecalho: '${l.ticker} · ${l.qtd} un. · ${brl(l.preco)}',
+                      lote: l,
+                    ),
+                  ),
+                );
+              },
               aoDuploClique: editavel
                   ? (l) {
                       controle.selecionarLote(l.id);

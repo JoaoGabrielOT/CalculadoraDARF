@@ -739,9 +739,7 @@ void main() {
       return r.top >= dialogo.top && r.bottom <= dialogo.bottom;
     }
 
-    testWidgets('o cartão do ticker já vem aberto e rolado até ele', (
-      t,
-    ) async {
+    testWidgets('o cartão do ticker já vem aberto e rolado até ele', (t) async {
       final s = ServicosFalsos()
         ..visaoSugestoes = _visao([
           for (final k in tickers) _ativo(k, compras: [_compra('L-$k')]),

@@ -4,6 +4,8 @@
 // ([listasApuracao], Tarefa 14). Expandido: conteúdo e Detalhamento lado a lado; compacto: lista
 // rolável com FAB.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -19,6 +21,7 @@ import 'detalhamento.dart';
 import 'indicadores.dart';
 import 'lista_posicoes.dart';
 import 'lista_vendas.dart';
+import 'menu_contexto.dart';
 import 'seletor_visao.dart';
 
 class TelaApuracao extends StatelessWidget {
@@ -103,53 +106,59 @@ class _Expandido extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visao = controle.visao;
-    return Column(
-      children: [
-        _Progresso(controle.carregando || controle.verificando),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-          child: _Barra(controle: controle, compacto: false),
-        ),
-        _Avisos(controle),
-        if (visao == null)
-          Expanded(
-            child: controle.erro == null
-                ? const Carregando()
-                : const SizedBox.shrink(),
-          )
-        else
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: Column(
-                children: [
-                  Indicadores(
-                    apuracao: visao.apuracao,
-                    mes: visao.mes,
-                    compacto: false,
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: conteudo?.call(context) ?? const SizedBox(),
-                        ),
-                        const SizedBox(width: 16),
-                        Detalhamento(
-                          apuracao: visao.apuracao,
-                          mes: visao.mes,
-                          compacto: false,
-                        ),
-                      ],
+    // botão direito fora das linhas: só as ações gerais
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (d) =>
+          unawaited(abrirMenuApuracao(context, d.globalPosition)),
+      child: Column(
+        children: [
+          _Progresso(controle.carregando || controle.verificando),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: _Barra(controle: controle, compacto: false),
+          ),
+          _Avisos(controle),
+          if (visao == null)
+            Expanded(
+              child: controle.erro == null
+                  ? const Carregando()
+                  : const SizedBox.shrink(),
+            )
+          else
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                child: Column(
+                  children: [
+                    Indicadores(
+                      apuracao: visao.apuracao,
+                      mes: visao.mes,
+                      compacto: false,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: conteudo?.call(context) ?? const SizedBox(),
+                          ),
+                          const SizedBox(width: 16),
+                          Detalhamento(
+                            apuracao: visao.apuracao,
+                            mes: visao.mes,
+                            compacto: false,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -311,11 +320,7 @@ class _Barra extends StatelessWidget {
     final c = CoresApp.de(context);
     final estado = context.watch<EstadoApp>();
     final visao = controle.visao;
-    final pode =
-        visao != null &&
-        visao.editavel &&
-        !controle.carregando &&
-        !controle.fechando;
+    final pode = controle.podeFechar;
     final botaoMes = OutlinedButton(
       onPressed: () => controle.escolher(context),
       child: Text('${fmtMes(estado.mes)}  ▾'),

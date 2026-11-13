@@ -1,6 +1,8 @@
 // Vendas do mês: tabela no expandido (calculadora_darf.py:1389-1407, 1578-1590)
 // e cartões com menu de item no compacto (android/main.py:851-859, 1019-1049).
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,6 +13,7 @@ import '../../regras/filtros.dart';
 import '../../tema/cores_app.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
+import 'menu_contexto.dart';
 import 'lista_lotes.dart' show CabecalhoLista, alturaTabela, estiloPerigo;
 
 /// Vendas do mês; [sliver] como em `ListaLotes`.
@@ -225,6 +228,22 @@ class _ExpandidoState extends State<_Expandido> {
                     }
                   });
                 }
+              },
+              aoClicarDireito: (g, posicao) {
+                controle.selecionarVenda(grupoDe(g.op.vendaId));
+                unawaited(
+                  abrirMenuApuracao(
+                    context,
+                    posicao,
+                    alvo: AlvoMenu(
+                      ticker: g.op.ticker,
+                      cabecalho:
+                          '${g.op.ticker} · ${g.op.qtd} un. · '
+                          '${brl(g.op.preco)}',
+                      vendaId: g.op.vendaId,
+                    ),
+                  ),
+                );
               },
               aoDuploClique: editavel
                   ? (g) {

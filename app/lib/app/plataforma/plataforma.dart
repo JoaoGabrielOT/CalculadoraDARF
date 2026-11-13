@@ -1,8 +1,10 @@
 // Camada Plataforma: a única que usa plugins (url_launcher, notificações,
-// instalador). Roda na thread da interface, nunca no isolate de serviços.
+// instalador, área de transferência). Roda na thread da interface, nunca no
+// isolate de serviços.
 
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'instalador.dart';
@@ -23,6 +25,9 @@ abstract interface class Plataforma {
   Future<void> notificar(int id, String titulo, String corpo, String link);
 
   Future<void> instalarAtualizacao(String caminho);
+
+  /// Põe [texto] na área de transferência.
+  Future<void> copiarTexto(String texto);
 }
 
 class PlataformaReal implements Plataforma {
@@ -76,4 +81,8 @@ class PlataformaReal implements Plataforma {
     iniciarProcesso: iniciarProcesso,
     sair: sair,
   );
+
+  @override
+  Future<void> copiarTexto(String texto) =>
+      Clipboard.setData(ClipboardData(text: texto));
 }

@@ -63,11 +63,8 @@ class TelaMetas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ControleMetas>(
-      create: (c) => ControleMetas(
-        c.read<ServicosApp>(),
-        c.read<EstadoApp>(),
-        foco: foco,
-      ),
+      create: (c) =>
+          ControleMetas(c.read<ServicosApp>(), c.read<EstadoApp>(), foco: foco),
       child: dialogo ? const _Dialogo() : const _Cheia(),
     );
   }
