@@ -12,6 +12,7 @@ export 'google/planilha.dart';
 export 'google/sessao.dart';
 export 'google/token.dart';
 export 'http/cliente.dart';
+export 'http/cliente_proxy.dart';
 export 'http/erros.dart';
 export 'http/json.dart';
 export 'http/semaforo.dart';
