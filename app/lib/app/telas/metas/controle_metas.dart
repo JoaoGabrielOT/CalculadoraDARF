@@ -27,6 +27,15 @@ class CamposAtivo {
   }
 }
 
+/// Ativo das Sugestões que a janela abre à vista (menu da Apuração);
+/// [compras] rola até os botões de criar meta das compras dele.
+class FocoMetas {
+  const FocoMetas(this.ticker, {this.compras = false});
+
+  final String ticker;
+  final bool compras;
+}
+
 /// O que a coluna esquerda mostra (`seg_modo`).
 enum ModoMetas { sugestoes, calculadora }
 
@@ -44,7 +53,7 @@ const textoMetaCriada =
     'atingido.';
 
 class ControleMetas extends ChangeNotifier {
-  ControleMetas(this._servicos, this._estado) {
+  ControleMetas(this._servicos, this._estado, {this.foco}) {
     _versao = _estado.versaoDados;
     _estado.addListener(_aoMudarEstado);
     unawaited(recarregar());
@@ -53,6 +62,12 @@ class ControleMetas extends ChangeNotifier {
 
   final ServicosApp _servicos;
   final EstadoApp _estado;
+
+  /// Cartão que abre à vista; null = nenhum.
+  final FocoMetas? foco;
+
+  /// O foco fora das posições já ligou o radar uma vez.
+  bool _focoNoRadar = false;
 
   late int _versao;
   int _geracao = 0;
@@ -253,6 +268,16 @@ class ControleMetas extends ChangeNotifier {
       textoSug = nova.ativos.isEmpty
           ? ''
           : 'Atualizado às ${horaMinuto(ambiente.agora())}.';
+      // o ativo do foco sem posição aberta só aparece com o radar
+      final f = foco;
+      if (f != null &&
+          soPosicoes &&
+          !_focoNoRadar &&
+          !nova.ativos.any((a) => a.ticker == f.ticker && a.posicao != null)) {
+        _focoNoRadar = true;
+        soPosicoes = false;
+        unawaited(recarregarSugestoes());
+      }
     } catch (e) {
       if (geracao != _geracaoSug) return;
       erroSug = e is PedidoSuperado && sugestoes != null ? null : textoErro(e);

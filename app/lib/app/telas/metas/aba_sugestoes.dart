@@ -124,6 +124,9 @@ class _Corpo extends StatelessWidget {
         ? 'Nenhum ativo com compra de hoje para o filtro escolhido.'
         : 'Nenhum ativo para o filtro escolhido.';
     return ListView(
+      // com foco, todos os cartões montam: o do foco precisa existir para a
+      // rolagem chegar até ele
+      cacheExtent: controle.foco == null ? null : 1e6,
       children: [
         _Filtros(controle: controle),
         const SizedBox(height: 8),

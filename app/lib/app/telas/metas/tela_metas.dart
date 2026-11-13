@@ -24,36 +24,50 @@ const larguraDialogoMetas = 900.0;
 const _larguraColunaEsquerda = 420.0;
 
 /// Abre a janela de metas. Com dados de amigo na tela volta antes para
-/// "Meus dados" (py:2587-2590).
-Future<void> abrirMetas(BuildContext c) async {
+/// "Meus dados" (py:2587-2590). Com [ticker] (menu da Apuração), as Sugestões
+/// abrem com o cartão dele aberto e à vista; [compras] rola até os botões de
+/// criar meta das compras dele.
+Future<void> abrirMetas(
+  BuildContext c, {
+  String? ticker,
+  bool compras = false,
+}) async {
+  final foco = ticker == null ? null : FocoMetas(ticker, compras: compras);
   final estado = c.read<EstadoApp>();
   await estado.trocarVisao(null);
   if (!c.mounted) return;
   if (expandido(c)) {
     await showDialog<void>(
       context: c,
-      builder: (_) => const Dialog(child: TelaMetas(dialogo: true)),
+      builder: (_) => Dialog(child: TelaMetas(dialogo: true, foco: foco)),
     );
   } else {
     await Navigator.of(c).push<void>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => const TelaMetas(dialogo: false),
+        builder: (_) => TelaMetas(dialogo: false, foco: foco),
       ),
     );
   }
 }
 
 class TelaMetas extends StatelessWidget {
-  const TelaMetas({super.key, required this.dialogo});
+  const TelaMetas({super.key, required this.dialogo, this.foco});
 
   /// Diálogo de 900 px (PC) ou tela cheia com abas (celular).
   final bool dialogo;
 
+  /// Cartão das Sugestões que já abre à vista; null = nenhum.
+  final FocoMetas? foco;
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ControleMetas>(
-      create: (c) => ControleMetas(c.read<ServicosApp>(), c.read<EstadoApp>()),
+      create: (c) => ControleMetas(
+        c.read<ServicosApp>(),
+        c.read<EstadoApp>(),
+        foco: foco,
+      ),
       child: dialogo ? const _Dialogo() : const _Cheia(),
     );
   }

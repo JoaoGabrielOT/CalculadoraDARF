@@ -102,6 +102,21 @@ class _CartaoAtivoState extends State<CartaoAtivo> {
   Timer? _espera;
   bool _aberto = false;
   _Aba? _aba;
+  final _compras = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    // o ativo do foco (menu da Apuração) já abre, e a lista rola até ele
+    final foco = widget.controle.foco;
+    if (foco == null || foco.ticker != widget.resultado.ativo.ticker) return;
+    _aberto = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final alvo = foco.compras ? _compras.currentContext : null;
+      unawaited(Scrollable.ensureVisible(alvo ?? context));
+    });
+  }
 
   void _digitou() {
     _espera?.cancel();
@@ -154,7 +169,7 @@ class _CartaoAtivoState extends State<CartaoAtivo> {
           filhos: _comoCalculei(context, r),
         ),
         if (r.posicao != null)
-          _Bloco('Compras (gerencial)', [
+          _Bloco('Compras (gerencial)', key: _compras, [
             for (final compra in r.posicao!.compras)
               _LinhaCompra(
                 resultado: r,
@@ -919,7 +934,7 @@ class _ExpansivelState extends State<_Expansivel> {
 }
 
 class _Bloco extends StatelessWidget {
-  const _Bloco(this.titulo, this.filhos);
+  const _Bloco(this.titulo, this.filhos, {super.key});
 
   final String titulo;
   final List<Widget> filhos;

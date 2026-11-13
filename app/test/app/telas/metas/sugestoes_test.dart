@@ -706,4 +706,84 @@ void main() {
     expect(find.text('segunda'), findsNothing);
     expect(find.text('terceira'), findsOneWidget);
   });
+
+  group('abrir com o foco num ticker (menu da Apuração)', () {
+    // o foco fica no fim da lista, fora da janela
+    final tickers = [
+      for (var i = 0; i < 12; i++) 'AAA${String.fromCharCode(65 + i)}3',
+    ];
+
+    Future<void> abrirCom(
+      WidgetTester t,
+      ServicosFalsos s,
+      String ticker, {
+      bool compras = false,
+    }) async {
+      s.visaoMetas ??= VisaoMetas(
+        metas: const [],
+        descricoes: const {},
+        lotes: [(mes: '2026-10', lote: _lote, livre: 100)],
+        ativas: 0,
+      );
+      await abrirNoTeste<void>(
+        t,
+        s,
+        (c) => abrirMetas(c, ticker: ticker, compras: compras),
+        tamanho: _pc,
+      );
+    }
+
+    bool naJanela(WidgetTester t, Finder f) {
+      final dialogo = t.getRect(find.byKey(const ValueKey('metas-dialogo')));
+      final r = t.getRect(f);
+      return r.top >= dialogo.top && r.bottom <= dialogo.bottom;
+    }
+
+    testWidgets('o cartão do ticker já vem aberto e rolado até ele', (
+      t,
+    ) async {
+      final s = ServicosFalsos()
+        ..visaoSugestoes = _visao([
+          for (final k in tickers) _ativo(k, compras: [_compra('L-$k')]),
+          _ativo('ZZZZ3', compras: [_compra('L1')]),
+        ]);
+      await abrirCom(t, s, 'ZZZZ3');
+      expect(find.byKey(const ValueKey('abas-ZZZZ3')), findsOneWidget);
+      expect(naJanela(t, find.byKey(const ValueKey('abrir-ZZZZ3'))), isTrue);
+      // só o do foco abre
+      expect(find.byKey(ValueKey('abas-${tickers.first}')), findsNothing);
+    });
+
+    testWidgets('compras: rola até os botões de criar meta do ticker', (
+      t,
+    ) async {
+      final s = ServicosFalsos()
+        ..visaoSugestoes = _visao([
+          for (final k in tickers) _ativo(k, compras: [_compra('L-$k')]),
+          _ativo('ZZZZ3', compras: [_compra('L1')]),
+        ]);
+      await abrirCom(t, s, 'ZZZZ3', compras: true);
+      final criar = find.descendant(
+        of: find.byKey(const ValueKey('sug-ZZZZ3')),
+        matching: find.text('Criar meta de alvo e stop'),
+      );
+      expect(criar, findsOneWidget);
+      expect(naJanela(t, criar), isTrue);
+    });
+
+    testWidgets('ticker fora das posições: desliga "Só posições abertas"', (
+      t,
+    ) async {
+      final s = ServicosFalsos()
+        ..sugestoesMetasFn = (radar) => Future.value(
+          _visao([
+            _ativo('PETR4'),
+            if (radar) _ativo('WEGE3', semPosicao: true),
+          ]),
+        );
+      await abrirCom(t, s, 'WEGE3');
+      expect(s.chamadas, contains('sugestoesMetas(radar)'));
+      expect(find.byKey(const ValueKey('abas-WEGE3')), findsOneWidget);
+    });
+  });
 }
