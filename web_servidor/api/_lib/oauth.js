@@ -1,8 +1,22 @@
 import { lerChave } from './cifra.js';
+import { origensPermitidas } from './http.js';
 
 export const URL_TOKEN = 'https://oauth2.googleapis.com/token';
 export const URL_REVOGAR = 'https://oauth2.googleapis.com/revoke';
 export const COOKIE = '__Host-darf_oauth';
+/** Nonce do cliente: volta no fragmento para o site conferir que foi ele quem começou o login. */
+export const NONCE = /^[A-Za-z0-9_-]{16,128}$/;
+
+const LOCAL = /^http:\/\/(localhost|127\.0\.0\.1)(:|$)/;
+
+/**
+ * Origens aceitas como destino da volta do login: as de ORIGENS_PERMITIDAS.
+ * localhost só entra se ORIGENS_PERMITIDAS listar alguma origem localhost (desenvolvimento).
+ */
+export function origensDeVolta(env) {
+  const doEnv = (env?.ORIGENS_PERMITIDAS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+  return doEnv.some((o) => LOCAL.test(o)) ? origensPermitidas(env) : doEnv;
+}
 
 const EXIGIDAS = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'CHAVE_PACOTE', 'ORIGENS_PERMITIDAS', 'URL_RETORNO'];
 

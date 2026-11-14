@@ -15,7 +15,8 @@ export function criar(dep) {
 
           let refresh;
           try {
-            refresh = decifrar(await lerPacote(request), cfg.chave).r;
+            const sessao = decifrar(await lerPacote(request), cfg.chave);
+            refresh = sessao?.k === 'sessao' ? sessao.r : null;
           } catch {
             refresh = null;
           }
@@ -39,7 +40,7 @@ export function criar(dep) {
           }
           const saida = { access_token: dados.access_token, expires_in: dados.expires_in };
           if (typeof dados.refresh_token === 'string' && dados.refresh_token) {
-            saida.pacote = cifrar({ r: dados.refresh_token, t: dep.agora() }, cfg.chave);
+            saida.pacote = cifrar({ k: 'sessao', r: dados.refresh_token, t: dep.agora() }, cfg.chave);
           }
           return json(200, saida, SEM_CACHE);
         },

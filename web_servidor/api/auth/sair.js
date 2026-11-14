@@ -11,7 +11,8 @@ export function criar(dep) {
           const cfg = config(dep.env);
           if (!cfg) return json(500, { erro: 'configuracao' });
           try {
-            const refresh = decifrar(await lerPacote(request), cfg.chave).r;
+            const sessao = decifrar(await lerPacote(request), cfg.chave);
+            const refresh = sessao?.k === 'sessao' ? sessao.r : null;
             if (typeof refresh === 'string' && refresh) {
               await postarGoogle(dep.fetch, URL_REVOGAR, { token: refresh });
             }

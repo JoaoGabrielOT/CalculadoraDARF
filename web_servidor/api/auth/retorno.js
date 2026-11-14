@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { criarRota, depPadrao, json, origensPermitidas, permitida } from '../_lib/http.js';
+import { criarRota, depPadrao, json, permitida } from '../_lib/http.js';
 import { cifrar, decifrar } from '../_lib/cifra.js';
-import { COOKIE, URL_TOKEN, config, postarGoogle } from '../_lib/oauth.js';
+import { COOKIE, NONCE, URL_TOKEN, config, origensDeVolta, postarGoogle } from '../_lib/oauth.js';
 
 const PAGINA_ERRO =
   '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Calculadora DARF</title></head>' +
@@ -28,8 +28,18 @@ function iguais(a, b) {
   return timingSafeEqual(ha, hb) && typeof a === 'string' && a.length > 0;
 }
 
-const voltar = (origem, fragmento) =>
-  new Response(null, { status: 302, headers: { location: `${origem}/#${fragmento}`, ...COMUNS } });
+const voltar = (sessao, fragmento) =>
+  new Response(null, {
+    status: 302,
+    headers: { location: `${sessao.o}/#${fragmento}&n=${sessao.n}`, ...COMUNS },
+  });
+
+const cookieValido = (sessao, env) =>
+  sessao?.k === 'cookie' &&
+  typeof sessao.o === 'string' &&
+  permitida(sessao.o, origensDeVolta(env)) &&
+  typeof sessao.n === 'string' &&
+  NONCE.test(sessao.n);
 
 export function criar(dep) {
   return criarRota(
@@ -48,7 +58,7 @@ export function criar(dep) {
           } catch {
             sessao = null;
           }
-          if (!sessao || typeof sessao.o !== 'string' || !permitida(sessao.o, origensPermitidas(dep.env))) {
+          if (!cookieValido(sessao, dep.env)) {
             return new Response(PAGINA_ERRO, {
               status: 400,
               headers: { 'content-type': 'text/html; charset=utf-8', ...COMUNS },
@@ -57,11 +67,11 @@ export function criar(dep) {
 
           const p = url.searchParams;
           const vencido = !(typeof sessao.e === 'number' && dep.agora() <= sessao.e);
-          if (!iguais(sessao.s, p.get('state') ?? '') || vencido) return voltar(sessao.o, 'auth_erro=estado');
+          if (!iguais(sessao.s, p.get('state') ?? '') || vencido) return voltar(sessao, 'auth_erro=estado');
           const erro = p.get('error');
-          if (erro) return voltar(sessao.o, erro === 'access_denied' ? 'auth_erro=acesso_negado' : 'auth_erro=falhou');
+          if (erro) return voltar(sessao, erro === 'access_denied' ? 'auth_erro=acesso_negado' : 'auth_erro=falhou');
           const codigo = p.get('code');
-          if (!codigo) return voltar(sessao.o, 'auth_erro=falhou');
+          if (!codigo) return voltar(sessao, 'auth_erro=falhou');
 
           let refresh = null;
           try {
@@ -77,9 +87,9 @@ export function criar(dep) {
           } catch {
             // rede fora: cai em falhou
           }
-          if (!refresh) return voltar(sessao.o, 'auth_erro=falhou');
+          if (!refresh) return voltar(sessao, 'auth_erro=falhou');
           // No fragmento: não vai ao servidor nem aparece em log de acesso.
-          return voltar(sessao.o, `auth=${cifrar({ r: refresh, t: dep.agora() }, cfg.chave)}`);
+          return voltar(sessao, `auth=${cifrar({ k: 'sessao', r: refresh, t: dep.agora() }, cfg.chave)}`);
         },
       },
     },

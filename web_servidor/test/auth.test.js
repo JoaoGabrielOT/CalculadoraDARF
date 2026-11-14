@@ -21,10 +21,12 @@ const AGORA = 1_700_000_000_000;
 const agora = () => AGORA;
 const RENDER = 'https://calculadora-darf.onrender.com';
 const COOKIE = '__Host-darf_oauth';
+const NONCE = 'nonce-do-cliente-0123456789';
 
 const dep = (fetch = fetchFalso(200, '{}'), e = env, a = agora) => ({ fetch, env: e, agora: a });
 
-function cookieDe(o = { s: 'estado-1', v: 'verificador-1', o: ORIGEM, e: AGORA + 600_000 }) {
+function cookieDe(extra = {}) {
+  const o = { k: 'cookie', s: 'estado-1', v: 'verificador-1', o: ORIGEM, e: AGORA + 600_000, n: NONCE, ...extra };
   return `${COOKIE}=${cifrar(o, CHAVE)}`;
 }
 
@@ -51,7 +53,7 @@ const json = (o) => JSON.stringify(o);
 
 test('inicio com volta fora da lista -> 400', async () => {
   const { GET } = criarInicio(dep());
-  const r = await GET(pedido('/api/auth/inicio?volta=https://evil.example', { origem: null }));
+  const r = await GET(pedido(`/api/auth/inicio?volta=https://evil.example&n=${NONCE}`, { origem: null }));
   assert.equal(r.status, 400);
   assert.equal(r.headers.get('set-cookie'), null);
 });
@@ -64,7 +66,7 @@ test('inicio sem volta -> 400', async () => {
 
 test('inicio válido -> 302 para o Google com PKCE e cookie', async () => {
   const { GET } = criarInicio(dep());
-  const r = await GET(pedido(`/api/auth/inicio?volta=${encodeURIComponent(RENDER)}`, { origem: null }));
+  const r = await GET(pedido(`/api/auth/inicio?volta=${encodeURIComponent(RENDER)}&n=${NONCE}`, { origem: null }));
   assert.equal(r.status, 302);
   const loc = new URL(r.headers.get('location'));
   assert.equal(loc.origin + loc.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
@@ -93,20 +95,56 @@ test('inicio válido -> 302 para o Google com PKCE e cookie', async () => {
   assert.equal(conteudo.s, state);
   assert.equal(conteudo.o, RENDER);
   assert.equal(conteudo.e, AGORA + 600_000);
+  assert.equal(conteudo.n, NONCE);
+  assert.equal(conteudo.k, 'cookie');
   const desafio = createHash('sha256').update(conteudo.v).digest('base64url');
   assert.equal(p.get('code_challenge'), desafio);
 });
 
-test('inicio aceita localhost com porta', async () => {
+test('inicio com a configuração de produção recusa localhost -> 400', async () => {
   const { GET } = criarInicio(dep());
-  const r = await GET(pedido('/api/auth/inicio?volta=http://localhost:5000', { origem: null }));
-  assert.equal(r.status, 302);
+  for (const volta of ['http://localhost:8080', 'http://127.0.0.1:8080']) {
+    const r = await GET(pedido(`/api/auth/inicio?volta=${volta}&n=${NONCE}`, { origem: null }));
+    assert.equal(r.status, 400, volta);
+  }
+});
+
+test('inicio aceita localhost com porta quando ORIGENS_PERMITIDAS lista um localhost', async () => {
+  const e = { ...env, ORIGENS_PERMITIDAS: `${env.ORIGENS_PERMITIDAS},http://localhost:5000` };
+  const { GET } = criarInicio(dep(undefined, e));
+  for (const volta of ['http://localhost:5000', 'http://localhost:8080', 'http://127.0.0.1:8080']) {
+    const r = await GET(pedido(`/api/auth/inicio?volta=${volta}&n=${NONCE}`, { origem: null }));
+    assert.equal(r.status, 302, volta);
+  }
+});
+
+test('retorno com cookie de localhost e configuração de produção -> 400 HTML', async () => {
+  const r = await retorno('code=c&state=estado-1', { cookie: cookieDe({ o: 'http://localhost:8080' }) });
+  assert.equal(r.status, 400);
+});
+
+test('inicio sem n ou com n inválido -> 400', async () => {
+  const { GET } = criarInicio(dep());
+  const casos = ['', '&n=', '&n=curto-15-chars', `&n=${'a'.repeat(129)}`, '&n=com%20espaco-0123456789', '&n=ponto.0123456789abc'];
+  for (const n of casos) {
+    const r = await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}${n}`, { origem: null }));
+    assert.equal(r.status, 400, n);
+    assert.equal(r.headers.get('set-cookie'), null);
+  }
+});
+
+test('inicio aceita n com 16 e com 128 caracteres', async () => {
+  const { GET } = criarInicio(dep());
+  for (const n of ['a'.repeat(16), 'A_-9'.repeat(32)]) {
+    const r = await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${n}`, { origem: null }));
+    assert.equal(r.status, 302, n);
+  }
 });
 
 test('inicio gera state novo a cada chamada', async () => {
   const { GET } = criarInicio(dep());
   const st = async () =>
-    new URL((await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}`, { origem: null }))).headers.get('location'))
+    new URL((await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}`, { origem: null }))).headers.get('location'))
       .searchParams.get('state');
   assert.notEqual(await st(), await st());
 });
@@ -114,9 +152,9 @@ test('inicio gera state novo a cada chamada', async () => {
 test('inicio: limite de 30 por minuto', async () => {
   const { GET } = criarInicio(dep());
   for (let i = 0; i < 30; i++) {
-    assert.equal((await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}`, { origem: null }))).status, 302);
+    assert.equal((await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}`, { origem: null }))).status, 302);
   }
-  assert.equal((await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}`, { origem: null }))).status, 429);
+  assert.equal((await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}`, { origem: null }))).status, 429);
 });
 
 // ---------- retorno ----------
@@ -141,6 +179,21 @@ test('retorno com cookie cuja origem saiu da lista -> 400 HTML', async () => {
   assert.equal(r.status, 400);
 });
 
+test('retorno com um pacote de sessão no lugar do cookie -> 400 HTML', async () => {
+  const f = fetchFalso(200, json({ refresh_token: 'rt-1' }));
+  const falso = cifrar({ k: 'sessao', s: 'estado-1', v: 'v', o: ORIGEM, e: AGORA + 600_000, n: NONCE, r: 'x' }, CHAVE);
+  const r = await retorno('code=c&state=estado-1', { cookie: `${COOKIE}=${falso}`, fetch: f });
+  assert.equal(r.status, 400);
+  assert.equal(f.chamadas.length, 0);
+});
+
+test('retorno com cookie sem k ou sem n válido -> 400 HTML', async () => {
+  for (const extra of [{ k: undefined }, { n: undefined }, { n: 'curto' }]) {
+    const r = await retorno('code=c&state=estado-1', { cookie: cookieDe(extra) });
+    assert.equal(r.status, 400, JSON.stringify(extra));
+  }
+});
+
 test('retorno funciona sem Origin (navegação vinda do Google)', async () => {
   const f = fetchFalso(200, json({ access_token: 'at', refresh_token: 'rt-1' }));
   const r = await retorno('code=c&state=estado-1', { fetch: f });
@@ -152,32 +205,32 @@ test('retorno com state diferente -> volta com auth_erro=estado', async () => {
   const cookie = cookieDe({ s: 'estado-1', v: 'v', o: RENDER, e: AGORA + 600_000 });
   const r = await retorno('code=c&state=estado-2', { cookie, fetch: f });
   assert.equal(r.status, 302);
-  assert.equal(r.headers.get('location'), 'https://calculadora-darf.onrender.com/#auth_erro=estado');
+  assert.equal(r.headers.get('location'), `https://calculadora-darf.onrender.com/#auth_erro=estado&n=${NONCE}`);
   assert.equal(f.chamadas.length, 0);
   cabecalhosDeRetorno(r);
 });
 
 test('retorno sem state -> auth_erro=estado', async () => {
   const r = await retorno('code=c');
-  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=estado`);
+  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=estado&n=${NONCE}`);
 });
 
 test('retorno com cookie vencido -> auth_erro=estado', async () => {
   const f = fetchFalso(200, json({ refresh_token: 'rt-1' }));
   const r = await retorno('code=c&state=estado-1', { fetch: f, a: () => AGORA + 11 * 60_000 });
-  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=estado`);
+  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=estado&n=${NONCE}`);
   assert.equal(f.chamadas.length, 0);
 });
 
 test('retorno com error=access_denied -> auth_erro=acesso_negado', async () => {
   const r = await retorno('error=access_denied&state=estado-1');
-  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=acesso_negado`);
+  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=acesso_negado&n=${NONCE}`);
   cabecalhosDeRetorno(r);
 });
 
 test('retorno com outro error -> auth_erro=falhou', async () => {
   const r = await retorno('error=server_error&state=estado-1');
-  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou`);
+  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou&n=${NONCE}`);
 });
 
 test('retorno com sucesso troca o código e devolve o pacote no fragmento', async () => {
@@ -199,7 +252,9 @@ test('retorno com sucesso troca o código e devolve o pacote no fragmento', asyn
   const loc = r.headers.get('location');
   assert.ok(loc.startsWith('https://calculadora-darf.vercel.app/#auth=v1.'), loc);
   assert.equal(new URL(loc).search, '');
-  const pacote = decifrar(loc.slice(loc.indexOf('#auth=') + 6), CHAVE);
+  assert.ok(loc.endsWith(`&n=${NONCE}`), loc);
+  const pacote = decifrar(loc.slice(loc.indexOf('#auth=') + 6, loc.indexOf('&n=')), CHAVE);
+  assert.equal(pacote.k, 'sessao');
   assert.equal(pacote.r, 'rt-1');
   assert.equal(pacote.t, AGORA);
   assert.equal(loc.includes('segredo-falso'), false);
@@ -209,30 +264,30 @@ test('retorno com sucesso troca o código e devolve o pacote no fragmento', asyn
 test('retorno sem refresh_token na troca -> auth_erro=falhou', async () => {
   const f = fetchFalso(200, json({ access_token: 'at' }));
   const r = await retorno('code=c&state=estado-1', { fetch: f });
-  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou`);
+  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou&n=${NONCE}`);
 });
 
 test('retorno com Google 400 ou rede fora -> auth_erro=falhou', async () => {
   let r = await retorno('code=c&state=estado-1', { fetch: fetchFalso(400, json({ error: 'invalid_grant' })) });
-  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou`);
+  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou&n=${NONCE}`);
   r = await retorno('code=c&state=estado-1', {
     fetch: async () => {
       throw new Error('rede');
     },
   });
-  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou`);
+  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou&n=${NONCE}`);
 });
 
 test('retorno sem code -> auth_erro=falhou', async () => {
   const f = fetchFalso(200, json({ refresh_token: 'rt-1' }));
   const r = await retorno('state=estado-1', { fetch: f });
-  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou`);
+  assert.equal(r.headers.get('location'), `${ORIGEM}/#auth_erro=falhou&n=${NONCE}`);
   assert.equal(f.chamadas.length, 0);
 });
 
 // ---------- token ----------
 
-const pacoteOk = () => cifrar({ r: 'rt-1', t: AGORA }, CHAVE);
+const pacoteOk = () => cifrar({ k: 'sessao', r: 'rt-1', t: AGORA }, CHAVE);
 const postar = (rota, corpo, opcoes = {}) =>
   rota.POST(pedido('/api/auth/token', { metodo: 'POST', corpo, tipo: 'application/json', ...opcoes }));
 
@@ -297,6 +352,17 @@ test('token: pacote adulterado, ausente ou corpo inválido -> 401 sem chamar o G
   }
 });
 
+test('token com um cookie cifrado no lugar do pacote ou pacote sem k -> 401', async () => {
+  const cookie = cifrar({ k: 'cookie', r: 'rt-1', s: 'estado-1', v: 'v', o: ORIGEM, e: AGORA + 600_000, n: NONCE }, CHAVE);
+  const semK = cifrar({ r: 'rt-1', t: AGORA }, CHAVE);
+  for (const pacote of [cookie, semK]) {
+    const f = fetchFalso(200, json({ access_token: 'at' }));
+    const r = await postar(criarToken(dep(f)), json({ pacote }));
+    assert.equal(r.status, 401);
+    assert.equal(f.chamadas.length, 0);
+  }
+});
+
 test('token: origem estranha -> 403', async () => {
   const f = fetchFalso(200, '{}');
   const r = await postar(criarToken(dep(f)), json({ pacote: pacoteOk() }), { origem: 'https://evil.example' });
@@ -339,6 +405,16 @@ test('sair com pacote inválido ou Google fora -> 204', async () => {
   assert.equal(r.status, 204);
 });
 
+test('sair com um cookie cifrado no lugar do pacote não revoga', async () => {
+  const f = fetchFalso(200, '');
+  const cookie = cifrar({ k: 'cookie', r: 'rt-1', n: NONCE }, CHAVE);
+  const r = await criarSair(dep(f)).POST(
+    pedido('/api/auth/sair', { metodo: 'POST', corpo: json({ pacote: cookie }), tipo: 'application/json' }),
+  );
+  assert.equal(r.status, 204);
+  assert.equal(f.chamadas.length, 0);
+});
+
 test('sair: origem estranha -> 403', async () => {
   const r = await criarSair(dep()).POST(
     pedido('/api/auth/sair', { metodo: 'POST', corpo: json({ pacote: pacoteOk() }), origem: 'https://evil.example' }),
@@ -354,7 +430,7 @@ for (const falta of ['CHAVE_PACOTE', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
     delete e[falta];
     const volta = falta === 'ORIGENS_PERMITIDAS' ? 'http://localhost:5000' : ORIGEM;
     const respostas = [
-      await criarInicio(dep(undefined, e)).GET(pedido(`/api/auth/inicio?volta=${volta}`, { origem: null })),
+      await criarInicio(dep(undefined, e)).GET(pedido(`/api/auth/inicio?volta=${volta}&n=${NONCE}`, { origem: null })),
       await criarRetorno(dep(undefined, e)).GET(
         pedido('/api/auth/retorno?code=c&state=estado-1', { origem: null, cabecalhos: { cookie: cookieDe() } }),
       ),
@@ -372,7 +448,7 @@ for (const falta of ['CHAVE_PACOTE', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET',
 
 test('CHAVE_PACOTE que não tem 32 bytes -> 500 configuracao', async () => {
   const e = { ...env, CHAVE_PACOTE: Buffer.alloc(16).toString('base64') };
-  const r = await criarInicio(dep(undefined, e)).GET(pedido(`/api/auth/inicio?volta=${ORIGEM}`, { origem: null }));
+  const r = await criarInicio(dep(undefined, e)).GET(pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}`, { origem: null }));
   assert.equal(r.status, 500);
   assert.deepEqual(await r.json(), { erro: 'configuracao' });
 });

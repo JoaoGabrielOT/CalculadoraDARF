@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { criarRota, depPadrao, json, origensPermitidas, permitida } from '../_lib/http.js';
+import { criarRota, depPadrao, json, permitida } from '../_lib/http.js';
 import { cifrar } from '../_lib/cifra.js';
-import { COOKIE, config } from '../_lib/oauth.js';
+import { COOKIE, NONCE, config, origensDeVolta } from '../_lib/oauth.js';
 
 // Os mesmos de escoposGoogle (app/lib/integracoes/google/constantes.dart).
 const ESCOPOS = [
@@ -21,7 +21,9 @@ export function criar(dep) {
           const cfg = config(dep.env);
           if (!cfg) return json(500, { erro: 'configuracao' });
           const volta = url.searchParams.get('volta') ?? '';
-          if (!permitida(volta, origensPermitidas(dep.env))) return json(400, { erro: 'volta' });
+          if (!permitida(volta, origensDeVolta(dep.env))) return json(400, { erro: 'volta' });
+          const nonce = url.searchParams.get('n') ?? '';
+          if (!NONCE.test(nonce)) return json(400, { erro: 'nonce' });
 
           const state = randomBytes(16).toString('base64url');
           const verificador = randomBytes(32).toString('base64url');
@@ -38,7 +40,10 @@ export function criar(dep) {
             code_challenge_method: 'S256',
             state,
           }).toString();
-          const cookie = cifrar({ s: state, v: verificador, o: volta, e: dep.agora() + 600_000 }, cfg.chave);
+          const cookie = cifrar(
+            { k: 'cookie', s: state, v: verificador, o: volta, e: dep.agora() + 600_000, n: nonce },
+            cfg.chave,
+          );
           return new Response(null, {
             status: 302,
             headers: {
