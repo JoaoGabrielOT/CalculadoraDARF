@@ -23,6 +23,7 @@ import 'tema/temas.dart';
 import 'tema/tema_visual.dart';
 import 'web/areas_seguras.dart';
 import 'web/entrada.dart';
+import 'web/entrada_web.dart';
 import '../integracoes/integracoes.dart';
 
 /// Raiz capturável (imagem da tela, usada pelos goldens e pela captura).
@@ -30,17 +31,18 @@ final chaveCaptura = GlobalKey();
 
 /// Sobe o isolate de serviços e abre o app. [servicos], [plataforma] e
 /// [criarServicos] só são trocados nos testes; sem nenhum deles, no navegador
-/// a partida é a da Web. Falha ao subir mostra o motivo com "Tentar de novo".
+/// a partida é a da Web ([entrada], trocada nos testes). Falha ao subir mostra o motivo com "Tentar de novo".
 Future<void> iniciarApp({
   ServicosApp? servicos,
   Plataforma? plataforma,
   Future<ServicosApp> Function(Plataforma plataforma)? criarServicos,
   Duration esperaEncerramento = const Duration(seconds: 5),
+  EntradaWeb? Function() entrada = entradaWeb,
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
   registrarLicencaRoboto();
   final web = (plataforma == null && criarServicos == null && servicos == null)
-      ? entradaWeb()
+      ? entrada()
       : null;
   final plat = plataforma ?? web?.plataforma ?? PlataformaReal();
   Future<void>? encerrando;
@@ -70,10 +72,12 @@ Future<void> iniciarApp({
         plat,
         verificarAtualizacaoAutomatica: kReleaseMode && !plat.web,
       );
-      final aviso =
-          (migracao == null ? null : avisoMigracao(migracao!)) ??
-          web?.avisoInicial;
+      final aviso = migracao == null ? null : avisoMigracao(migracao!);
       if (aviso != null) estado.avisar(aviso.$1, aviso.$2);
+      for (final (titulo, texto)
+          in web?.avisosIniciais ?? const <(String, String)>[]) {
+        estado.avisar(titulo, texto);
+      }
       // O estado inicial chega antes do primeiro quadro: ele já sai com o
       // tema gravado, sem passar pelo padrão.
       estado.aplicarInicial(await serv.iniciar());

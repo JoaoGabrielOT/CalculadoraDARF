@@ -5,7 +5,7 @@ import 'chave_valor_navegador.dart';
 import 'entrada_web.dart';
 
 /// Partida no navegador. O endereço e o nonce do login são lidos uma vez por
-/// carga; cada tentativa de subir os serviços refaz o aviso inicial.
+/// carga; cada tentativa de subir os serviços refaz os avisos iniciais.
 EntradaWeb? entradaWeb() {
   final plataforma = PlataformaWeb()..usarMenuDoApp();
   final endereco = Uri.base;
@@ -15,7 +15,7 @@ EntradaWeb? entradaWeb() {
   entrada = EntradaWeb(
     plataforma: plataforma,
     criarServicos: (_) {
-      entrada.avisoInicial = null;
+      entrada.avisosIniciais.clear();
       return prepararServicosWeb(
         endereco: endereco,
         nonceEsperado: nonce,
@@ -24,7 +24,7 @@ EntradaWeb? entradaWeb() {
         limparEndereco: plataforma.limparEndereco,
         irPara: plataforma.navegar,
         abrirUrl: plataforma.abrirUrl,
-        avisar: (titulo, texto) => entrada.avisoInicial = (titulo, texto),
+        avisar: (titulo, texto) => entrada.avisosIniciais.add((titulo, texto)),
       );
     },
   );

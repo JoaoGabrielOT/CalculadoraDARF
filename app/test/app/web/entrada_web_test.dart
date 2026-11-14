@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import '../apoio/plataforma_falsa.dart';
+import '../apoio/servicos_falsos.dart';
 
 const _textoOutraAba =
     'A Calculadora DARF já está aberta em outra aba ou janela deste navegador. '
@@ -140,6 +141,47 @@ void main() {
   test('fragmento que não é de login: não limpa o endereço', () async {
     await preparar('https://calculadora-darf.vercel.app/#outra=1');
     expect(limpezas, 0);
+  });
+
+  test(
+    'armazenamento bloqueado e auth_erro: os dois avisos, em ordem',
+    () async {
+      await preparar(
+        'https://calculadora-darf.vercel.app/#auth_erro=acesso_negado&n=n1',
+        armazenamento: false,
+      );
+      expect(avisos.map((a) => a.$1), [
+        'Dados do navegador bloqueados',
+        'Login não concluído',
+      ]);
+    },
+  );
+
+  testWidgets('todos os avisos iniciais da Web chegam à interface, em ordem', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    late final EntradaWeb e;
+    e = EntradaWeb(
+      plataforma: PlataformaFalsa(web: true),
+      criarServicos: (_) async {
+        e.avisosIniciais
+          ..add(('Dados do navegador bloqueados', 'texto 1'))
+          ..add(('Login não concluído', 'O login foi cancelado.'));
+        return ServicosFalsos();
+      },
+    );
+    await iniciarApp(entrada: () => e);
+    await t.pump(const Duration(seconds: 1));
+    await t.pump();
+    expect(find.text('Dados do navegador bloqueados'), findsOneWidget);
+    await t.tap(find.text('OK'));
+    await t.pump(const Duration(seconds: 1));
+    await t.pump();
+    expect(find.text('Login não concluído'), findsOneWidget);
+    expect(find.text('O login foi cancelado.'), findsOneWidget);
   });
 
   testWidgets('ErroOutraAba na partida mostra o texto e Tentar de novo', (

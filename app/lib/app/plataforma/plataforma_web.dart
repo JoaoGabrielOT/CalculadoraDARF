@@ -14,6 +14,11 @@ import 'package:web/web.dart' as html;
 import 'plataforma.dart';
 
 class PlataformaWeb implements Plataforma {
+  /// [nomeTrava] só muda nos testes.
+  PlataformaWeb({this.nomeTrava = 'calculadora-darf'});
+
+  final String nomeTrava;
+
   @override
   bool get windows => false;
 
@@ -21,7 +26,7 @@ class PlataformaWeb implements Plataforma {
   bool get web => true;
 
   void Function(String link)? _aoTocar;
-  bool _comTrava = false;
+  Future<bool>? _trava;
 
   @override
   late final ValueListenable<EdgeInsets>? areasSeguras = _lerAreasSeguras();
@@ -88,15 +93,21 @@ class PlataformaWeb implements Plataforma {
       Clipboard.setData(ClipboardData(text: texto));
 
   /// Trava de aba única (Web Locks): true se esta página a tem. Uma vez
-  /// obtida, fica com a página até ela fechar. Sem a API, true.
-  Future<bool> travarAbaUnica() async {
-    if (_comTrava) return true;
+  /// obtida, fica com a página até ela fechar. Sem a API, true. Chamadas
+  /// simultâneas recebem o mesmo futuro; só um false permite pedir de novo
+  /// (a outra aba pode ter fechado).
+  Future<bool> travarAbaUnica() => _trava ??= _pedirTrava().then((ok) {
+    if (!ok) _trava = null;
+    return ok;
+  });
+
+  Future<bool> _pedirTrava() async {
     final nav = html.window.navigator;
     if (!(nav as JSObject).has('locks')) return true;
     final pronto = Completer<bool>();
     try {
       final pedido = nav.locks.request(
-        'calculadora-darf',
+        nomeTrava,
         html.LockOptions(ifAvailable: true),
         ((html.Lock? trava) {
           pronto.complete(trava != null);
@@ -115,7 +126,7 @@ class PlataformaWeb implements Plataforma {
     } catch (_) {
       return true;
     }
-    return _comTrava = await pronto.future;
+    return pronto.future;
   }
 
   /// O menu do botão direito passa a ser o do app, não o do navegador.

@@ -20,15 +20,15 @@ class ErroOutraAba implements Exception {
       'navegador. Feche a outra e toque em "Tentar de novo".';
 }
 
-/// O que `iniciarApp` usa na Web. [avisoInicial] é preenchido por
-/// [criarServicos] (armazenamento bloqueado, volta do login com erro) e vira
-/// o primeiro aviso do estado.
+/// O que `iniciarApp` usa na Web. [avisosIniciais] é preenchida por
+/// [criarServicos] (armazenamento bloqueado, volta do login com erro) e vira,
+/// em ordem, os primeiros avisos do estado.
 class EntradaWeb {
   EntradaWeb({required this.plataforma, required this.criarServicos});
 
   final Plataforma plataforma;
   final Future<ServicosApp> Function(Plataforma plataforma) criarServicos;
-  (String, String)? avisoInicial;
+  final List<(String, String)> avisosIniciais = [];
 }
 
 /// Sobe os serviços da Web. [endereco] é o da página na carga e
