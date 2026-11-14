@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { origensPermitidas, origemDoPedido } from '../api/_lib/http.js';
 import { criar } from '../api/yahoo/chart/[ticker].js';
 import { env, fetchFalso, pedido } from './auxiliar.js';
@@ -105,4 +106,12 @@ test('Vary: Origin em toda resposta (sem Origin, 403, 405, 429)', async () => {
   for (let i = 0; i < 241; i++) ultima = await lim.GET(pedido(URL_OK));
   assert.equal(ultima.status, 429);
   assert.equal(ultima.headers.get('vary'), 'Origin');
+});
+
+test('vercel.json: todas as rotas proíbem o site dentro de frames', () => {
+  const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  const todas = vercel.headers.find((h) => h.source === '/(.*)');
+  const valor = (k) => todas.headers.find((h) => h.key === k)?.value;
+  assert.equal(valor('Content-Security-Policy'), "frame-ancestors 'none'");
+  assert.equal(valor('X-Frame-Options'), 'DENY');
 });
