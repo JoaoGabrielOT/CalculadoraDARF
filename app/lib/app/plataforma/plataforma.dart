@@ -4,7 +4,9 @@
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/painting.dart' show EdgeInsets;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'instalador.dart';
@@ -12,6 +14,13 @@ import 'notificacoes.dart';
 
 abstract interface class Plataforma {
   bool get windows;
+
+  /// Rodando no navegador (sem atualizador, backup nem isolates).
+  bool get web;
+
+  /// Áreas que o navegador do celular reserva (entalhe, barra de gestos),
+  /// somadas ao `MediaQuery` do app; `null` fora da Web.
+  ValueListenable<EdgeInsets>? get areasSeguras;
 
   /// Abre no navegador externo; false quando não abriu.
   Future<bool> abrirUrl(Uri url);
@@ -41,6 +50,12 @@ class PlataformaReal implements Plataforma {
 
   @override
   final bool windows;
+
+  @override
+  bool get web => false;
+
+  @override
+  ValueListenable<EdgeInsets>? get areasSeguras => null;
 
   final AdaptadorNotificacoes _adaptador;
 

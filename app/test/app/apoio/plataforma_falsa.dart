@@ -2,6 +2,7 @@
 // instalações e textos copiados; a resposta de `abrirUrl` é programável.
 
 import 'package:calculadoradarf/app/plataforma/plataforma.dart';
+import 'package:flutter/widgets.dart';
 
 class NotificacaoGravada {
   const NotificacaoGravada(this.id, this.titulo, this.corpo, this.link);
@@ -13,10 +14,16 @@ class NotificacaoGravada {
 }
 
 class PlataformaFalsa implements Plataforma {
-  PlataformaFalsa({this.windows = true});
+  PlataformaFalsa({this.windows = true, this.web = false});
 
   @override
   final bool windows;
+
+  @override
+  final bool web;
+
+  @override
+  ValueNotifier<EdgeInsets>? areasSeguras;
 
   final List<Uri> urlsAbertas = [];
   final List<NotificacaoGravada> notificacoes = [];

@@ -85,6 +85,38 @@ void main() {
     expect(s.chamadas.where((c) => c == 'iniciar()'), hasLength(1));
   });
 
+  testWidgets('na Web o estado não procura atualização sozinho', (t) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    await iniciarApp(
+      servicos: ServicosFalsos(),
+      plataforma: PlataformaFalsa(web: true),
+    );
+    await t.pump(const Duration(seconds: 1));
+    final estado = Provider.of<EstadoApp>(
+      t.element(find.byType(Casca)),
+      listen: false,
+    );
+    expect(estado.verificarAtualizacaoAutomatica, isFalse);
+  });
+
+  testWidgets('áreas seguras da plataforma entram no MediaQuery do app', (
+    t,
+  ) async {
+    t.view.physicalSize = const Size(1366, 768);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    final plat = PlataformaFalsa(web: true)
+      ..areasSeguras = ValueNotifier(const EdgeInsets.only(bottom: 34));
+    await iniciarApp(servicos: ServicosFalsos(), plataforma: plat);
+    await t.pump(const Duration(seconds: 1));
+    expect(MediaQuery.of(t.element(find.byType(Casca))).padding.bottom, 34);
+    plat.areasSeguras!.value = const EdgeInsets.only(bottom: 20);
+    await t.pump();
+    expect(MediaQuery.of(t.element(find.byType(Casca))).padding.bottom, 20);
+  });
+
   testWidgets('servicos.iniciar() que falha abre a tela de falha', (t) async {
     t.view.physicalSize = const Size(1366, 768);
     t.view.devicePixelRatio = 1.0;

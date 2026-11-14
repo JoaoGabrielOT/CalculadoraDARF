@@ -21,14 +21,16 @@ import 'telas/casca.dart';
 import 'telas/falha_inicial.dart';
 import 'tema/temas.dart';
 import 'tema/tema_visual.dart';
+import 'web/areas_seguras.dart';
+import 'web/entrada.dart';
 import '../integracoes/integracoes.dart';
 
 /// Raiz capturável (imagem da tela, usada pelos goldens e pela captura).
 final chaveCaptura = GlobalKey();
 
 /// Sobe o isolate de serviços e abre o app. [servicos], [plataforma] e
-/// [criarServicos] só são trocados nos testes. Falha ao subir mostra o motivo
-/// com "Tentar de novo".
+/// [criarServicos] só são trocados nos testes; sem nenhum deles, no navegador
+/// a partida é a da Web. Falha ao subir mostra o motivo com "Tentar de novo".
 Future<void> iniciarApp({
   ServicosApp? servicos,
   Plataforma? plataforma,
@@ -37,7 +39,10 @@ Future<void> iniciarApp({
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
   registrarLicencaRoboto();
-  final plat = plataforma ?? PlataformaReal();
+  final web = (plataforma == null && criarServicos == null && servicos == null)
+      ? entradaWeb()
+      : null;
+  final plat = plataforma ?? web?.plataforma ?? PlataformaReal();
   Future<void>? encerrando;
   Future<void>? emCurso;
 
@@ -56,11 +61,18 @@ Future<void> iniciarApp({
       serv =
           servicos ??
           await (criarServicos ??
+              web?.criarServicos ??
               (p) => _criarServicos(p, (r) => migracao = r))(plat);
       // O estado assina os eventos já no construtor: o proxy só guarda os 256
       // últimos até a primeira assinatura.
-      estado = EstadoApp(serv, plat);
-      final aviso = migracao == null ? null : avisoMigracao(migracao!);
+      estado = EstadoApp(
+        serv,
+        plat,
+        verificarAtualizacaoAutomatica: kReleaseMode && !plat.web,
+      );
+      final aviso =
+          (migracao == null ? null : avisoMigracao(migracao!)) ??
+          web?.avisoInicial;
       if (aviso != null) estado.avisar(aviso.$1, aviso.$2);
       // O estado inicial chega antes do primeiro quadro: ele já sai com o
       // tema gravado, sem passar pelo padrão.
@@ -160,30 +172,48 @@ class _AppMaterial extends StatelessWidget {
     final escolhido = context.select<EstadoApp, TemaVisual>(
       (e) => e.preferencias.tema,
     );
+    final areas = context.read<Plataforma>().areasSeguras;
     // Acima do MaterialApp ainda não há MediaQuery: este traz o do sistema,
     // para o tema Automático reagir ao claro/escuro.
     return MediaQuery.fromView(
       view: View.of(context),
       child: Builder(
-        builder: (context) => MaterialApp(
-          title: 'Calculadora DARF',
-          debugShowCheckedModeBanner: false,
-          locale: const Locale('pt', 'BR'),
-          supportedLocales: const [Locale('pt', 'BR')],
-          localizationsDelegates: GlobalMaterialLocalizations.delegates,
-          theme: temaDe(
-            resolverTema(escolhido, MediaQuery.platformBrightnessOf(context)),
-          ),
-          // a troca de tema em Configurações vale no mesmo quadro
-          themeAnimationDuration: Duration.zero,
-          // O escopo fica acima do Navigator: as logos valem também nos
-          // diálogos e nas telas empilhadas.
-          builder: (context, child) => RepaintBoundary(
-            key: chaveCaptura,
-            child: EscopoLogos(child: child!),
-          ),
-          home: const Casca(),
-        ),
+        builder: (context) {
+          final app = MaterialApp(
+            title: 'Calculadora DARF',
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('pt', 'BR'),
+            supportedLocales: const [Locale('pt', 'BR')],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            theme: temaDe(
+              resolverTema(escolhido, MediaQuery.platformBrightnessOf(context)),
+            ),
+            // a troca de tema em Configurações vale no mesmo quadro
+            themeAnimationDuration: Duration.zero,
+            // O escopo fica acima do Navigator: as logos valem também nos
+            // diálogos e nas telas empilhadas.
+            builder: (context, child) => RepaintBoundary(
+              key: chaveCaptura,
+              child: EscopoLogos(child: child!),
+            ),
+            // `routes` só põe o Navigator na árvore; na Web o endereço pode
+            // trazer um fragmento, e a rota inicial é sempre a casca
+            routes: {'/': (_) => const Casca()},
+            onGenerateInitialRoutes: (_) => [
+              MaterialPageRoute<void>(builder: (_) => const Casca()),
+            ],
+          );
+          if (areas == null) return app;
+          // na Web, as áreas seguras do navegador (entalhe, barra de gestos)
+          return ValueListenableBuilder<EdgeInsets>(
+            valueListenable: areas,
+            builder: (context, extra, child) => MediaQuery(
+              data: comAreasSeguras(MediaQuery.of(context), extra),
+              child: child!,
+            ),
+            child: app,
+          );
+        },
       ),
     );
   }
