@@ -57,7 +57,7 @@ void main() {
     'outra aba com a trava: ErroOutraAba sem tocar no armazenamento',
     () async {
       await expectLater(
-        preparar('https://calculadora-darf.vercel.app/', trava: false),
+        preparar('https://calculadora-darf-web.vercel.app/', trava: false),
         throwsA(isA<ErroOutraAba>()),
       );
       expect(a.listar(), isEmpty);
@@ -68,7 +68,7 @@ void main() {
   test('outra aba com retorno de login: endereço limpo mesmo assim', () async {
     await expectLater(
       preparar(
-        'https://calculadora-darf.vercel.app/#auth=$_pacote&n=n1',
+        'https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1',
         trava: false,
       ),
       throwsA(isA<ErroOutraAba>()),
@@ -78,7 +78,7 @@ void main() {
   });
 
   test('retorno com pacote: grava o token.json e limpa o endereço', () async {
-    await preparar('https://calculadora-darf.vercel.app/#auth=$_pacote&n=n1');
+    await preparar('https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1');
     expect(a.ler('token.json'), contains(_pacote));
     expect(limpezas, 1);
     expect(avisos, isEmpty);
@@ -86,7 +86,7 @@ void main() {
 
   test('pacote com n errado não é gravado e avisa a falha', () async {
     await preparar(
-      'https://calculadora-darf.vercel.app/#auth=$_pacote&n=outro',
+      'https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=outro',
     );
     expect(a.ler('token.json'), isNull);
     expect(limpezas, 1);
@@ -95,7 +95,7 @@ void main() {
 
   test('pacote sem nonce guardado não é gravado', () async {
     await preparar(
-      'https://calculadora-darf.vercel.app/#auth=$_pacote&n=n1',
+      'https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1',
       nonce: null,
     );
     expect(a.ler('token.json'), isNull);
@@ -104,7 +104,7 @@ void main() {
 
   test('auth_erro=acesso_negado: avisa o cancelamento, sem token', () async {
     await preparar(
-      'https://calculadora-darf.vercel.app/#auth_erro=acesso_negado&n=n1',
+      'https://calculadora-darf-web.vercel.app/#auth_erro=acesso_negado&n=n1',
     );
     expect(avisos, [('Login não concluído', 'O login foi cancelado.')]);
     expect(limpezas, 1);
@@ -113,7 +113,7 @@ void main() {
 
   test('auth_erro com código estranho usa só o texto genérico', () async {
     await preparar(
-      'https://calculadora-darf.vercel.app/#auth_erro=%3Cscript%3E&n=n1',
+      'https://calculadora-darf-web.vercel.app/#auth_erro=%3Cscript%3E&n=n1',
     );
     expect(avisos, [('Login não concluído', 'O login não foi concluído.')]);
     expect(limpezas, 1);
@@ -121,7 +121,7 @@ void main() {
 
   test('armazenamento bloqueado: sobe em memória e avisa', () async {
     final serv = await preparar(
-      'https://calculadora-darf.vercel.app/',
+      'https://calculadora-darf-web.vercel.app/',
       armazenamento: false,
     );
     await serv.iniciar();
@@ -136,13 +136,13 @@ void main() {
   });
 
   test('sem fragmento: não limpa o endereço', () async {
-    await preparar('https://calculadora-darf.vercel.app/');
+    await preparar('https://calculadora-darf-web.vercel.app/');
     expect(limpezas, 0);
     expect(avisos, isEmpty);
   });
 
   test('fragmento que não é de login: não limpa o endereço', () async {
-    await preparar('https://calculadora-darf.vercel.app/#outra=1');
+    await preparar('https://calculadora-darf-web.vercel.app/#outra=1');
     expect(limpezas, 0);
   });
 
@@ -150,7 +150,7 @@ void main() {
     'armazenamento bloqueado e auth_erro: os dois avisos, em ordem',
     () async {
       await preparar(
-        'https://calculadora-darf.vercel.app/#auth_erro=acesso_negado&n=n1',
+        'https://calculadora-darf-web.vercel.app/#auth_erro=acesso_negado&n=n1',
         armazenamento: false,
       );
       expect(avisos.map((a) => a.$1), [

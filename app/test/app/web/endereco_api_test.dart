@@ -2,11 +2,11 @@ import 'package:calculadoradarf/app/web/endereco_api.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const esperado = 'https://calculadora-darf.vercel.app/api';
+  const esperado = 'https://calculadora-darf-web.vercel.app/api';
 
   test('página no host da Vercel usa a própria origem', () {
     expect(
-      enderecoApi(Uri.parse('https://calculadora-darf.vercel.app/#/')),
+      enderecoApi(Uri.parse('https://calculadora-darf-web.vercel.app/#/')),
       Uri.parse(esperado),
     );
   });

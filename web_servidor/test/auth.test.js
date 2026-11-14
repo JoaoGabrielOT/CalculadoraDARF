@@ -15,7 +15,7 @@ const env = {
   GOOGLE_CLIENT_ID: 'id-falso.apps.googleusercontent.com',
   GOOGLE_CLIENT_SECRET: 'segredo-falso',
   CHAVE_PACOTE: CHAVE,
-  URL_RETORNO: 'https://calculadora-darf.vercel.app/api/auth/retorno',
+  URL_RETORNO: 'https://calculadora-darf-web.vercel.app/api/auth/retorno',
 };
 const AGORA = 1_700_000_000_000;
 const agora = () => AGORA;
@@ -252,7 +252,7 @@ test('retorno com sucesso troca o código e devolve o pacote no fragmento', asyn
   assert.equal(corpo.get('code_verifier'), 'verificador-1');
 
   const loc = r.headers.get('location');
-  assert.ok(loc.startsWith('https://calculadora-darf.vercel.app/#auth=v1.'), loc);
+  assert.ok(loc.startsWith('https://calculadora-darf-web.vercel.app/#auth=v1.'), loc);
   assert.equal(new URL(loc).search, '');
   assert.ok(loc.endsWith(`&n=${NONCE}`), loc);
   const pacote = decifrar(loc.slice(loc.indexOf('#auth=') + 6, loc.indexOf('&n=')), CHAVE);

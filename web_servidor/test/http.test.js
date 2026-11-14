@@ -10,7 +10,7 @@ const nova = (agora = () => 0) => criar({ fetch: fetchFalso(200, '{}'), env, ago
 
 test('origensPermitidas junta o env com localhost', () => {
   assert.deepEqual(origensPermitidas(env), [
-    'https://calculadora-darf.vercel.app',
+    'https://calculadora-darf-web.vercel.app',
     'https://calculadora-darf.onrender.com',
     'http://localhost:*',
     'http://127.0.0.1:*',
@@ -40,7 +40,7 @@ test('origem estranha -> 403', async () => {
 
 test('Referer permitido é aceito', async () => {
   const r = await nova().GET(
-    pedido(URL_OK, { origem: null, cabecalhos: { referer: 'https://calculadora-darf.vercel.app/' } }),
+    pedido(URL_OK, { origem: null, cabecalhos: { referer: 'https://calculadora-darf-web.vercel.app/' } }),
   );
   assert.equal(r.status, 200);
 });
@@ -56,7 +56,7 @@ test('localhost com qualquer porta é aceito e ecoa a origem', async () => {
 test('OPTIONS de origem permitida -> 204 com cabeçalhos CORS', async () => {
   const r = await nova().OPTIONS(pedido(URL_OK, { metodo: 'OPTIONS' }));
   assert.equal(r.status, 204);
-  assert.equal(r.headers.get('access-control-allow-origin'), 'https://calculadora-darf.vercel.app');
+  assert.equal(r.headers.get('access-control-allow-origin'), 'https://calculadora-darf-web.vercel.app');
   assert.equal(r.headers.get('access-control-allow-methods'), 'GET, POST, OPTIONS');
   assert.equal(r.headers.get('access-control-allow-headers'), 'content-type, accept-language');
   assert.equal(r.headers.get('access-control-max-age'), '600');
@@ -97,7 +97,7 @@ test('exceção interna vira 502 sem detalhes', async () => {
 
 test('Vary: Origin em toda resposta (sem Origin, 403, 405, 429)', async () => {
   const { GET, POST } = nova();
-  assert.equal((await GET(pedido(URL_OK, { origem: null, cabecalhos: { referer: 'https://calculadora-darf.vercel.app/' } }))).headers.get('vary'), 'Origin');
+  assert.equal((await GET(pedido(URL_OK, { origem: null, cabecalhos: { referer: 'https://calculadora-darf-web.vercel.app/' } }))).headers.get('vary'), 'Origin');
   assert.equal((await GET(pedido(URL_OK, { origem: null }))).headers.get('vary'), 'Origin');
   assert.equal((await POST(pedido(URL_OK, { metodo: 'POST' }))).status, 405);
   assert.equal((await POST(pedido(URL_OK, { metodo: 'POST' }))).headers.get('vary'), 'Origin');

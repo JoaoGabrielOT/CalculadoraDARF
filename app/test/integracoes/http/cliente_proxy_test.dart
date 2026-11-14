@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-final api = Uri.parse('https://calculadora-darf.vercel.app/api');
+final api = Uri.parse('https://calculadora-darf-web.vercel.app/api');
 
 Uri reescrever(String url, {DestinoLivre livre = DestinoLivre.pagina}) =>
     ClienteProxy(
@@ -20,7 +20,7 @@ void main() {
       final u = reescrever(
         'https://query1.finance.yahoo.com/v8/finance/chart/PETR4.SA?range=5d&interval=1d',
       );
-      expect(u.host, 'calculadora-darf.vercel.app');
+      expect(u.host, 'calculadora-darf-web.vercel.app');
       expect(u.path, '/api/yahoo/chart/PETR4.SA');
       expect(u.queryParameters, {'range': '5d', 'interval': '1d'});
     });
@@ -38,7 +38,7 @@ void main() {
       });
       expect(
         reescrever('https://news.google.com/_/DotsSplashUi/data/batchexecute'),
-        Uri.parse('https://calculadora-darf.vercel.app/api/noticias/resolver'),
+        Uri.parse('https://calculadora-darf-web.vercel.app/api/noticias/resolver'),
       );
       expect(
         reescrever('https://news.google.com/rss/articles/CBMiabc').path,
@@ -50,7 +50,7 @@ void main() {
       for (final s in [
         'https://sheets.googleapis.com/v4/spreadsheets/x',
         'https://www.googleapis.com/drive/v3/about',
-        'https://calculadora-darf.vercel.app/api/yahoo/chart/X',
+        'https://calculadora-darf-web.vercel.app/api/yahoo/chart/X',
       ]) {
         expect(reescrever(s), Uri.parse(s));
       }

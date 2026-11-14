@@ -11,8 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-final _api = Uri.parse('https://calculadora-darf.vercel.app/api');
-final _origem = Uri.parse('https://calculadora-darf.vercel.app/');
+final _api = Uri.parse('https://calculadora-darf-web.vercel.app/api');
+final _origem = Uri.parse('https://calculadora-darf-web.vercel.app/');
 final _pacote = 'v1.${'p' * 30}';
 
 void main() {
@@ -71,7 +71,7 @@ void main() {
     expect(pedidos, hasLength(1));
     expect(
       pedidos.single.url.toString(),
-      'https://calculadora-darf.vercel.app/api/yahoo/chart/PETR4.SA'
+      'https://calculadora-darf-web.vercel.app/api/yahoo/chart/PETR4.SA'
       '?range=5d&interval=1d',
     );
     expect(
@@ -89,7 +89,7 @@ void main() {
     expect(token.method, 'POST');
     expect(
       token.url.toString(),
-      'https://calculadora-darf.vercel.app/api/auth/token',
+      'https://calculadora-darf-web.vercel.app/api/auth/token',
     );
     expect(jsonDecode(token.body), {'pacote': _pacote});
     final about = pedidos[1];
@@ -130,8 +130,8 @@ void main() {
     expect(
       ida.replace(queryParameters: {'volta': ida.queryParameters['volta']}),
       Uri.parse(
-        'https://calculadora-darf.vercel.app/api/auth/inicio'
-        '?volta=https%3A%2F%2Fcalculadora-darf.vercel.app',
+        'https://calculadora-darf-web.vercel.app/api/auth/inicio'
+        '?volta=https%3A%2F%2Fcalculadora-darf-web.vercel.app',
       ),
     );
     expect(ida.queryParameters['n'], hasLength(43));

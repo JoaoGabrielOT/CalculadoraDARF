@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 const _agora = 1761000000.0;
-final api = Uri.parse('https://calculadora-darf.vercel.app/api');
+final api = Uri.parse('https://calculadora-darf-web.vercel.app/api');
 final _pacote = 'v1.${'aB3_-' * 8}';
 const _nonce = 'nonce-do-cliente-0123456789';
 
@@ -43,7 +43,7 @@ void main() {
         Uri.parse('https://calculadora-darf.onrender.com/#/'),
         _nonce,
       ).toString(),
-      'https://calculadora-darf.vercel.app/api/auth/inicio'
+      'https://calculadora-darf-web.vercel.app/api/auth/inicio'
       '?volta=https%3A%2F%2Fcalculadora-darf.onrender.com&n=$_nonce',
     );
   });

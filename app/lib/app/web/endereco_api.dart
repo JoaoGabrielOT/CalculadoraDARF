@@ -1,7 +1,7 @@
 /// Endereço público da Vercel (sobrescrevível com --dart-define=URL_VERCEL).
 const urlVercel = String.fromEnvironment(
   'URL_VERCEL',
-  defaultValue: 'https://calculadora-darf.vercel.app',
+  defaultValue: 'https://calculadora-darf-web.vercel.app',
 );
 
 /// Base da API: a própria origem quando a página vem da Vercel; senão a Vercel.

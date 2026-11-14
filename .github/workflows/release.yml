@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  URL_VERCEL: https://calculadora-darf.vercel.app
+  URL_VERCEL: https://calculadora-darf-web.vercel.app
   URL_RENDER: https://calculadora-darf.onrender.com
 
 jobs:
