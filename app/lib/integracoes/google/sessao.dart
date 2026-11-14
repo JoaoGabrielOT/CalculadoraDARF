@@ -110,6 +110,9 @@ class SessaoGoogle {
     if (atual == null || geracao != _geracao) throw LoginNecessario(_msgLogin);
     final novo = await _renovarCom(atual);
     if (geracao != _geracao) throw LoginNecessario(_msgLogin);
+    // o refresh token pode vir rotacionado: sem gravar, a próxima carga
+    // usaria o antigo
+    gravarToken(armazenamento, novo);
     _token = novo;
   }
 

@@ -194,6 +194,31 @@ void main() {
     );
   });
 
+  test('req: renovação no meio da sessão grava o pacote rotacionado', () async {
+    final falso = ClienteFalso.fila([_about()]);
+    final a = ArmazenamentoMemoria();
+    final s = SessaoGoogle(
+      http: ClienteHttp(falso, tempoLimite: const Duration(seconds: 30)),
+      armazenamento: a,
+      executar: executarDireto,
+      renovar: (t) async => TokenGoogle(
+        token: 'novo',
+        refreshToken: 'v1.rotacionado',
+        clientId: t.clientId,
+        clientSecret: t.clientSecret,
+        expiry: DateTime.utc(2030),
+      ),
+    );
+    gravarToken(a, _token(refresh: 'v1.antigo'));
+    await s.iniciar(
+      _token(expiry: DateTime.utc(2025, 10, 1), refresh: 'v1.antigo'),
+    );
+    expect(falso.pedidos.single.cabecalhos['authorization'], 'Bearer novo');
+    final gravado = lerToken(a)!;
+    expect(gravado.refreshToken, 'v1.rotacionado');
+    expect(gravado.token, 'novo');
+  });
+
   test('req renova antes quando o token está vencido', () async {
     final (s, falso, _) = _montar([_renovou(), _about()]);
     await s.iniciar(_token(expiry: DateTime.utc(2025, 10, 1)));
@@ -358,6 +383,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     s.sair();
     await esperado;
+    expect(s.temToken(), isFalse);
     await expectLater(
       s.req('GET', '$urlSheets/x'),
       _erro<LoginNecessario>('Faça login com o Google.'),

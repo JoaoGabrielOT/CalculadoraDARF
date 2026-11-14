@@ -183,6 +183,19 @@ void main() {
       );
     });
 
+    for (final (nome, resposta) in [
+      ('404', () => http.Response('', 404)),
+      ('403', () => http.Response('', 403)),
+      ('200 com HTML', () => http.Response('<html>erro</html>', 200)),
+      ('200 sem access_token', () => json(200, {'expires_in': 3599})),
+      ('200 com lista', () => json(200, [1, 2])),
+    ]) {
+      test('$nome → Offline', () async {
+        final renovar = renovador(() async => resposta());
+        await expectLater(renovar(_tokenPacote()), throwsA(isA<Offline>()));
+      });
+    }
+
     test('503 → Offline', () async {
       final renovar = renovador(() async => http.Response('', 503));
       await expectLater(renovar(_tokenPacote()), throwsA(isA<Offline>()));

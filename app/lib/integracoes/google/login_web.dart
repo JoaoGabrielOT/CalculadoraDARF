@@ -85,20 +85,21 @@ RenovarToken criarRenovadorWeb(ClienteHttp http, Uri api) => (atual) async {
     throw Offline(e.mensagem);
   }
   final status = resposta.statusCode;
-  if (status == 429 || status >= 500) {
-    throw Offline(
-      'O servidor não respondeu (HTTP $status). Tente de novo mais tarde.',
-    );
-  }
-  if (status != 200) throw LoginNecessario(_msgSessao);
+  // só o 401 (pacote recusado) pede login de novo; o resto é falha passageira
+  // e o token fica
+  if (status == 401) throw LoginNecessario(_msgSessao);
+  final indisponivel = Offline(
+    'O servidor não respondeu (HTTP $status). Tente de novo mais tarde.',
+  );
+  if (status != 200) throw indisponivel;
   final Map<String, Object?> dados;
   try {
     dados = jsonDecode(utf8.decode(resposta.bodyBytes)) as Map<String, Object?>;
   } catch (_) {
-    throw LoginNecessario(_msgSessao);
+    throw indisponivel;
   }
   final novo = dados['access_token'];
-  if (novo is! String) throw LoginNecessario(_msgSessao);
+  if (novo is! String) throw indisponivel;
   final dura = dados['expires_in'];
   final novoPacote = dados['pacote'];
   return TokenGoogle(
