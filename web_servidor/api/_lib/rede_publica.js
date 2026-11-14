@@ -5,7 +5,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { Readable, pipeline } from 'node:stream';
 import zlib from 'node:zlib';
 import { criarRota, depPadrao, json } from './http.js';
-import { USER_AGENT } from './repasse.js';
+import { DEFESAS, USER_AGENT } from './repasse.js';
 
 export class ErroPrevia extends Error {
   constructor(status) {
@@ -18,8 +18,6 @@ const ERROS = {
   400: 'destino', 413: 'tamanho', 415: 'tipo', 502: 'indisponivel', 504: 'tempo', 508: 'redirecionamentos',
 };
 const REDIRECIONAMENTOS = new Set([301, 302, 303, 307, 308]);
-// O HTML de terceiros nunca roda na origem do site.
-const DEFESAS = { 'content-security-policy': "sandbox; default-src 'none'", 'x-content-type-options': 'nosniff' };
 
 function octetos4(ip) {
   const partes = ip.split('.');

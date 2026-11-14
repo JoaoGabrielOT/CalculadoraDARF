@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { criar } from '../api/yahoo/chart/[ticker].js';
+import { repassar } from '../api/_lib/repasse.js';
 import { env, fetchFalso, pedido } from './auxiliar.js';
 
 test('repassa o chart com só os parâmetros permitidos', async () => {
@@ -74,4 +75,15 @@ test('3xx do destino não é seguido nem repassado -> 502', async () => {
   assert.deepEqual(await r.json(), { erro: 'indisponivel' });
   assert.equal(f.chamadas.length, 1);
   assert.equal(f.chamadas[0].redirect, 'manual');
+});
+
+test('repassar: toda resposta leva sandbox e nosniff (200, erro do destino e 502)', async () => {
+  const falhaRede = async () => {
+    throw new Error('x');
+  };
+  for (const f of [fetchFalso(200, '<html></html>'), fetchFalso(404, '{}'), fetchFalso(302, ''), falhaRede]) {
+    const r = await repassar('https://exemplo.invalid/', { fetch: f });
+    assert.equal(r.headers.get('content-security-policy'), "sandbox; default-src 'none'");
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
+  }
 });

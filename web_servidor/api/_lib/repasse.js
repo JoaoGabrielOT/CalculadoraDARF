@@ -3,10 +3,13 @@ export const USER_AGENT =
 
 const SEM_CORPO = new Set([204, 205, 304]);
 
+/** Impede que o corpo repassado seja interpretado como página ou script do nosso domínio. */
+export const DEFESAS = { 'content-security-policy': "sandbox; default-src 'none'", 'x-content-type-options': 'nosniff' };
+
 const falha = () =>
   new Response('{"erro":"indisponivel"}', {
     status: 502,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...DEFESAS },
   });
 
 /** Mantém só os parâmetros permitidos (primeira ocorrência, ordem do pedido). */
@@ -34,7 +37,7 @@ export async function repassar(
     // Redirecionamento poderia levar a host fora da lista: não seguimos (502).
     if (r.status >= 300 && r.status < 400) return falha();
     const dados = SEM_CORPO.has(r.status) ? null : await r.arrayBuffer();
-    const saida = {};
+    const saida = { ...DEFESAS };
     const tipoResp = r.headers.get('content-type');
     if (tipoResp) saida['content-type'] = tipoResp;
     if (r.status === 200 && cache) saida['cache-control'] = cache;
