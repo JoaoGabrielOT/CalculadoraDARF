@@ -26,7 +26,7 @@ export function origemDoPedido(request) {
   }
 }
 
-function permitida(origem, lista) {
+export function permitida(origem, lista) {
   return lista.some((padrao) => {
     if (!padrao.endsWith(':*')) return padrao === origem;
     const prefixo = padrao.slice(0, -1);
