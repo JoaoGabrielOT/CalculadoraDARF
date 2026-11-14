@@ -22,6 +22,10 @@ abstract interface class Plataforma {
   /// somadas ao `MediaQuery` do app; `null` fora da Web.
   ValueListenable<EdgeInsets>? get areasSeguras;
 
+  /// Dispara quando o navegador devolve a página do cache de ida e volta
+  /// (`pageshow` com `persisted`); `null` fora da Web.
+  SinalPlataforma? get paginaRestaurada;
+
   /// Abre no navegador externo; false quando não abriu.
   Future<bool> abrirUrl(Uri url);
 
@@ -37,6 +41,11 @@ abstract interface class Plataforma {
 
   /// Põe [texto] na área de transferência.
   Future<void> copiarTexto(String texto);
+}
+
+/// Aviso sem valor vindo da plataforma; [disparar] avisa os ouvintes.
+class SinalPlataforma extends ChangeNotifier {
+  void disparar() => notifyListeners();
 }
 
 class PlataformaReal implements Plataforma {
@@ -56,6 +65,9 @@ class PlataformaReal implements Plataforma {
 
   @override
   ValueListenable<EdgeInsets>? get areasSeguras => null;
+
+  @override
+  SinalPlataforma? get paginaRestaurada => null;
 
   final AdaptadorNotificacoes _adaptador;
 

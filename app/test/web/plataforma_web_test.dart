@@ -6,6 +6,7 @@ import 'dart:js_interop_unsafe';
 
 import 'package:calculadoradarf/app/plataforma/plataforma_web.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:web/web.dart' as html;
 
 void main() {
   test('a mesma plataforma, de novo, continua com a trava', () async {
@@ -35,6 +36,26 @@ void main() {
     await p.iniciarNotificacoes((_) {});
     await p.notificar(1, 'Título', 'Corpo', 'https://x.com');
     expect(await p.pedirPermissaoNotificacoes(), isFalse);
+  });
+
+  test('pageshow restaurado do cache dispara paginaRestaurada; o comum não', () {
+    final p = PlataformaWeb();
+    var vezes = 0;
+    p.paginaRestaurada.addListener(() => vezes++);
+    html.window.dispatchEvent(
+      html.PageTransitionEvent(
+        'pageshow',
+        html.PageTransitionEventInit(persisted: false),
+      ),
+    );
+    expect(vezes, 0);
+    html.window.dispatchEvent(
+      html.PageTransitionEvent(
+        'pageshow',
+        html.PageTransitionEventInit(persisted: true),
+      ),
+    );
+    expect(vezes, 1);
   });
 
   test('web é true e windows é false', () {

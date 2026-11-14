@@ -25,6 +25,12 @@ class PlataformaFalsa implements Plataforma {
   @override
   ValueNotifier<EdgeInsets>? areasSeguras;
 
+  @override
+  late final SinalPlataforma? paginaRestaurada = web ? SinalPlataforma() : null;
+
+  /// Simula o navegador devolvendo a página do cache de ida e volta.
+  void restaurarPagina() => paginaRestaurada?.disparar();
+
   final List<Uri> urlsAbertas = [];
   final List<NotificacaoGravada> notificacoes = [];
   final List<String> instalacoes = [];

@@ -32,6 +32,9 @@ class PlataformaWeb implements Plataforma {
   late final ValueListenable<EdgeInsets>? areasSeguras = _lerAreasSeguras();
 
   @override
+  late final SinalPlataforma paginaRestaurada = _ouvirRestauracao();
+
+  @override
   Future<bool> abrirUrl(Uri url) async {
     try {
       return await launchUrl(url, webOnlyWindowName: '_blank');
@@ -136,6 +139,17 @@ class PlataformaWeb implements Plataforma {
   void limparEndereco() {
     final l = html.window.location;
     html.window.history.replaceState(null, '', '${l.pathname}${l.search}');
+  }
+
+  SinalPlataforma _ouvirRestauracao() {
+    final sinal = SinalPlataforma();
+    html.window.addEventListener(
+      'pageshow',
+      ((html.PageTransitionEvent e) {
+        if (e.persisted) sinal.disparar();
+      }).toJS,
+    );
+    return sinal;
   }
 
   ValueListenable<EdgeInsets>? _lerAreasSeguras() {

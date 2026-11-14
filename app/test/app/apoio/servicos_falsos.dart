@@ -531,6 +531,10 @@ class ServicosFalsos implements ServicosApp {
 
   // conta, sincronização e amigos
   EstadoConta estadoConta = const EstadoConta();
+
+  /// Quando preenchido, `conectar` só termina depois dele; `cancelarLogin` o
+  /// completa (como o login real, que acaba ao ser cancelado).
+  Completer<void>? loginPendente;
   List<Amigo> listaAmigos = [];
   ResumoAmigo? resumoAmigo;
 
@@ -538,10 +542,16 @@ class ServicosFalsos implements ServicosApp {
   Future<EstadoConta> conta() => _chamar('conta', [], () => estadoConta);
 
   @override
-  Future<void> conectar() => _chamar('conectar', [], () {});
+  Future<void> conectar() async {
+    await _chamar('conectar', [], () {});
+    await loginPendente?.future;
+  }
 
   @override
-  Future<void> cancelarLogin() => _chamar('cancelarLogin', [], () {});
+  Future<void> cancelarLogin() => _chamar('cancelarLogin', [], () {
+    final c = loginPendente;
+    if (c != null && !c.isCompleted) c.complete();
+  });
 
   @override
   Future<void> sair() => _chamar('sair', [], () {});

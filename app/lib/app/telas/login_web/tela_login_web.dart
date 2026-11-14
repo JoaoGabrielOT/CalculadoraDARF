@@ -65,8 +65,27 @@ class _TelaLoginWebState extends State<TelaLoginWeb> {
   final List<EventoAviso> _avisos = [];
   bool _quadroAgendado = false;
 
+  late final SinalPlataforma? _restaurada = context
+      .read<Plataforma>()
+      .paginaRestaurada;
+
+  @override
+  void initState() {
+    super.initState();
+    _restaurada?.addListener(_aoRestaurar);
+  }
+
+  /// Voltando do Google pelo botão Voltar, o navegador pode devolver a página
+  /// do cache com o login ainda pendente: cancela e reabilita o botão.
+  void _aoRestaurar() {
+    if (_controle.conectando || _estado.conta.status == StatusSync.login) {
+      unawaited(_controle.cancelarLogin());
+    }
+  }
+
   @override
   void dispose() {
+    _restaurada?.removeListener(_aoRestaurar);
     _controle.dispose();
     super.dispose();
   }

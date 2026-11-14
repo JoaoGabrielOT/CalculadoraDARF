@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/regras/textos.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
@@ -35,11 +37,12 @@ Future<void> _montar(
   ServicosFalsos s, {
   bool web = true,
   Size tamanho = const Size(390, 844),
+  PlataformaFalsa? plataforma,
 }) async {
   await montarApp(
     t,
     servicos: s,
-    plataforma: PlataformaFalsa(web: web, windows: !web),
+    plataforma: plataforma ?? PlataformaFalsa(web: web, windows: !web),
     tamanho: tamanho,
   );
   await t.pumpAndSettle();
@@ -111,6 +114,47 @@ void main() {
     expect(botao, findsOneWidget);
     expect(t.widget<FilledButton>(botao).onPressed, isNull);
     expect(find.text('Entrar com o Google'), findsNothing);
+  });
+
+  testWidgets(
+    'página restaurada do cache com o login aberto: cancela e reabilita o botão',
+    (t) async {
+      final s = _servicos(_semToken)..loginPendente = Completer<void>();
+      final p = PlataformaFalsa(web: true, windows: false);
+      await _montar(t, s, plataforma: p);
+      await t.tap(_entrar);
+      await t.pump();
+      expect(
+        find.widgetWithText(FilledButton, 'Abrindo o Google...'),
+        findsOneWidget,
+      );
+      p.restaurarPagina();
+      await t.pumpAndSettle();
+      expect(s.chamadas, contains('cancelarLogin()'));
+      expect(t.widget<FilledButton>(_entrar).onPressed, isNotNull);
+    },
+  );
+
+  testWidgets('página restaurada aguardando o login (status) cancela', (
+    t,
+  ) async {
+    final s = _servicos(
+      const EstadoConta(status: StatusSync.login, temCredencial: true),
+    );
+    final p = PlataformaFalsa(web: true, windows: false);
+    await _montar(t, s, plataforma: p);
+    p.restaurarPagina();
+    await t.pump();
+    expect(s.chamadas, contains('cancelarLogin()'));
+  });
+
+  testWidgets('página restaurada sem login aberto não cancela nada', (t) async {
+    final s = _servicos(_semToken);
+    final p = PlataformaFalsa(web: true, windows: false);
+    await _montar(t, s, plataforma: p);
+    p.restaurarPagina();
+    await t.pump();
+    expect(s.chamadas, isNot(contains('cancelarLogin()')));
   });
 
   group('Verificar atualização na Conta', () {
