@@ -38,25 +38,28 @@ void main() {
     expect(await p.pedirPermissaoNotificacoes(), isFalse);
   });
 
-  test('pageshow restaurado do cache dispara paginaRestaurada; o comum não', () {
-    final p = PlataformaWeb();
-    var vezes = 0;
-    p.paginaRestaurada.addListener(() => vezes++);
-    html.window.dispatchEvent(
-      html.PageTransitionEvent(
-        'pageshow',
-        html.PageTransitionEventInit(persisted: false),
-      ),
-    );
-    expect(vezes, 0);
-    html.window.dispatchEvent(
-      html.PageTransitionEvent(
-        'pageshow',
-        html.PageTransitionEventInit(persisted: true),
-      ),
-    );
-    expect(vezes, 1);
-  });
+  test(
+    'pageshow restaurado do cache dispara paginaRestaurada; o comum não',
+    () {
+      final p = PlataformaWeb();
+      var vezes = 0;
+      p.paginaRestaurada.addListener(() => vezes++);
+      html.window.dispatchEvent(
+        html.PageTransitionEvent(
+          'pageshow',
+          html.PageTransitionEventInit(persisted: false),
+        ),
+      );
+      expect(vezes, 0);
+      html.window.dispatchEvent(
+        html.PageTransitionEvent(
+          'pageshow',
+          html.PageTransitionEventInit(persisted: true),
+        ),
+      );
+      expect(vezes, 1);
+    },
+  );
 
   test('web é true e windows é false', () {
     final p = PlataformaWeb();

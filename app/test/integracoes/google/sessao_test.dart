@@ -226,38 +226,35 @@ void main() {
     expect(gravado.token, 'novo');
   });
 
-  test(
-    'req: falha ao gravar o token renovado não derruba o pedido nem renova de novo',
-    () async {
-      final falso = ClienteFalso.fila([_about(), _about()]);
-      var renovacoes = 0;
-      final s = SessaoGoogle(
-        http: ClienteHttp(falso, tempoLimite: const Duration(seconds: 30)),
-        armazenamento: _ArmazenamentoQueFalha(),
-        executar: executarDireto,
-        renovar: (t) async {
-          renovacoes++;
-          return TokenGoogle(
-            token: 'novo',
-            refreshToken: t.refreshToken,
-            clientId: t.clientId,
-            clientSecret: t.clientSecret,
-            expiry: DateTime.utc(2030),
-          );
-        },
-      );
-      expect(
-        await s.iniciar(_token(expiry: DateTime.utc(2025, 10, 1))),
-        'ana@gmail.com',
-      );
-      await s.req('GET', '$urlDrive/about');
-      expect(renovacoes, 1);
-      expect(falso.pedidos, hasLength(2));
-      for (final p in falso.pedidos) {
-        expect(p.cabecalhos['authorization'], 'Bearer novo');
-      }
-    },
-  );
+  test('req: falha ao gravar o token renovado não derruba o pedido nem renova de novo', () async {
+    final falso = ClienteFalso.fila([_about(), _about()]);
+    var renovacoes = 0;
+    final s = SessaoGoogle(
+      http: ClienteHttp(falso, tempoLimite: const Duration(seconds: 30)),
+      armazenamento: _ArmazenamentoQueFalha(),
+      executar: executarDireto,
+      renovar: (t) async {
+        renovacoes++;
+        return TokenGoogle(
+          token: 'novo',
+          refreshToken: t.refreshToken,
+          clientId: t.clientId,
+          clientSecret: t.clientSecret,
+          expiry: DateTime.utc(2030),
+        );
+      },
+    );
+    expect(
+      await s.iniciar(_token(expiry: DateTime.utc(2025, 10, 1))),
+      'ana@gmail.com',
+    );
+    await s.req('GET', '$urlDrive/about');
+    expect(renovacoes, 1);
+    expect(falso.pedidos, hasLength(2));
+    for (final p in falso.pedidos) {
+      expect(p.cabecalhos['authorization'], 'Bearer novo');
+    }
+  });
 
   test('req renova antes quando o token está vencido', () async {
     final (s, falso, _) = _montar([_renovou(), _about()]);
