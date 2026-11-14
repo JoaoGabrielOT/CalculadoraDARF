@@ -5,9 +5,18 @@ on:
     tags: ["v*", "[0-9]*"]
     branches: [migracao-flutter]  # só verifica (versão e testes); publicar é só por tag
   workflow_dispatch:  # gera os arquivos para teste, sem publicar release
+    inputs:
+      publicar_web:
+        description: "Publicar o build Web na branch web-dist"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+env:
+  URL_VERCEL: https://calculadora-darf.vercel.app
+  URL_RENDER: https://calculadora-darf.onrender.com
 
 jobs:
   versao:
@@ -332,6 +341,58 @@ jobs:
           name: capturas-windows
           path: app/build/capturas
 
+  web:
+    needs: versao
+    runs-on: ubuntu-latest
+    env:
+      VERSAO: ${{ needs.versao.outputs.versao }}
+      NUMERO: ${{ needs.versao.outputs.numero }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Testes do servidor
+        run: node --test web_servidor/test/*.test.js
+
+      - name: Testes dos scripts da Web
+        run: bash app/ci/testar_ci_web.sh
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+
+      - name: Preparar a versão
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            printf '%s\n' '/// Versão do aplicativo (comparada com a do GitHub pelo atualizador).' \
+              "const String versaoApp = '$VERSAO';" > app/lib/versao.dart
+          fi
+
+      - name: Dependências
+        working-directory: app
+        run: flutter pub get
+
+      - name: Testes no navegador
+        working-directory: app
+        run: flutter test --platform chrome test/web
+
+      - name: Compilar a Web
+        working-directory: app
+        run: flutter build web --release --no-wasm-dry-run --build-name "$VERSAO" --build-number "$NUMERO" --dart-define=URL_VERCEL="$URL_VERCEL"
+
+      - name: Montar a saída da Web
+        run: bash app/ci/montar_web.sh app/build/web web_servidor saida-web
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: saida-web
+
   publicar:
     if: github.event_name == 'push' && github.ref_type == 'tag'
     needs: [versao, testes, android, windows]
@@ -363,9 +424,30 @@ jobs:
           body_path: docs/release/${{ needs.versao.outputs.versao }}.md
           fail_on_unmatched_files: true
 
+  publicar-web:
+    needs: [versao, testes, android, windows, web, publicar]
+    if: ${{ !cancelled() && needs.web.result == 'success' && needs.testes.result == 'success' && ((github.event_name == 'push' && github.ref_type == 'tag' && needs.publicar.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.publicar_web)) }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      VERSAO: ${{ needs.versao.outputs.versao }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: saida-web
+
+      - name: Publicar na branch web-dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash app/ci/publicar_web.sh saida-web "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$VERSAO"
+
   conferir-atualizador:
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: [versao, publicar]
+    needs: [versao, publicar, publicar-web]
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -447,3 +529,10 @@ jobs:
             exit 1
           fi
           echo "::notice title=Atualizadores::versão $VERSAO detectada pelos atualizadores Python 1.12 e Flutter;$ASSETS_RESUMO"
+
+      - name: Web publicada nas duas URLs
+        run: |
+          if ! bash app/ci/conferir_web.sh "$VERSAO" "$URL_VERCEL" "$URL_RENDER"; then
+            echo "::error title=Web::a Web $VERSAO não apareceu em $URL_VERCEL e $URL_RENDER com a API respondendo"
+            exit 1
+          fi
