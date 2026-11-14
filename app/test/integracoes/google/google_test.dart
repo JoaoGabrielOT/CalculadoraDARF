@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:calculadoradarf/integracoes/integracoes.dart';
@@ -17,14 +18,19 @@ final _cliente = ClienteOAuth.deTexto(
   }),
 );
 
-Google _google(ClienteOAuth? cliente) {
+Google _google(
+  ClienteOAuth? cliente, {
+  Armazenamento? armazenamento,
+  FazerLogin? fazerLogin,
+  void Function(TokenGoogle? token)? aoSair,
+}) {
   final http = ClienteHttp(
     ClienteFalso.fila([]),
     tempoLimite: const Duration(seconds: 30),
   );
   final sessao = SessaoGoogle(
     http: http,
-    armazenamento: ArmazenamentoMemoria(),
+    armazenamento: armazenamento ?? ArmazenamentoMemoria(),
     executar: executarDireto,
   );
   return Google(
@@ -32,6 +38,8 @@ Google _google(ClienteOAuth? cliente) {
     planilha: PlanilhaGoogle(sessao),
     httpLogin: http,
     cliente: cliente,
+    fazerLogin: fazerLogin,
+    aoSair: aoSair,
   );
 }
 
@@ -59,5 +67,48 @@ void main() {
     final g = _google(_cliente);
     expect(g.email, isNull);
     expect(g.temToken(), isFalse);
+  });
+
+  test('fazerLogin sem cliente: temCredencial e login delega', () async {
+    Future<void>? recebido;
+    final cancelar = Completer<void>().future;
+    final g = _google(
+      null,
+      fazerLogin: (abrirUrl, {cancelar}) async {
+        recebido = cancelar;
+        return 'ana@gmail.com';
+      },
+    );
+    expect(g.temCredencial, isTrue);
+    expect(await g.login((_) async {}, cancelar: cancelar), 'ana@gmail.com');
+    expect(recebido, same(cancelar));
+  });
+
+  test('sair entrega o token do pacote ao aoSair e apaga o token.json', () {
+    final a = ArmazenamentoMemoria();
+    gravarPacoteWeb(a, 'v1.p');
+    TokenGoogle? entregue;
+    var chamadas = 0;
+    final g = _google(
+      null,
+      armazenamento: a,
+      aoSair: (t) {
+        chamadas++;
+        entregue = t;
+      },
+    );
+    g.sair();
+    expect(chamadas, 1);
+    expect(entregue?.refreshToken, 'v1.p');
+    expect(a.existe(arquivoToken), isFalse);
+  });
+
+  test('sair com token.json ilegível → aoSair(null), sem exceção', () {
+    final a = ArmazenamentoMemoria()..gravar(arquivoToken, 'lixo');
+    final recebidos = <TokenGoogle?>[];
+    final g = _google(null, armazenamento: a, aoSair: recebidos.add);
+    g.sair();
+    expect(recebidos, [null]);
+    expect(a.existe(arquivoToken), isFalse);
   });
 }

@@ -5,6 +5,13 @@ import 'erros.dart';
 import 'login.dart';
 import 'planilha.dart';
 import 'sessao.dart';
+import 'token.dart';
+
+/// Login alternativo ao do navegador com loopback (na Web, pelo servidor).
+typedef FazerLogin = Future<String> Function(
+  AbrirUrl abrirUrl, {
+  Future<void>? cancelar,
+});
 
 /// O que o sincronizador precisa da conta Google (a fachada [Google] e os
 /// falsos dos testes).
@@ -31,18 +38,24 @@ class Google implements ContaGoogle {
     required this.planilha,
     required this.httpLogin,
     this.cliente,
+    this.fazerLogin,
+    this.aoSair,
   });
 
   final SessaoGoogle sessao;
   final PlanilhaGoogle planilha;
   final ClienteHttp httpLogin;
   final ClienteOAuth? cliente;
+  final FazerLogin? fazerLogin;
+
+  /// Chamado depois de `sair()` com o token que havia (`null` se ilegível).
+  final void Function(TokenGoogle? token)? aoSair;
 
   @override
   String? get email => sessao.email;
 
   @override
-  bool get temCredencial => cliente != null;
+  bool get temCredencial => cliente != null || fazerLogin != null;
 
   @override
   bool temToken() => sessao.temToken();
@@ -52,6 +65,10 @@ class Google implements ContaGoogle {
 
   @override
   Future<String> login(AbrirUrl abrirUrl, {Future<void>? cancelar}) async {
+    final fazerLogin = this.fazerLogin;
+    if (fazerLogin != null) {
+      return await fazerLogin(abrirUrl, cancelar: cancelar);
+    }
     final cliente = this.cliente;
     if (cliente == null) {
       throw SemCredencial('Arquivo credentials.json não encontrado.');
@@ -66,7 +83,21 @@ class Google implements ContaGoogle {
   }
 
   @override
-  void sair() => sessao.sair();
+  void sair() {
+    final aoSair = this.aoSair;
+    if (aoSair == null) {
+      sessao.sair();
+      return;
+    }
+    TokenGoogle? token;
+    try {
+      token = lerToken(sessao.armazenamento);
+    } catch (_) {
+      token = null;
+    }
+    sessao.sair();
+    aoSair(token);
+  }
 
   @override
   Future<String?> buscarPlanilha([String dono = 'me']) =>

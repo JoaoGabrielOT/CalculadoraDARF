@@ -18,6 +18,10 @@ const _msgInvalida = 'Resposta inválida do Google.';
 const _msgNaN =
     'Há um valor inválido (NaN ou infinito) nos dados; nada foi enviado ao Google.';
 
+/// Troca o token vencido por um novo (no app, [renovarToken]; na Web, pelo
+/// servidor).
+typedef RenovarToken = Future<TokenGoogle> Function(TokenGoogle atual);
+
 /// google_sync.py:104-129 e 246-280: token, e-mail da conta e pedidos
 /// autenticados com renovação automática.
 class SessaoGoogle {
@@ -25,11 +29,13 @@ class SessaoGoogle {
     required this.http,
     required this.armazenamento,
     this.executar = executarEmIsolate,
-  });
+    RenovarToken? renovar,
+  }) : _renovarToken = renovar;
 
   final ClienteHttp http;
   final Armazenamento armazenamento;
   final Executar executar;
+  final RenovarToken? _renovarToken;
   TokenGoogle? _token;
   String? _email;
 
@@ -47,7 +53,7 @@ class SessaoGoogle {
     var token = lerToken(armazenamento);
     if (token == null) throw LoginNecessario(_msgLogin);
     if (!token.valido(ambiente.agora())) {
-      token = await renovarToken(http, token);
+      token = await _renovarCom(token);
       if (geracao != _geracao) throw LoginNecessario(_msgLogin);
       gravarToken(armazenamento, token);
     }
@@ -94,10 +100,15 @@ class SessaoGoogle {
     return base.replace(queryParameters: consulta);
   }
 
+  Future<TokenGoogle> _renovarCom(TokenGoogle t) {
+    final renovar = _renovarToken;
+    return renovar == null ? renovarToken(http, t) : renovar(t);
+  }
+
   Future<void> _renovar(int geracao) async {
     final atual = _token;
     if (atual == null || geracao != _geracao) throw LoginNecessario(_msgLogin);
-    final novo = await renovarToken(http, atual);
+    final novo = await _renovarCom(atual);
     if (geracao != _geracao) throw LoginNecessario(_msgLogin);
     _token = novo;
   }

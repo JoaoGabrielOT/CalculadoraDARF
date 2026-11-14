@@ -92,6 +92,37 @@ void main() {
     },
   );
 
+  test(
+    'renovar injetado: um só pedido (o about) e nada ao Google OAuth',
+    () async {
+      final falso = ClienteFalso.fila([_about()]);
+      final a = ArmazenamentoMemoria();
+      final s = SessaoGoogle(
+        http: ClienteHttp(falso, tempoLimite: const Duration(seconds: 30)),
+        armazenamento: a,
+        executar: executarDireto,
+        renovar: (t) async => TokenGoogle(
+          token: 'novo',
+          refreshToken: t.refreshToken,
+          clientId: t.clientId,
+          clientSecret: t.clientSecret,
+          expiry: DateTime.fromMillisecondsSinceEpoch(
+            ((_agora + 3600) * 1000).toInt(),
+            isUtc: true,
+          ),
+        ),
+      );
+      gravarToken(a, _token(expiry: DateTime.utc(2025, 10, 1)));
+      await s.carregarToken();
+      expect(falso.pedidos, hasLength(1));
+      final p = falso.pedidos.single;
+      expect(p.metodo, 'GET');
+      expect(p.url.toString().startsWith('$urlDrive/about'), isTrue);
+      expect(p.cabecalhos['authorization'], 'Bearer novo');
+      expect(lerToken(a)!.token, 'novo');
+    },
+  );
+
   test('sem rede na renovação → Offline e token.json intacto', () async {
     final (s, _, a) = _montar([
       RespostaFalsa(200, erro: const SocketException('sem rede')),
