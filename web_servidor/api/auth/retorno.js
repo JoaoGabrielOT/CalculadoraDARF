@@ -11,6 +11,9 @@ const COMUNS = {
   'set-cookie': `${COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
   'cache-control': 'no-store',
   'referrer-policy': 'no-referrer',
+  // a página de erro é HTML: não pode ir para dentro de um frame
+  'content-security-policy': "frame-ancestors 'none'",
+  'x-frame-options': 'DENY',
 };
 
 function lerCookie(request) {

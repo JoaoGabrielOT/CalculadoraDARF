@@ -4,7 +4,11 @@ export const USER_AGENT =
 const SEM_CORPO = new Set([204, 205, 304]);
 
 /** Impede que o corpo repassado seja interpretado como página ou script do nosso domínio. */
-export const DEFESAS = { 'content-security-policy': "sandbox; default-src 'none'", 'x-content-type-options': 'nosniff' };
+export const DEFESAS = {
+  'content-security-policy': "sandbox; default-src 'none'; frame-ancestors 'none'",
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+};
 
 const falha = () =>
   new Response('{"erro":"indisponivel"}', {

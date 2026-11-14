@@ -108,10 +108,20 @@ test('Vary: Origin em toda resposta (sem Origin, 403, 405, 429)', async () => {
   assert.equal(ultima.headers.get('vary'), 'Origin');
 });
 
-test('vercel.json: todas as rotas proíbem o site dentro de frames', () => {
+test('vercel.json: o site fora de frames, sem trocar o CSP das funções em /api', () => {
   const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
-  const todas = vercel.headers.find((h) => h.source === '/(.*)');
-  const valor = (k) => todas.headers.find((h) => h.key === k)?.value;
-  assert.equal(valor('Content-Security-Policy'), "frame-ancestors 'none'");
-  assert.equal(valor('X-Frame-Options'), 'DENY');
+  const valor = (regra, k) => regra.headers.find((h) => h.key === k)?.value;
+  const casa = (regra, caminho) => new RegExp(`^${regra.source}$`).test(caminho);
+  const comCsp = vercel.headers.filter((r) => valor(r, 'Content-Security-Policy') !== undefined);
+  assert.equal(comCsp.length, 1);
+  const site = comCsp[0];
+  assert.equal(valor(site, 'Content-Security-Policy'), "frame-ancestors 'none'");
+  assert.equal(valor(site, 'X-Frame-Options'), 'DENY');
+  for (const c of ['/', '/index.html', '/main.dart.js', '/assets/x.png']) assert.ok(casa(site, c), c);
+  for (const c of ['/api/yahoo/chart/PETR4.SA', '/api/auth/retorno', '/api/previas/pagina']) {
+    assert.equal(casa(site, c), false, c);
+  }
+  // fora do CSP, só valores iguais aos das funções valem para /api
+  const todas = vercel.headers.find((r) => r.source === '/(.*)');
+  assert.deepEqual(todas.headers, [{ key: 'X-Content-Type-Options', value: 'nosniff' }]);
 });

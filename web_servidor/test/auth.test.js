@@ -44,6 +44,8 @@ function cookieApagado(r) {
 function cabecalhosDeRetorno(r) {
   assert.equal(r.headers.get('cache-control'), 'no-store');
   assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
+  assert.equal(r.headers.get('content-security-policy'), "frame-ancestors 'none'");
+  assert.equal(r.headers.get('x-frame-options'), 'DENY');
   cookieApagado(r);
 }
 

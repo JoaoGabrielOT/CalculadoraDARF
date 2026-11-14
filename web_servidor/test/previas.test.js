@@ -182,7 +182,8 @@ test('pagina: HTML de 1,5 MB -> 200 cortado em 1 048 576 bytes, com cache e defe
   assert.equal(r.status, 200);
   assert.equal((await r.arrayBuffer()).byteLength, 1048576);
   assert.match(r.headers.get('cache-control'), /s-maxage=3600/);
-  assert.equal(r.headers.get('content-security-policy'), "sandbox; default-src 'none'");
+  assert.equal(r.headers.get('content-security-policy'), "sandbox; default-src 'none'; frame-ancestors 'none'");
+  assert.equal(r.headers.get('x-frame-options'), 'DENY');
   assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(r.headers.get('x-url-final'), 'https://a.exemplo/grande');
 });
@@ -241,7 +242,8 @@ test('imagem: image/jpeg pequeno -> 200 com s-maxage=3600', async () => {
   assert.match(r.headers.get('cache-control'), /s-maxage=3600/);
   assert.equal(r.headers.get('content-type'), 'image/jpeg');
   assert.equal(r.headers.get('x-url-final'), 'https://a.exemplo/p.jpg');
-  assert.equal(r.headers.get('content-security-policy'), "sandbox; default-src 'none'");
+  assert.equal(r.headers.get('content-security-policy'), "sandbox; default-src 'none'; frame-ancestors 'none'");
+  assert.equal(r.headers.get('x-frame-options'), 'DENY');
   assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
   assert.equal((await r.arrayBuffer()).byteLength, 100);
 });

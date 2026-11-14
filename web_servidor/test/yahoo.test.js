@@ -83,7 +83,8 @@ test('repassar: toda resposta leva sandbox e nosniff (200, erro do destino e 502
   };
   for (const f of [fetchFalso(200, '<html></html>'), fetchFalso(404, '{}'), fetchFalso(302, ''), falhaRede]) {
     const r = await repassar('https://exemplo.invalid/', { fetch: f });
-    assert.equal(r.headers.get('content-security-policy'), "sandbox; default-src 'none'");
+    assert.equal(r.headers.get('content-security-policy'), "sandbox; default-src 'none'; frame-ancestors 'none'");
+    assert.equal(r.headers.get('x-frame-options'), 'DENY');
     assert.equal(r.headers.get('x-content-type-options'), 'nosniff');
   }
 });
