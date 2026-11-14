@@ -45692,9 +45692,9 @@ case 3:s=4
 return A.j(A.fo(q.a+A.p($.wz())+"dados").Lk(!0),$async$XV)
 case 4:return A.u(null,r)}})
 return A.v($async$XV,r)},
-bX5(a){var s=A.dV("https://calculadora-darf.vercel.app",0,null)
+bX5(a){var s=A.dV("https://calculadora-darf-web.vercel.app",0,null)
 if(a.gmb()===s.gmb())return A.dV(a.gA9()+"/api",0,null)
-return A.dV("https://calculadora-darf.vercel.app/api",0,null)},
+return A.dV("https://calculadora-darf-web.vercel.app/api",0,null)},
 bgX(a,b){return A.bXa(a,b,b)},
 bXa(a,b,c){var s=0,r=A.w(c),q
 var $async$bgX=A.q(function(d,e){if(d===1)return A.t(e,r)
