@@ -34,7 +34,10 @@ export function criar(dep) {
             return json(503, { erro: 'indisponivel' }, SEM_CACHE);
           }
           const { status, dados } = resposta;
-          if (status === 400 || status === 401) return json(401, { erro: 'sessao' }, SEM_CACHE);
+          // Só invalid_grant encerra a sessão; outro 400/401 (ex.: segredo errado no Vercel) não pode desconectar ninguém.
+          if ((status === 400 || status === 401) && dados?.error === 'invalid_grant') {
+            return json(401, { erro: 'sessao' }, SEM_CACHE);
+          }
           if (status !== 200 || typeof dados?.access_token !== 'string') {
             return json(503, { erro: 'indisponivel' }, SEM_CACHE);
           }

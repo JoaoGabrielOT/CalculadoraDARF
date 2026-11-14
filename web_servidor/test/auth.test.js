@@ -326,6 +326,20 @@ test('token: Google 400 invalid_grant ou 401 -> 401 sessao', async () => {
   }
 });
 
+test('token: Google 400 ou 401 sem invalid_grant (segredo errado) -> 503 indisponivel', async () => {
+  for (const [status, corpo] of [
+    [400, json({ error: 'invalid_client' })],
+    [401, json({ error: 'invalid_client' })],
+    [400, json({ error: 'unauthorized_client' })],
+    [401, ''],
+  ]) {
+    const r = await postar(criarToken(dep(fetchFalso(status, corpo))), json({ pacote: pacoteOk() }));
+    assert.equal(r.status, 503);
+    assert.deepEqual(await r.json(), { erro: 'indisponivel' });
+    assert.equal(r.headers.get('cache-control'), 'no-store');
+  }
+});
+
 test('token: Google 503, 429 ou rede -> 503 indisponivel', async () => {
   for (const f of [
     fetchFalso(503, ''),
