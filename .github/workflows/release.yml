@@ -379,7 +379,19 @@ jobs:
 
       - name: Testes no navegador
         working-directory: app
-        run: flutter test --platform chrome test/web
+        run: |
+          set -o pipefail
+          if flutter test --platform chrome test/web --reporter expanded 2>&1 | tee "$RUNNER_TEMP/navegador.log"; then
+            exit 0
+          fi
+          # os logs exigem login; as linhas de erro vão como anotação
+          linhas=$(grep -E '\[E\]|Error|Failed to load|Expected' "$RUNNER_TEMP/navegador.log" | head -n 40 || true)
+          [ -n "$linhas" ] || linhas=$(tail -n 15 "$RUNNER_TEMP/navegador.log")
+          while IFS= read -r l; do
+            l="${l:0:300}"
+            echo "::error title=Testes no navegador::${l//%/%25}"
+          done <<< "$linhas"
+          exit 1
 
       - name: Compilar a Web
         working-directory: app
@@ -429,6 +441,9 @@ jobs:
     if: ${{ !cancelled() && needs.web.result == 'success' && needs.testes.result == 'success' && ((github.event_name == 'push' && github.ref_type == 'tag' && needs.publicar.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.publicar_web)) }}
     permissions:
       contents: write
+    concurrency:
+      group: web-dist
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     env:
       VERSAO: ${{ needs.versao.outputs.versao }}
@@ -445,9 +460,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash app/ci/publicar_web.sh saida-web "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$VERSAO"
 
+  conferir-web:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [versao, publicar-web]
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    env:
+      VERSAO: ${{ needs.versao.outputs.versao }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Web publicada nas duas URLs
+        run: |
+          if ! bash app/ci/conferir_web.sh "$VERSAO" "$URL_VERCEL" "$URL_RENDER"; then
+            echo "::error title=Web::a Web $VERSAO não apareceu em $URL_VERCEL e $URL_RENDER com a API respondendo"
+            exit 1
+          fi
+
   conferir-atualizador:
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: [versao, publicar, publicar-web]
+    needs: [versao, publicar]
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -529,10 +562,3 @@ jobs:
             exit 1
           fi
           echo "::notice title=Atualizadores::versão $VERSAO detectada pelos atualizadores Python 1.12 e Flutter;$ASSETS_RESUMO"
-
-      - name: Web publicada nas duas URLs
-        run: |
-          if ! bash app/ci/conferir_web.sh "$VERSAO" "$URL_VERCEL" "$URL_RENDER"; then
-            echo "::error title=Web::a Web $VERSAO não apareceu em $URL_VERCEL e $URL_RENDER com a API respondendo"
-            exit 1
-          fi

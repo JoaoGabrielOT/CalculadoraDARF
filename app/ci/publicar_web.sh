@@ -15,10 +15,16 @@ TRABALHO="$(mktemp -d)"
 trap 'rm -rf "$TRABALHO"' EXIT
 git() { command git -c core.autocrlf=false "$@"; }
 
-if git ls-remote --exit-code --heads "$REMOTO" web-dist > /dev/null 2>&1; then
+# --exit-code: 2 é só "branch ausente"; outro código (rede, permissão, remoto errado) não pode virar órfã
+codigo=0
+git ls-remote --exit-code --heads "$REMOTO" web-dist > /dev/null 2>&1 || codigo=$?
+if [ "$codigo" = 0 ]; then
   # depth 1: o histórico guarda um build por versão e só o último interessa
   git clone --quiet --depth 1 --single-branch --branch web-dist "$REMOTO" "$TRABALHO/repo"
   cd "$TRABALHO/repo"
+elif [ "$codigo" != 2 ]; then
+  echo "::error title=Web::git ls-remote falhou (código $codigo); remoto inacessível"
+  exit 1
 else
   echo "::notice title=Web::branch web-dist ausente no remoto; criando órfã"
   mkdir "$TRABALHO/repo"

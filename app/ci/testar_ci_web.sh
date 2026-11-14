@@ -57,14 +57,14 @@ fi
 grep -q '::error' "$TMP/c3.log" || falha 3 "sem ::error: $(cat "$TMP/c3.log")"
 passou 3
 
-# 4. publicação: dois conteúdos -> 2 commits encadeados; terceiro igual -> continua 2
+# 4. publicação (file:// força o clone raso de verdade): dois conteúdos -> 2 commits encadeados; terceiro igual -> continua 2
 remoto="$TMP/remoto.git"
 git init --quiet --bare "$remoto"
 mkdir -p "$TMP/p1" "$TMP/p2"
 echo '<p>1</p>' > "$TMP/p1/index.html"; echo 'velho' > "$TMP/p1/so_no_1.txt"
 echo '<p>2</p>' > "$TMP/p2/index.html"
 for p in p1 p2 p2; do
-  bash "$CI/publicar_web.sh" "$TMP/$p" "$remoto" 9.9.9 > "$TMP/c4.log" 2>&1 \
+  bash "$CI/publicar_web.sh" "$TMP/$p" "file://$remoto" 9.9.9 > "$TMP/c4.log" 2>&1 \
     || falha 4 "publicar_web.sh ($p) saiu com erro: $(cat "$TMP/c4.log")"
 done
 grep -q '::notice' "$TMP/c4.log" || falha 4 "terceira publicação sem ::notice"
@@ -77,6 +77,11 @@ arquivos=$(git --git-dir="$remoto" ls-tree --name-only web-dist | tr '\n' ' ')
 [ "$arquivos" = "index.html " ] || falha 4 "conteúdo não foi trocado: $arquivos"
 assunto=$(git --git-dir="$remoto" log -1 --format='%s|%an' web-dist)
 case "$assunto" in "Web 9.9.9 ("*")|github-actions[bot]") ;; *) falha 4 "commit inesperado: $assunto" ;; esac
+# remoto inacessível não é "branch ausente": não pode criar órfã
+if bash "$CI/publicar_web.sh" "$TMP/p1" "file://$TMP/nao_existe.git" 9.9.9 > "$TMP/c4.log" 2>&1; then
+  falha 4 "publicar_web.sh aceitou remoto inexistente"
+fi
+grep -q '::error' "$TMP/c4.log" || falha 4 "remoto inexistente sem ::error: $(cat "$TMP/c4.log")"
 passou 4
 
 # 5. conferência do version.json num servidor local
