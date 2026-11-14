@@ -19,6 +19,7 @@ import 'servicos/parametros.dart';
 import 'servicos/servicos_isolate.dart';
 import 'telas/casca.dart';
 import 'telas/falha_inicial.dart';
+import 'telas/login_web/tela_login_web.dart';
 import 'tema/temas.dart';
 import 'tema/tema_visual.dart';
 import 'web/areas_seguras.dart';
@@ -176,7 +177,12 @@ class _AppMaterial extends StatelessWidget {
     final escolhido = context.select<EstadoApp, TemaVisual>(
       (e) => e.preferencias.tema,
     );
-    final areas = context.read<Plataforma>().areasSeguras;
+    final plataforma = context.read<Plataforma>();
+    final areas = plataforma.areasSeguras;
+    // na Web, sem conta, a casca dá lugar ao login
+    final inicio = plataforma.web
+        ? const PortaoLoginWeb(child: Casca())
+        : const Casca();
     // Acima do MaterialApp ainda não há MediaQuery: este traz o do sistema,
     // para o tema Automático reagir ao claro/escuro.
     return MediaQuery.fromView(
@@ -202,9 +208,9 @@ class _AppMaterial extends StatelessWidget {
             ),
             // `routes` só põe o Navigator na árvore; na Web o endereço pode
             // trazer um fragmento, e a rota inicial é sempre a casca
-            routes: {'/': (_) => const Casca()},
+            routes: {'/': (_) => inicio},
             onGenerateInitialRoutes: (_) => [
-              MaterialPageRoute<void>(builder: (_) => const Casca()),
+              MaterialPageRoute<void>(builder: (_) => inicio),
             ],
           );
           if (areas == null) return app;

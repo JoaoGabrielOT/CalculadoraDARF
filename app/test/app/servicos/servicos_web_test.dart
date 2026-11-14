@@ -117,21 +117,8 @@ void main() {
     expect(c.status, StatusSync.off);
   });
 
-  test(
-    '401 na renovação avisa que a sessão expirou',
-    () async {
-      await recusarPacote();
-
-      expect(
-        eventos.whereType<EventoAviso>().map((e) => '${e.titulo} ${e.texto}'),
-        contains(contains('Sessão expirada')),
-      );
-    },
-    skip:
-        'Sincronizador.conectarComToken sai da conta em silêncio no '
-        'LoginNecessario (Windows e Android também); avisar exige mudar o '
-        'código compartilhado, fora do escopo da Tarefa 8.',
-  );
+  // O aviso "Sessão expirada" da Web vem do EstadoApp quando a sessão cai
+  // sem a pessoa sair (test/app/telas/login_web_test.dart).
 
   test('conectar sai da página rumo ao login do servidor', () async {
     await s.iniciar();

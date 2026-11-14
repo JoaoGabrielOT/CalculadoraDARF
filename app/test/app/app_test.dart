@@ -14,6 +14,11 @@ import 'apoio/montar.dart';
 import 'apoio/plataforma_falsa.dart';
 import 'apoio/servicos_falsos.dart';
 
+/// Na Web, sem token a casca dá lugar ao login.
+ServicosFalsos _comToken() =>
+    ServicosFalsos()
+      ..estadoConta = const EstadoConta(temCredencial: true, temToken: true);
+
 CoresApp _cores(WidgetTester t) =>
     CoresApp.de(t.element(find.text('Calculadora DARF').first));
 
@@ -90,7 +95,7 @@ void main() {
     t.view.devicePixelRatio = 1.0;
     addTearDown(t.view.reset);
     await iniciarApp(
-      servicos: ServicosFalsos(),
+      servicos: _comToken(),
       plataforma: PlataformaFalsa(web: true),
     );
     await t.pump(const Duration(seconds: 1));
@@ -109,7 +114,7 @@ void main() {
     addTearDown(t.view.reset);
     final plat = PlataformaFalsa(web: true)
       ..areasSeguras = ValueNotifier(const EdgeInsets.only(bottom: 34));
-    await iniciarApp(servicos: ServicosFalsos(), plataforma: plat);
+    await iniciarApp(servicos: _comToken(), plataforma: plat);
     await t.pump(const Duration(seconds: 1));
     expect(MediaQuery.of(t.element(find.byType(Casca))).padding.bottom, 34);
     plat.areasSeguras!.value = const EdgeInsets.only(bottom: 20);

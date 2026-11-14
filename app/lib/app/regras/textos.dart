@@ -12,6 +12,17 @@ import 'filtros.dart' show agruparVendas;
 const textoServicosEncerrados =
     'Os serviços do app foram encerrados. Feche e abra o app de novo.';
 
+// Tela de login da Web.
+const textoLoginWebTitulo = 'Entre com a sua conta Google';
+const textoLoginWebCorpo =
+    'A Calculadora DARF guarda os seus dados na sua planilha do Google, a '
+    'mesma usada pelo app do PC e do Android.';
+const textoLoginWebContasAutorizadas =
+    'Por enquanto, só entram contas autorizadas. Se o Google mostrar "Acesso '
+    'bloqueado", peça para cadastrarem o seu e-mail e tente de novo. Se '
+    'aparecer "O Google não verificou este app", toque em "Avançado" e '
+    'continue.';
+
 /// Texto do status de sincronização (calculadora_darf.py:2715-2726); o
 /// "Sincronizado" ganha " às HH:MM" quando há hora da última sincronização.
 String textoStatusSync(EstadoConta c) {

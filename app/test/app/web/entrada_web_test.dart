@@ -1,5 +1,8 @@
 import 'package:calculadoradarf/app/app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
+import 'package:calculadoradarf/app/servicos/eventos.dart';
+import 'package:calculadoradarf/app/telas/casca.dart';
+import 'package:calculadoradarf/app/telas/login_web/tela_login_web.dart';
 import 'package:calculadoradarf/app/web/entrada_web.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
@@ -170,7 +173,12 @@ void main() {
         e.avisosIniciais
           ..add(('Dados do navegador bloqueados', 'texto 1'))
           ..add(('Login não concluído', 'O login foi cancelado.'));
-        return ServicosFalsos();
+        // com token a casca abre direto e mostra os avisos
+        return ServicosFalsos()
+          ..estadoConta = const EstadoConta(
+            temCredencial: true,
+            temToken: true,
+          );
       },
     );
     await iniciarApp(entrada: () => e);
@@ -183,6 +191,46 @@ void main() {
     expect(find.text('Login não concluído'), findsOneWidget);
     expect(find.text('O login foi cancelado.'), findsOneWidget);
   });
+
+  testWidgets(
+    'sem token, os avisos iniciais chegam à tela de login e não voltam na casca',
+    (t) async {
+      t.view.physicalSize = const Size(1366, 768);
+      t.view.devicePixelRatio = 1.0;
+      addTearDown(t.view.reset);
+      final serv = ServicosFalsos()
+        ..estadoConta = const EstadoConta(temCredencial: true);
+      late final EntradaWeb e;
+      e = EntradaWeb(
+        plataforma: PlataformaFalsa(web: true),
+        criarServicos: (_) async {
+          e.avisosIniciais
+            ..add(('Dados do navegador bloqueados', 'texto 1'))
+            ..add(('Login não concluído', 'O login foi cancelado.'));
+          return serv;
+        },
+      );
+      await iniciarApp(entrada: () => e);
+      await t.pump(const Duration(seconds: 1));
+      await t.pump();
+      expect(find.byType(TelaLoginWeb), findsOneWidget);
+      expect(find.text('Dados do navegador bloqueados'), findsOneWidget);
+      expect(find.text('texto 1'), findsOneWidget);
+      expect(find.text('Login não concluído'), findsOneWidget);
+      expect(find.text('O login foi cancelado.'), findsOneWidget);
+
+      serv.eventosFalsos.add(
+        const EventoConta(
+          EstadoConta(temCredencial: true, temToken: true, email: 'eu@x.com'),
+        ),
+      );
+      await t.pump(const Duration(seconds: 1));
+      await t.pump();
+      expect(find.byType(Casca), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('Login não concluído'), findsNothing);
+    },
+  );
 
   testWidgets('ErroOutraAba na partida mostra o texto e Tentar de novo', (
     t,

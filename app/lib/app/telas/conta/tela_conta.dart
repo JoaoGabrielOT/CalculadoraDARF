@@ -198,9 +198,11 @@ class ControleConta extends ChangeNotifier {
     if (!sim || _descartado) return;
     agindo = true;
     notifyListeners();
+    _estado.saidaPedida = true;
     try {
       await _servicos.sair();
     } catch (e) {
+      _estado.saidaPedida = false;
       _avisarErro('Não foi possível sair', e);
     } finally {
       agindo = false;
@@ -647,6 +649,8 @@ class _BlocoSobre extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = CoresApp.de(context);
     final controle = context.watch<ControleConta>();
+    // na Web a versão nova chega com a página: não há o que verificar
+    final web = context.read<Plataforma>().web;
     return Cartao(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -657,17 +661,18 @@ class _BlocoSobre extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           Text('Versão $versaoApp', style: TextStyle(color: cores.textoSuave)),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.system_update),
-              onPressed: controle.verificando
-                  ? null
-                  : () => unawaited(controle.verificarAtualizacao(context)),
-              label: const Text('Verificar atualização'),
+          if (!web)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.system_update),
+                onPressed: controle.verificando
+                    ? null
+                    : () => unawaited(controle.verificarAtualizacao(context)),
+                label: const Text('Verificar atualização'),
+              ),
             ),
-          ),
-          if (controle.mensagemAtualizacao.isNotEmpty)
+          if (!web && controle.mensagemAtualizacao.isNotEmpty)
             Text(
               controle.mensagemAtualizacao,
               style: TextStyle(fontSize: 12, color: cores.textoSuave),

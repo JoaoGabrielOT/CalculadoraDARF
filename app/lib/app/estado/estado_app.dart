@@ -42,6 +42,14 @@ class EstadoApp extends ChangeNotifier {
   Preferencias preferencias = const Preferencias();
   EstadoConta conta = const EstadoConta();
 
+  /// A primeira leitura da conta já chegou (ou falhou): antes dela o portão
+  /// de login da Web não decide nada.
+  bool contaCarregada = false;
+
+  /// Na Web, a pessoa pediu para sair: a queda da sessão que vem em seguida
+  /// não vira o aviso de sessão expirada.
+  bool saidaPedida = false;
+
   /// E-mail do amigo cujos dados estão na tela; null = meus dados.
   String? amigo;
   bool carregandoAmigo = false;
@@ -471,7 +479,16 @@ class EstadoApp extends ChangeNotifier {
   void _aoEvento(EventoServico e) {
     switch (e) {
       case EventoConta():
+        final caiu = _comSessao(conta) && !_comSessao(e.conta);
         conta = e.conta;
+        contaCarregada = true;
+        if (caiu && saidaPedida) {
+          saidaPedida = false;
+        } else if (caiu && _plataforma.web) {
+          // o Sincronizador sai em silêncio quando a renovação dá 401 sem
+          // e-mail; na Web a tela de login explica a queda
+          avisar('Sessão expirada', 'Faça login novamente.');
+        }
         notifyListeners();
         unawaited(_conferirVisao());
       case EventoDadosMudaram():
@@ -504,11 +521,16 @@ class EstadoApp extends ChangeNotifier {
   Future<void> _atualizarConta() async {
     try {
       conta = await _servicos.conta();
-      notifyListeners();
     } catch (_) {
       // os eventos de conta corrigem o estado
+    } finally {
+      contaCarregada = true;
+      notifyListeners();
     }
   }
+
+  /// Com token ou e-mail: na Web, fora da tela de login.
+  static bool _comSessao(EstadoConta c) => c.temToken || c.email != null;
 
   Future<void> _atualizarNaoLidas() async {
     try {
