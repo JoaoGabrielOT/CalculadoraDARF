@@ -112,7 +112,11 @@ class SessaoGoogle {
     if (geracao != _geracao) throw LoginNecessario(_msgLogin);
     // o refresh token pode vir rotacionado: sem gravar, a próxima carga
     // usaria o antigo
-    gravarToken(armazenamento, novo);
+    try {
+      gravarToken(armazenamento, novo);
+    } catch (_) {
+      // falha no disco não derruba o pedido: o token novo vale em memória
+    }
     _token = novo;
   }
 

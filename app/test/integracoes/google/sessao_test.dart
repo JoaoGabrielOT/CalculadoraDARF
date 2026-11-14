@@ -39,6 +39,13 @@ RespostaFalsa _renovou([String token = 'ya29.novo']) =>
   return (s, falso, a);
 }
 
+/// Disco cheio ou sem permissão: toda gravação falha.
+class _ArmazenamentoQueFalha extends ArmazenamentoMemoria {
+  @override
+  void gravar(String nome, String conteudo) =>
+      throw const FileSystemException('sem espaço');
+}
+
 Matcher _erro<T extends ErroGoogle>(String msg, [int? status]) => throwsA(
   isA<T>()
       .having((e) => e.mensagem, 'mensagem', msg)
@@ -218,6 +225,39 @@ void main() {
     expect(gravado.refreshToken, 'v1.rotacionado');
     expect(gravado.token, 'novo');
   });
+
+  test(
+    'req: falha ao gravar o token renovado não derruba o pedido nem renova de novo',
+    () async {
+      final falso = ClienteFalso.fila([_about(), _about()]);
+      var renovacoes = 0;
+      final s = SessaoGoogle(
+        http: ClienteHttp(falso, tempoLimite: const Duration(seconds: 30)),
+        armazenamento: _ArmazenamentoQueFalha(),
+        executar: executarDireto,
+        renovar: (t) async {
+          renovacoes++;
+          return TokenGoogle(
+            token: 'novo',
+            refreshToken: t.refreshToken,
+            clientId: t.clientId,
+            clientSecret: t.clientSecret,
+            expiry: DateTime.utc(2030),
+          );
+        },
+      );
+      expect(
+        await s.iniciar(_token(expiry: DateTime.utc(2025, 10, 1))),
+        'ana@gmail.com',
+      );
+      await s.req('GET', '$urlDrive/about');
+      expect(renovacoes, 1);
+      expect(falso.pedidos, hasLength(2));
+      for (final p in falso.pedidos) {
+        expect(p.cabecalhos['authorization'], 'Bearer novo');
+      }
+    },
+  );
 
   test('req renova antes quando o token está vencido', () async {
     final (s, falso, _) = _montar([_renovou(), _about()]);
