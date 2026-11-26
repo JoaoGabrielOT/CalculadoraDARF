@@ -8,6 +8,9 @@ const textoArmazenamentoCheio =
 /// Arquivos que podem ser refeitos e portanto são apagados quando falta espaço.
 const arquivosDescartaveis = ['noticias_detalhes.json', 'noticias.json'];
 
+/// Prefixos de nomes que também podem ser refeitos (cache dos relatórios).
+const prefixosDescartaveis = ['relatorios/'];
+
 class ErroArmazenamentoCheio implements Exception {
   @override
   String toString() => textoArmazenamentoCheio;
@@ -55,6 +58,12 @@ class ArmazenamentoChaveValor implements Armazenamento {
     } catch (_) {
       for (final d in arquivosDescartaveis.where((d) => d != nome)) {
         _kv.remover('$prefixo$d');
+      }
+      for (final c in _kv.chaves().toList()) {
+        if (c == '$prefixo$nome') continue;
+        if (prefixosDescartaveis.any((p) => c.startsWith('$prefixo$p'))) {
+          _kv.remover(c);
+        }
       }
       try {
         _kv.definir('$prefixo$nome', conteudo);

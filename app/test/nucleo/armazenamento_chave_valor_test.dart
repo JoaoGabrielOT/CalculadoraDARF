@@ -54,4 +54,14 @@ void main() {
     expect(a.existe('noticias_detalhes.json'), isFalse);
     expect(a.ler('noticias.json'), 'n' * 10);
   });
+
+  test('armazenamento cheio descarta o cache dos relatórios', () {
+    final kv = ChaveValorLimitado(30)
+      ..definir('darf:relatorios/indice.json', 'i' * 10)
+      ..definir('darf:relatorios/relatorio-abertura-2026-11-26.json', 'r' * 10);
+    final a = ArmazenamentoChaveValor(kv);
+    a.gravar('2026-11.json', 'm' * 25);
+    expect(a.ler('2026-11.json'), 'm' * 25);
+    expect(kv.chaves().where((c) => c.startsWith('darf:relatorios/')), isEmpty);
+  });
 }

@@ -21,7 +21,7 @@ class ArmazenamentoArquivos implements Armazenamento {
 
   @override
   void gravar(String nome, String conteudo) {
-    Directory(pasta).createSync(recursive: true);
+    _arquivo(nome).parent.createSync(recursive: true);
     final temporario = _arquivo('$nome.tmp');
     temporario.writeAsBytesSync(utf8.encode(conteudo), flush: true);
     temporario.renameSync(_arquivo(nome).path);

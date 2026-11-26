@@ -279,6 +279,13 @@ void main() {
       expect(a.listar(), ['config.json']);
     });
 
+    test('gravar em subpasta cria a pasta e listar não a mostra', () {
+      final a = ArmazenamentoArquivos(pasta.path);
+      a.gravar('relatorios/indice.json', '{"a": 1}');
+      expect(a.ler('relatorios/indice.json'), '{"a": 1}');
+      expect(a.listar().where((n) => n.contains('relatorios')), isEmpty);
+    });
+
     test('ler, existe e apagar', () {
       final a = ArmazenamentoArquivos(pasta.path);
       expect(a.ler('2026-10.json'), isNull);
