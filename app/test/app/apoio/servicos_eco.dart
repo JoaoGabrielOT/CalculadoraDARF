@@ -474,4 +474,45 @@ class ServicosEco implements ServicosApp {
     final c = _cancelado;
     if (c != null && !c.isCompleted) c.complete();
   }
+
+  static Relatorio _relatorio(String data, String titulo) => Relatorio(
+    schemaVersion: 1,
+    data: data,
+    titulo: titulo,
+    termometro: const Termometro(positiva: 2, negativa: 1),
+    termometroDoJson: true,
+  );
+
+  @override
+  Future<VisaoRelatorios> relatorios() async => const VisaoRelatorios(
+    itens: [
+      ResumoRelatorio(
+        nome: 'relatorio-abertura-2026-11-25.json',
+        data: '2026-11-25',
+      ),
+    ],
+    hoje: '2026-11-26',
+  );
+
+  @override
+  Future<VisaoRelatorios> atualizarRelatorios() async => VisaoRelatorios(
+    itens: const [
+      ResumoRelatorio(
+        nome: 'relatorio-abertura-2026-11-26.json',
+        data: '2026-11-26',
+        termometro: Termometro(positiva: 2, negativa: 1),
+      ),
+    ],
+    hoje: '2026-11-26',
+    atual: _relatorio('2026-11-26', 'eco atualizado'),
+    ehHoje: true,
+    situacao: SituacaoRelatorios.semConexao,
+  );
+
+  @override
+  Future<Relatorio> abrirRelatorio(String nome) async =>
+      _relatorio('2026-11-26', nome);
+
+  @override
+  Future<void> entrarDeNovoGoogle() async {}
 }

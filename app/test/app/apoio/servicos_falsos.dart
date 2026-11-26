@@ -647,6 +647,39 @@ class ServicosFalsos implements ServicosApp {
     return imagemNoticiaFn?.call(url) ?? Future.value();
   }
 
+  // relatórios de abertura
+  VisaoRelatorios visaoRelatorios = const VisaoRelatorios(
+    itens: [],
+    hoje: '2026-11-26',
+  );
+
+  /// Resposta de `abrirRelatorio` por nome; sem entrada, um erro de teste.
+  Map<String, Relatorio> relatoriosAbertos = {};
+
+  /// Quando preenchido, `atualizarRelatorios` responde por ele (para deixar o
+  /// `Future` pendente).
+  Future<VisaoRelatorios> Function()? atualizarRelatoriosFn;
+
+  @override
+  Future<VisaoRelatorios> relatorios() =>
+      _chamar('relatorios', [], () => visaoRelatorios);
+
+  @override
+  Future<VisaoRelatorios> atualizarRelatorios() {
+    chamadas.add('atualizarRelatorios()');
+    final erro = erros['atualizarRelatorios'];
+    if (erro != null) return Future.error(erro);
+    return atualizarRelatoriosFn?.call() ?? Future.value(visaoRelatorios);
+  }
+
+  @override
+  Future<Relatorio> abrirRelatorio(String nome) => _chamar('abrirRelatorio', [
+    nome,
+  ], () => relatoriosAbertos[nome] ?? (throw ErroValidacao('sem $nome')));
+
+  @override
+  Future<void> entrarDeNovoGoogle() => _chamar('entrarDeNovoGoogle', [], () {});
+
   // radar e cotações
   VisaoRadar visaoRadar = VisaoRadar(
     itens: radarExemplo(),

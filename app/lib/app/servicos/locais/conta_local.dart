@@ -122,7 +122,14 @@ class ContaLocal {
   // --- conta
 
   Future<void> conectar() async {
-    if (_conta.email != null || _sync.ocupado) return;
+    if (_conta.email != null) return;
+    await reconectar();
+  }
+
+  /// Login de novo mesmo com a sessão aberta (o token sem o escopo dos
+  /// Relatórios): não sai da conta; cancelado, a conta continua.
+  Future<void> reconectar() async {
+    if (_sync.ocupado) return;
     if (!_conta.temCredencial) {
       _emitir(
         const EventoAviso(

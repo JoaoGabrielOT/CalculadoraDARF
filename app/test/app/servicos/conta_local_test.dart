@@ -223,6 +223,37 @@ void main() {
       expect(c.avisos.single.texto, 'O login foi cancelado.');
       expect(c.local.estado().email, isNull);
     });
+
+    test('reconectar com a sessão aberta faz login de novo sem sair', () async {
+      final c = _Cenario()..comPlanilha();
+      await c.local.reconectar();
+      // depois do login vem a sincronização (ler/escrever a planilha)
+      expect(c.conta.chamadas.first, 'login');
+      expect(c.conta.chamadas, isNot(contains('sair')));
+      expect(c.local.estado().email, 'ana@gmail.com');
+      expect(c.avisos.first.titulo, 'Conectado');
+    });
+
+    test('reconectar cancelado mantém a conta', () async {
+      final c = _Cenario();
+      c.conta.segurarLogin = Completer<void>().future;
+      final f = c.local.reconectar();
+      await _pausa(10);
+      expect(c.local.estado().ocupado, isTrue);
+      await c.local.cancelarLogin();
+      await f;
+      expect(c.conta.chamadas, ['login']);
+      expect(c.local.estado().email, 'ana@gmail.com');
+      expect(c.local.estado().ocupado, isFalse);
+    });
+
+    test('reconectar sem credencial avisa e não chama login', () async {
+      final c = _Cenario();
+      c.conta.credencial = false;
+      await c.local.reconectar();
+      expect(c.conta.chamadas, isEmpty);
+      expect(c.avisos.single.titulo, 'Credencial não encontrada');
+    });
   });
 
   group('sair e sincronizar', () {

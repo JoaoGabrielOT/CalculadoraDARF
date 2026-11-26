@@ -1,7 +1,8 @@
 // Fachada dos serviços no isolate do núcleo: um só `Repositorio`, um só dono.
 // Apuração e caixa vêm de `ApuracaoLocal`, conta e amigos de `ContaLocal`,
 // mercado, radar e metas de `MercadoLocal`, notícias e imagens de
-// `NoticiasLocal`, atualização de `AtualizadorLocal`.
+// `NoticiasLocal`, atualização de `AtualizadorLocal`, relatórios de
+// `RelatoriosLocal`.
 
 import 'dart:async';
 import 'dart:typed_data';
@@ -17,6 +18,7 @@ import 'locais/config_segura.dart';
 import 'locais/conta_local.dart';
 import 'locais/mercado_local.dart';
 import 'locais/noticias_local.dart';
+import 'locais/relatorios_local.dart';
 
 class ServicosLocais implements ServicosApp {
   ServicosLocais({
@@ -27,12 +29,14 @@ class ServicosLocais implements ServicosApp {
     Duration atrasoAgendamento = const Duration(milliseconds: 1500),
     NoticiasLocal Function(void Function(EventoServico))? noticias,
     AtualizadorLocal Function(void Function(EventoServico))? atualizador,
+    RelatoriosLocal Function()? relatorios,
     this._fazerBackup,
     this._esperaSyncMigracao = const Duration(seconds: 10),
   }) {
     // Quem não usa notícias nem atualização (testes de apuração) não monta.
     _noticiasLocal = noticias?.call(_emitir);
     _atualizadorLocal = atualizador?.call(_emitir);
+    _relatoriosLocal = relatorios?.call();
     _conta = ContaLocal(
       repo: _repo,
       conta: conta,
@@ -70,12 +74,16 @@ class ServicosLocais implements ServicosApp {
   late final MercadoLocal _mercado;
   late final NoticiasLocal? _noticiasLocal;
   late final AtualizadorLocal? _atualizadorLocal;
+  late final RelatoriosLocal? _relatoriosLocal;
 
   NoticiasLocal get _noticias =>
       _noticiasLocal ?? (throw StateError('Notícias não configuradas.'));
 
   AtualizadorLocal get _atualizador =>
       _atualizadorLocal ?? (throw StateError('Atualizador não configurado.'));
+
+  RelatoriosLocal get _relatorios =>
+      _relatoriosLocal ?? (throw StateError('Relatórios não configurados.'));
 
   void _emitir(EventoServico e) {
     if (!_eventos.isClosed) _eventos.add(e);
@@ -485,4 +493,18 @@ class ServicosLocais implements ServicosApp {
 
   @override
   Future<void> cancelarDownload() => _atualizador.cancelarDownload();
+
+  // --- relatórios de abertura (pasta do Drive)
+
+  @override
+  Future<VisaoRelatorios> relatorios() => _relatorios.emCache();
+
+  @override
+  Future<VisaoRelatorios> atualizarRelatorios() => _relatorios.atualizar();
+
+  @override
+  Future<Relatorio> abrirRelatorio(String nome) => _relatorios.abrir(nome);
+
+  @override
+  Future<void> entrarDeNovoGoogle() => _conta.reconectar();
 }

@@ -22,6 +22,7 @@ import 'api.dart';
 import 'eventos.dart';
 import 'locais/atualizador_local.dart';
 import 'locais/noticias_local.dart';
+import 'locais/relatorios_local.dart';
 import 'parametros.dart';
 import 'servicos_reais.dart';
 
@@ -71,6 +72,11 @@ ServicosApp criarServicosLocais(
       pastaTemporaria: p.pastaTemporaria,
       windows: p.windows,
       emitir: emitirLocal,
+    ),
+    relatorios: () => RelatoriosLocal(
+      disco: disco,
+      fonte: DriveRelatorios(sessao),
+      conta: google,
     ),
     fazerBackup: () => fazerBackup(p.pastaDados, DateTime.now()),
     cliente: c,
@@ -655,4 +661,19 @@ class ServicosIsolate implements ServicosApp {
 
   @override
   Future<void> cancelarDownload() => _chamar((s) => s.cancelarDownload());
+
+  // relatórios de abertura (pasta do Drive)
+  @override
+  Future<VisaoRelatorios> relatorios() => _chamar((s) => s.relatorios());
+
+  @override
+  Future<VisaoRelatorios> atualizarRelatorios() =>
+      _chamar((s) => s.atualizarRelatorios());
+
+  @override
+  Future<Relatorio> abrirRelatorio(String nome) =>
+      _chamar((s) => s.abrirRelatorio(nome));
+
+  @override
+  Future<void> entrarDeNovoGoogle() => _chamar((s) => s.entrarDeNovoGoogle());
 }

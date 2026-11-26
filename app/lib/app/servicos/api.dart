@@ -107,6 +107,15 @@ abstract interface class ServicosApp {
   Future<InfoAtualizacao?> verificarAtualizacao();
   Future<String> baixarAtualizacao(InfoAtualizacao info);
   Future<void> cancelarDownload();
+
+  // relatórios de abertura (pasta do Drive)
+  /// Só o cache, sem rede.
+  Future<VisaoRelatorios> relatorios();
+  Future<VisaoRelatorios> atualizarRelatorios();
+  Future<Relatorio> abrirRelatorio(String nome);
+
+  /// Login de novo com a sessão aberta (escopo novo), sem sair da conta.
+  Future<void> entrarDeNovoGoogle();
 }
 
 /// Preferências por aparelho (`Config.extras`, nunca vão para a planilha).

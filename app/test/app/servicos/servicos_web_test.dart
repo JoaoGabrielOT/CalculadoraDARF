@@ -6,28 +6,53 @@ import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/servicos/servicos_reais.dart';
 import 'package:calculadoradarf/app/servicos/servicos_web.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
-import 'package:calculadoradarf/nucleo/nucleo.dart';
+import 'package:calculadoradarf/nucleo/armazenamento_chave_valor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../../nucleo/apoio/fixture_relatorio.dart';
+
 final _api = Uri.parse('https://calculadora-darf-web.vercel.app/api');
 final _origem = Uri.parse('https://calculadora-darf-web.vercel.app/');
 final _pacote = 'v1.${'p' * 30}';
+const _nomeRelatorio = 'relatorio-abertura-2026-11-26.json';
+
+/// Os escopos da 2.6.0, antes do `drive.readonly`.
+const _escoposAntigos = [
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+];
 
 void main() {
-  late ArmazenamentoMemoria a;
+  late ChaveValorMemoria kv;
+  late ArmazenamentoChaveValor a;
   late List<http.Request> pedidos;
   late List<Uri> idas;
   late List<EventoServico> eventos;
   late int statusToken;
   late ServicosApp s;
 
+  /// Resposta da listagem da pasta; nula = 503.
+  http.Response? listagem;
+
   http.Response responder(http.Request r) {
     if (r.url.path == '/api/auth/token') {
       return http.Response(
         jsonEncode({'access_token': 'at', 'expires_in': 3600}),
         statusToken,
+      );
+    }
+    if (r.url.path == '/drive/v3/files' &&
+        r.url.queryParameters['q'] == consultaRelatorios) {
+      return listagem ?? http.Response('', 503);
+    }
+    if (r.url.path == '/drive/v3/files/r1' &&
+        r.url.queryParameters['alt'] == 'media') {
+      return http.Response.bytes(
+        utf8.encode(jsonEncode(fixtureRelatorio())),
+        200,
       );
     }
     if (r.url.path == '/drive/v3/about') {
@@ -42,8 +67,10 @@ void main() {
   }
 
   setUp(() {
-    a = ArmazenamentoMemoria();
+    kv = ChaveValorMemoria();
+    a = ArmazenamentoChaveValor(kv);
     pedidos = [];
+    listagem = null;
     idas = [];
     eventos = [];
     statusToken = 200;
@@ -149,6 +176,133 @@ void main() {
     expect(sair, hasLength(1));
     expect(sair.single.method, 'POST');
     expect(jsonDecode(sair.single.body), {'pacote': _pacote});
+  });
+
+  group('relatórios', () {
+    /// Token de acesso ainda válido: a sessão abre sem passar pelo servidor.
+    Future<void> abrirSessao(List<String> escopos) async {
+      gravarToken(
+        a,
+        TokenGoogle(
+          token: 'at-drive',
+          refreshToken: _pacote,
+          clientId: marcadorServidor,
+          clientSecret: marcadorServidor,
+          scopes: escopos,
+          expiry: DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+      );
+      await s.iniciar();
+      await (s as ServicosReais).tickSync();
+      expect((await s.conta()).email, 'eu@x.com');
+    }
+
+    test('lista e baixa direto do Drive com Bearer, sem o servidor', () async {
+      listagem = http.Response(
+        jsonEncode({
+          'files': [
+            {
+              'id': 'r1',
+              'name': _nomeRelatorio,
+              'modifiedTime': '2026-11-26T12:00:00.000Z',
+            },
+          ],
+        }),
+        200,
+      );
+      await abrirSessao(escoposGoogle);
+      pedidos.clear();
+
+      final v = await s.atualizarRelatorios();
+
+      expect(v.situacao, SituacaoRelatorios.ok);
+      expect(v.itens.single.nome, _nomeRelatorio);
+      final lista = pedidos.first;
+      expect(lista.method, 'GET');
+      expect(lista.url.host, 'www.googleapis.com');
+      expect(lista.url.path, '/drive/v3/files');
+      expect(lista.url.queryParameters['q'], consultaRelatorios);
+      expect(lista.headers['Authorization'], 'Bearer at-drive');
+      final baixa = pedidos[1];
+      expect(
+        baixa.url.toString(),
+        'https://www.googleapis.com/drive/v3/files/r1?alt=media',
+      );
+      expect(baixa.headers['Authorization'], 'Bearer at-drive');
+      expect(pedidos, hasLength(2));
+      expect(kv.obter('darf:relatorios/$_nomeRelatorio'), isNotNull);
+      expect(
+        jsonDecode(kv.obter('darf:relatorios/$_nomeRelatorio')!),
+        fixtureRelatorio(),
+      );
+    });
+
+    test('nenhum pedido ao servidor na sessão e nos relatórios', () async {
+      listagem = http.Response(jsonEncode({'files': <Object>[]}), 200);
+      await abrirSessao(escoposGoogle);
+      await s.atualizarRelatorios();
+      expect(pedidos.where((r) => r.url.host == _api.host), isEmpty);
+    });
+
+    test('token sem drive.readonly pede novo login sem ir ao Drive', () async {
+      await abrirSessao(_escoposAntigos);
+      pedidos.clear();
+
+      final v = await s.atualizarRelatorios();
+
+      expect(v.situacao, SituacaoRelatorios.novoLogin);
+      expect(pedidos, isEmpty);
+      // a conta continua conectada
+      expect((await s.conta()).email, 'eu@x.com');
+    });
+
+    test('403 de escopo do Drive vira novo login', () async {
+      listagem = http.Response(
+        jsonEncode({
+          'error': {
+            'code': 403,
+            'message': 'Request had insufficient authentication scopes.',
+            'errors': [
+              {'reason': 'insufficientPermissions'},
+            ],
+          },
+        }),
+        403,
+      );
+      await abrirSessao(escoposGoogle);
+
+      final v = await s.atualizarRelatorios();
+
+      expect(v.situacao, SituacaoRelatorios.novoLogin);
+      expect((await s.conta()).email, 'eu@x.com');
+    });
+
+    test('só 5 relatórios guardam o conteúdo', () async {
+      listagem = http.Response(
+        jsonEncode({
+          'files': [
+            for (var d = 10; d < 17; d++)
+              {
+                'id': 'r1',
+                'name': 'relatorio-abertura-2026-10-$d.json',
+                'modifiedTime': '2026-11-26T12:00:00.000Z',
+              },
+          ],
+        }),
+        200,
+      );
+      await abrirSessao(escoposGoogle);
+
+      final v = await s.atualizarRelatorios();
+
+      expect(v.itens, hasLength(7));
+      expect(
+        kv.chaves().where(
+          (c) => c.startsWith('darf:relatorios/relatorio-abertura-'),
+        ),
+        hasLength(5),
+      );
+    });
   });
 
   test('sem atualizador', () {

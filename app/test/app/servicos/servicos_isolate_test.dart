@@ -188,6 +188,19 @@ void main() {
     expect(info.versao, '9.9.9');
     expect(await s.baixarAtualizacao(info), 'baixou 9.9.9');
     await s.cancelarDownload();
+
+    final cache = await s.relatorios();
+    expect((cache.hoje, cache.situacao), ('2026-11-26', SituacaoRelatorios.ok));
+    expect(cache.itens.single.nome, 'relatorio-abertura-2026-11-25.json');
+    final novos = await s.atualizarRelatorios();
+    expect(novos.situacao, SituacaoRelatorios.semConexao);
+    expect(novos.ehHoje, isTrue);
+    expect(novos.atual!.titulo, 'eco atualizado');
+    expect(novos.itens.first.termometro!.de(Leitura.positiva), 2);
+    final aberto = await s.abrirRelatorio('relatorio-abertura-2026-11-26.json');
+    expect(aberto.titulo, 'relatorio-abertura-2026-11-26.json');
+    expect(aberto.data, '2026-11-26');
+    await s.entrarDeNovoGoogle();
   });
 
   test('ErroValidacao volta com o mesmo tipo e mensagem', () async {
@@ -540,6 +553,13 @@ void main() {
             throwsA(isNot(isA<StateError>())),
           );
           expect((await real.conta()).email, isNull);
+
+          // os relatórios estão montados (sem conta: nada a listar)
+          expect((await real.relatorios()).itens, isEmpty);
+          expect(
+            (await real.atualizarRelatorios()).situacao,
+            SituacaoRelatorios.semConta,
+          );
         } finally {
           await real.encerrar();
         }

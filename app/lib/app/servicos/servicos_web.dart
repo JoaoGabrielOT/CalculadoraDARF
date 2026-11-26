@@ -10,6 +10,7 @@ import '../../integracoes/integracoes.dart';
 import '../../nucleo/nucleo.dart';
 import 'api.dart';
 import 'locais/noticias_local.dart';
+import 'locais/relatorios_local.dart';
 import 'servicos_reais.dart';
 
 const _msgNavegador = 'Não foi possível abrir o navegador.';
@@ -75,6 +76,14 @@ ServicosApp criarServicosWeb({
       cache: cache,
       navegador: Logos.clienteNavegador(imagem),
       emitir: emitirLocal,
+    ),
+    // o Drive direto com Bearer (a mesma sessão), cache descartável no
+    // armazenamento do navegador
+    relatorios: () => RelatoriosLocal(
+      disco: armazenamento,
+      fonte: DriveRelatorios(sessao),
+      conta: google,
+      limiteConteudo: 5,
     ),
     cliente: c,
   );
