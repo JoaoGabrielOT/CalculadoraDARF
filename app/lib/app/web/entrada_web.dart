@@ -47,6 +47,7 @@ Future<ServicosApp> prepararServicosWeb({
   required Future<bool> Function(Uri url) abrirUrl,
   required void Function(String titulo, String texto) avisar,
   http.Client? cliente,
+  Duration limiteConferencia = limitePadraoConferencia,
   bool timers = true,
 }) async {
   final retorno = lerRetornoLogin(endereco, nonceEsperado: nonceEsperado);
@@ -75,6 +76,7 @@ Future<ServicosApp> prepararServicosWeb({
         mesmaConta: mesmaConta,
         http: ClienteHttp(c, tempoLimite: const Duration(seconds: 30)),
         api: enderecoApi(endereco),
+        limite: limiteConferencia,
       );
       if (recusa != null) avisar(_tituloLogin, recusa);
     case RetornoPacote(:final pacote):

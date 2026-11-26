@@ -118,16 +118,16 @@ test('inicio com hint de e-mail -> login_hint para o Google', async () => {
   assert.equal(new URL(r.headers.get('location')).searchParams.get('login_hint'), 'ana@gmail.com');
 });
 
-test('inicio com hint inválido -> 400 sem cookie', async () => {
+test('inicio com hint inválido segue o login sem login_hint', async () => {
   const { GET } = criarInicio(dep());
   const longo = `${'a'.repeat(250)}@x.com`;
   for (const hint of ['', 'sem-arroba', 'a b@x.com', 'a@b', '<script>@x.com', longo]) {
     const r = await GET(
       pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}&hint=${encodeURIComponent(hint)}`, { origem: null }),
     );
-    assert.equal(r.status, 400, hint);
-    assert.deepEqual(await r.json(), { erro: 'hint' });
-    assert.equal(r.headers.get('set-cookie'), null);
+    assert.equal(r.status, 302, hint);
+    assert.equal(new URL(r.headers.get('location')).searchParams.has('login_hint'), false, hint);
+    assert.match(r.headers.get('set-cookie'), /^__Host-darf_oauth=v1\./);
   }
 });
 

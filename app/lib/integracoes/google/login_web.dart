@@ -172,38 +172,46 @@ Future<void> revogarWeb(ClienteHttp http, Uri api, String pacote) async {
   } catch (_) {}
 }
 
+/// Limite padrão da conferência da conta na volta do login.
+const limitePadraoConferencia = Duration(seconds: 15);
+
 /// Volta do "entrar de novo" com [pacote]: só fica se for da conta
-/// [mesmaConta] (renova pelo servidor e consulta o e-mail). Outra conta, ou
-/// sem conseguir conferir, revoga o pacote novo e o `token.json` anterior
-/// continua; devolve o texto do aviso. Da mesma conta, grava o token já
-/// renovado e devolve `null`.
+/// [mesmaConta] (renova pelo servidor e consulta o e-mail, em até [limite]).
+/// Da mesma conta, grava o token já renovado e devolve `null`. Nos outros
+/// casos o `token.json` anterior continua e volta o texto do aviso: outra
+/// conta confirmada tem o pacote novo revogado; sem conseguir conferir, o
+/// pacote novo só é descartado (revogar desfaria a autorização do app na
+/// conta, e ela pode ser a mesma).
 Future<String?> gravarPacoteDaMesmaConta(
   Armazenamento a,
   String pacote, {
   required String mesmaConta,
   required ClienteHttp http,
   required Uri api,
+  Duration limite = limitePadraoConferencia,
 }) async {
-  var atual = pacote;
+  final TokenGoogle novo;
+  final String email;
   try {
-    final novo = await criarRenovadorWeb(http, api)(
-      TokenGoogle(
-        refreshToken: pacote,
-        clientId: marcadorServidor,
-        clientSecret: marcadorServidor,
-      ),
-    );
-    atual = novo.refreshToken ?? pacote;
-    if (await emailDaConta(http, novo.token!) == mesmaConta) {
-      gravarToken(a, novo);
-      return null;
-    }
-    await revogarWeb(http, api, atual);
-    return textoOutraConta(mesmaConta);
+    (novo, email) = await () async {
+      final t = await criarRenovadorWeb(http, api)(
+        TokenGoogle(
+          refreshToken: pacote,
+          clientId: marcadorServidor,
+          clientSecret: marcadorServidor,
+        ),
+      );
+      return (t, await emailDaConta(http, t.token!));
+    }().timeout(limite);
   } catch (_) {
-    await revogarWeb(http, api, atual);
     return _msgLogin;
   }
+  if (email != mesmaConta) {
+    await revogarWeb(http, api, novo.refreshToken ?? pacote);
+    return textoOutraConta(mesmaConta);
+  }
+  gravarToken(a, novo);
+  return null;
 }
 
 /// O que o servidor devolveu no fragmento do endereço.

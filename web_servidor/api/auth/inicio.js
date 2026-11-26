@@ -28,10 +28,9 @@ export function criar(dep) {
           if (!permitida(volta, origensDeVolta(dep.env))) return json(400, { erro: 'volta' });
           const nonce = url.searchParams.get('n') ?? '';
           if (!NONCE.test(nonce)) return json(400, { erro: 'nonce' });
-          const hint = url.searchParams.get('hint');
-          if (hint !== null && (hint.length > HINT_MAX || !HINT.test(hint))) {
-            return json(400, { erro: 'hint' });
-          }
+          // hint fora do formato: só não vai ao Google
+          const pedido = url.searchParams.get('hint');
+          const hint = pedido !== null && pedido.length <= HINT_MAX && HINT.test(pedido) ? pedido : null;
 
           const state = randomBytes(16).toString('base64url');
           const verificador = randomBytes(32).toString('base64url');

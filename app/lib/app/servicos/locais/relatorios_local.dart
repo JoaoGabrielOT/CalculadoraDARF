@@ -144,15 +144,20 @@ class RelatoriosLocal {
     return _naFila(() async => _limparAgora());
   }
 
+  /// Nunca lança: o `sair()` não pode parecer falho por causa do cache.
   void _limparAgora() {
     _pendente = null;
     _naMemoria.clear();
-    final nomes = <String>{
-      for (final nome in _indiceDoDisco().arquivos.keys) _caminho(nome),
-      // conteúdos fora do índice (o disco do app lista só a raiz)
-      ...disco.listar().where((n) => n.startsWith('relatorios/')),
-    }..remove(arquivoIndiceRelatorios);
-    nomes.forEach(_apagar);
+    try {
+      final nomes = <String>{
+        for (final nome in _indiceDoDisco().arquivos.keys) _caminho(nome),
+        // conteúdos fora do índice (o disco do app lista só a raiz)
+        ...disco.listar().where((n) => n.startsWith('relatorios/')),
+      }..remove(arquivoIndiceRelatorios);
+      nomes.forEach(_apagar);
+    } on Exception catch (e) {
+      registrar('Falha ao limpar os relatórios: $e');
+    }
     _apagar(arquivoIndiceRelatorios);
   }
 

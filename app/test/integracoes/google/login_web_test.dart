@@ -172,7 +172,12 @@ void main() {
     late ArmazenamentoMemoria a;
     late String antes;
 
-    Future<String?> gravar(String email, {int statusToken = 200}) {
+    Future<String?> gravar(
+      String email, {
+      int statusToken = 200,
+      int statusAbout = 200,
+      bool pendurar = false,
+    }) {
       pedidos = [];
       a = ArmazenamentoMemoria();
       gravarPacoteWeb(a, 'v1.antigo');
@@ -180,6 +185,7 @@ void main() {
       final cliente = MockClient((r) async {
         pedidos.add(r);
         if (r.url.path == '/api/auth/token') {
+          if (pendurar) await Completer<void>().future;
           return http.Response(
             jsonEncode({
               'access_token': 'at-novo',
@@ -194,7 +200,7 @@ void main() {
             jsonEncode({
               'user': {'emailAddress': email},
             }),
-            200,
+            statusAbout,
           );
         }
         return http.Response('{}', 200);
@@ -205,6 +211,7 @@ void main() {
         mesmaConta: 'ana@gmail.com',
         http: ClienteHttp(cliente),
         api: api,
+        limite: const Duration(milliseconds: 50),
       );
     }
 
@@ -230,19 +237,23 @@ void main() {
       expect(pedidos.where((r) => r.url.path == '/api/auth/sair'), isEmpty);
     });
 
-    test(
-      'sem confirmar a conta: o token antigo fica e o novo é revogado',
-      () async {
-        expect(
-          await gravar('ana@gmail.com', statusToken: 503),
-          'O login não foi concluído.',
-        );
-        expect(a.ler('token.json'), antes);
-        final sair = pedidos.last;
-        expect(sair.url.path, '/api/auth/sair');
-        expect(jsonDecode(sair.body), {'pacote': _pacote});
-      },
-    );
+    void semRevogar(String? aviso) {
+      expect(aviso, 'O login não foi concluído.');
+      expect(a.ler('token.json'), antes);
+      expect(pedidos.where((r) => r.url.path == '/api/auth/sair'), isEmpty);
+    }
+
+    test('sem confirmar a conta (503): descarta o novo sem revogar', () async {
+      semRevogar(await gravar('ana@gmail.com', statusToken: 503));
+    });
+
+    test('about que falha: descarta o novo sem revogar', () async {
+      semRevogar(await gravar('ana@gmail.com', statusAbout: 500));
+    });
+
+    test('conferência além do limite: descarta o novo sem revogar', () async {
+      semRevogar(await gravar('ana@gmail.com', pendurar: true));
+    });
   });
 
   test('GuardaNonceMemoria: consumir devolve e apaga', () {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:calculadoradarf/app/app.dart';
@@ -42,6 +43,7 @@ void main() {
     bool trava = true,
     bool armazenamento = true,
     http.Client? cliente,
+    Duration limiteConferencia = const Duration(seconds: 15),
   }) async {
     return s = await prepararServicosWeb(
       endereco: Uri.parse(endereco),
@@ -53,6 +55,7 @@ void main() {
       abrirUrl: (_) async => true,
       avisar: (t, x) => avisos.add((t, x)),
       cliente: cliente ?? MockClient((_) async => http.Response('', 503)),
+      limiteConferencia: limiteConferencia,
       timers: false,
     );
   }
@@ -112,6 +115,27 @@ void main() {
       );
       expect(a.ler('token.json'), contains(_pacote));
       expect(avisos, isEmpty);
+    });
+
+    test('conferência pendurada: o limite vale como não conferido', () async {
+      await preparar(
+        'https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1',
+        cliente: MockClient((r) async {
+          pedidos.add(r);
+          if (r.url.path == '/api/auth/token') {
+            await Completer<void>().future;
+          }
+          return http.Response('', 503);
+        }),
+        limiteConferencia: const Duration(milliseconds: 50),
+      );
+      expect(a.ler('token.json'), antes);
+      expect(avisos, [('Login não concluído', 'O login não foi concluído.')]);
+      expect(pedidos.where((r) => r.url.path == '/api/auth/sair'), isEmpty);
+    });
+
+    test('limite padrão da conferência: 15 s', () {
+      expect(limitePadraoConferencia, const Duration(seconds: 15));
     });
 
     test('sem token antigo a marca é ignorada', () async {

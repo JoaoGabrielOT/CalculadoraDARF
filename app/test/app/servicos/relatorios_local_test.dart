@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/locais/relatorios_local.dart';
@@ -59,6 +60,12 @@ class FonteFalsa implements FonteRelatorios {
 class DiscoCheio extends ArmazenamentoMemoria {
   @override
   void gravar(String nome, String conteudo) => throw ErroArmazenamentoCheio();
+}
+
+/// Disco cujo `listar` falha, como uma pasta inacessível.
+class DiscoQueNaoLista extends ArmazenamentoMemoria {
+  @override
+  List<String> listar() => throw const FileSystemException('sem acesso');
 }
 
 /// Disco que conta as leituras do conteúdo dos relatórios (fora o índice).
@@ -608,6 +615,14 @@ void main() {
       expect(v.atual, isNull);
     },
   );
+
+  test('limpar não lança quando o disco falha; só registra', () async {
+    final f = FonteFalsa();
+    final local = _local(f, DiscoQueNaoLista());
+    await local.limpar();
+    expect(registrados, isNotEmpty);
+    expect(registrados.first, startsWith('Falha ao limpar os relatórios'));
+  });
 
   test('emCache sem conta nem token: semConta, sem itens', () async {
     final f = FonteFalsa(
