@@ -12,6 +12,11 @@ import '../api.dart';
 
 const arquivoIndiceRelatorios = 'relatorios/indice.json';
 
+/// Erro de `abrir` quando o arquivo da pasta é ilegível, fora do formato ou
+/// sumiu (404).
+const textoRelatorioInvalido =
+    'O arquivo deste relatório é inválido e não pode ser aberto.';
+
 void registrarRelatorios(String texto) =>
     developer.log(texto, name: 'relatorios');
 
@@ -121,6 +126,9 @@ class RelatoriosLocal {
   final _naMemoria = <String, Relatorio>{};
   Future<VisaoRelatorios>? _emCurso;
 
+  /// `atualizar` e `abrir` leem e regravam o índice: um de cada vez.
+  Future<void> _fila = Future.value();
+
   String get _hoje => hojeBrasilia(ambiente.agoraBr());
 
   Future<VisaoRelatorios> emCache() async =>
@@ -129,16 +137,36 @@ class RelatoriosLocal {
   /// Lista a pasta e baixa o que mudou; chamadas simultâneas compartilham o
   /// mesmo pedido.
   Future<VisaoRelatorios> atualizar() =>
-      _emCurso ??= _atualizar().whenComplete(() => _emCurso = null);
+      _emCurso ??= _naFila(_atualizar).whenComplete(() => _emCurso = null);
 
-  /// Conteúdo do cache; sem cache baixa e guarda.
-  Future<Relatorio> abrir(String nome) async {
+  /// Conteúdo do cache; sem cache baixa e guarda. Arquivo inválido é marcado
+  /// e vira `ErroValidacao(textoRelatorioInvalido)`.
+  Future<Relatorio> abrir(String nome) => _naFila(() => _abrir(nome));
+
+  Future<T> _naFila<T>(Future<T> Function() tarefa) {
+    final r = _fila.then((_) => tarefa());
+    _fila = r.then<void>((_) {}, onError: (_) {});
+    return r;
+  }
+
+  Future<Relatorio> _abrir(String nome) async {
     final indice = _lerIndice();
     final e = indice.arquivos[nome];
     if (e == null || e.invalido) {
       throw ErroValidacao('Relatório não encontrado.');
     }
-    final r = _conteudo(nome) ?? await _baixar(nome, e);
+    var r = _conteudo(nome);
+    if (r == null) {
+      try {
+        r = await _baixar(nome, e);
+      } on Exception catch (erro) {
+        if (!_ehInvalido(erro)) rethrow;
+        _marcarInvalido(nome, e, erro);
+        _descartarConteudo(nome);
+        _gravarIndice(indice);
+        throw ErroValidacao(textoRelatorioInvalido);
+      }
+    }
     indice.aberto = nome;
     _gravarIndice(indice);
     return r;
@@ -188,18 +216,31 @@ class RelatoriosLocal {
     final novo = _Indice(
       aberto: pasta.containsKey(antigo.aberto) ? antigo.aberto : null,
     );
+    // modifiedTime novo: a entrada antiga (e o conteúdo dela) fica até o
+    // download novo dar certo.
+    final mudados = <String, _Entrada>{};
     for (final a in pasta.values) {
       final e = antigo.arquivos[a.nome];
-      if (e != null && e.modificado == a.modificado) {
+      final nova = _Entrada(id: a.id, modificado: a.modificado);
+      if (e != null && (e.modificado == a.modificado || !e.invalido)) {
         novo.arquivos[a.nome] = e..id = a.id;
+        if (e.modificado != a.modificado) mudados[a.nome] = nova;
       } else {
-        novo.arquivos[a.nome] = _Entrada(id: a.id, modificado: a.modificado);
+        novo.arquivos[a.nome] = nova;
         _descartarConteudo(a.nome);
       }
     }
 
     final ordenados = _itens(novo);
     final hoje = _hoje;
+    // Só o escolhido é decodificado; se estiver ilegível, é apagado aqui e
+    // baixado no laço.
+    final lidos = <String, Relatorio>{};
+    final escolhido = escolherRelatorio(ordenados, hoje).escolhido?.nome;
+    if (escolhido != null && !mudados.containsKey(escolhido)) {
+      final r = _conteudo(escolhido);
+      if (r != null) lidos[escolhido] = r;
+    }
     final manter = <String>{
       ?novo.aberto,
       ?ordenados.where((r) => r.data == hoje).firstOrNull?.nome,
@@ -209,41 +250,34 @@ class RelatoriosLocal {
     var parar = false;
     for (final r in ordenados) {
       if (guardados >= limiteConteudo && !manter.contains(r.nome)) continue;
-      final e = novo.arquivos[r.nome]!;
-      if (_conteudo(r.nome) == null) {
-        if (parar) continue;
-        try {
-          await _baixar(r.nome, e);
-        } on EscopoInsuficiente {
-          return _novoLogin();
-        } on Offline {
-          parar = true;
-          continue;
-        } on LoginNecessario {
-          parar = true;
-          continue;
-        } on RespostaInvalida catch (erro) {
-          _marcarInvalido(r.nome, e, erro);
-        } on FormatException catch (erro) {
-          _marcarInvalido(r.nome, e, erro);
-        } on ErroGoogle catch (erro) {
-          if (erro.status == 404) {
-            _marcarInvalido(r.nome, e, erro);
-          } else {
-            // 429, 5xx: tenta de novo na próxima atualização.
+      final nova = mudados.remove(r.nome);
+      if (nova != null || !_temConteudo(r.nome)) {
+        final e = nova ?? novo.arquivos[r.nome]!;
+        if (!parar) {
+          try {
+            lidos[r.nome] = await _baixar(r.nome, e);
+            novo.arquivos[r.nome] = e;
+          } on EscopoInsuficiente {
+            return _novoLogin();
+          } on Exception catch (erro) {
+            if (_ehInvalido(erro)) {
+              _marcarInvalido(r.nome, e, erro);
+              novo.arquivos[r.nome] = e;
+              manter.remove(r.nome);
+              continue;
+            }
+            // Rede, 429, 5xx: fica o que havia; tenta de novo na próxima.
             registrar('Falha ao baixar ${r.nome}: $erro');
             parar = true;
-            continue;
           }
         }
-        if (e.invalido) {
-          manter.remove(r.nome);
-          continue;
-        }
+        if (!_temConteudo(r.nome)) continue;
       }
       manter.add(r.nome);
       guardados++;
     }
+    // Mudados fora do limite: entrada nova, sem o termômetro da versão velha.
+    novo.arquivos.addAll(mudados);
 
     for (final nome in {...antigo.arquivos.keys, ...novo.arquivos.keys}) {
       if (!manter.contains(nome)) _descartarConteudo(nome);
@@ -252,8 +286,19 @@ class RelatoriosLocal {
     return _visao(
       novo,
       parar ? SituacaoRelatorios.semConexao : SituacaoRelatorios.ok,
+      lidos: lidos,
     );
   }
+
+  /// Ruling 1: só JSON ilegível ou fora do formato e 404 marcam `invalido`;
+  /// rede, 429 e 5xx são passageiros.
+  static bool _ehInvalido(Object erro) =>
+      erro is RespostaInvalida ||
+      erro is FormatException ||
+      (erro is ErroGoogle && erro.status == 404);
+
+  bool _temConteudo(String nome) =>
+      _naMemoria.containsKey(nome) || disco.existe(_caminho(nome));
 
   VisaoRelatorios _novoLogin() => VisaoRelatorios(
     itens: const [],
@@ -271,14 +316,21 @@ class RelatoriosLocal {
         ),
   ]);
 
-  VisaoRelatorios _visao(_Indice indice, SituacaoRelatorios situacao) {
+  /// [lidos]: conteúdos já decodificados nesta chamada.
+  VisaoRelatorios _visao(
+    _Indice indice,
+    SituacaoRelatorios situacao, {
+    Map<String, Relatorio> lidos = const {},
+  }) {
     final itens = _itens(indice);
     final hoje = _hoje;
     final (:escolhido, :ehHoje) = escolherRelatorio(itens, hoje);
     return VisaoRelatorios(
       itens: itens,
       hoje: hoje,
-      atual: escolhido == null ? null : _conteudo(escolhido.nome),
+      atual: escolhido == null
+          ? null
+          : lidos[escolhido.nome] ?? _conteudo(escolhido.nome),
       ehHoje: ehHoje,
       situacao: situacao,
     );

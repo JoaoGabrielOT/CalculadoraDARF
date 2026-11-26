@@ -46,6 +46,7 @@ class FonteFalsa implements FonteRelatorios {
   @override
   Future<Map<String, Object?>> baixar(String id) async {
     downloads++;
+    await Future<void>.delayed(Duration.zero);
     final c = conteudos[id];
     if (c is Map) {
       return (jsonDecode(jsonEncode(c)) as Map).cast<String, Object?>();
@@ -58,6 +59,17 @@ class FonteFalsa implements FonteRelatorios {
 class DiscoCheio extends ArmazenamentoMemoria {
   @override
   void gravar(String nome, String conteudo) => throw ErroArmazenamentoCheio();
+}
+
+/// Disco que conta as leituras do conteúdo dos relatórios (fora o índice).
+class DiscoContado extends ArmazenamentoMemoria {
+  final leituras = <String>[];
+
+  @override
+  String? ler(String nome) {
+    if (nome != arquivoIndiceRelatorios) leituras.add(nome);
+    return super.ler(nome);
+  }
 }
 
 String _nome(String data) => 'relatorio-abertura-$data.json';
@@ -618,6 +630,156 @@ void main() {
     expect(identical(r[0], r[1]), isTrue);
     await local.atualizar();
     expect(f.listagens, 2);
+  });
+
+  test('abrir durante uma atualização espera a vez e não se perde', () async {
+    final f = FonteFalsa(
+      arquivos: [_arq('2026-11-24'), _arq('2026-11-25')],
+      conteudos: {
+        'id-2026-11-24': _doDia('2026-11-24'),
+        'id-2026-11-25': _doDia('2026-11-25'),
+        'id-2026-11-26': _doDia('2026-11-26'),
+      },
+    );
+    final disco = ArmazenamentoMemoria();
+    final local = _local(f, disco, limite: 1);
+    await local.atualizar();
+    f.arquivos.add(_arq('2026-11-26'));
+    final r = await Future.wait<Object>([
+      local.atualizar(),
+      local.abrir(_nome('2026-11-24')),
+    ]);
+    expect((r[1] as Relatorio).data, '2026-11-24');
+    expect(_temConteudo(disco, '2026-11-24'), isTrue);
+    expect(_temConteudo(disco, '2026-11-26'), isTrue);
+    final j = jsonDecode(disco.ler(arquivoIndiceRelatorios)!) as Map;
+    expect(j['aberto'], _nome('2026-11-24'));
+    expect((j['arquivos'] as Map).keys, contains(_nome('2026-11-26')));
+    // A atualização seguinte respeita o aberto.
+    await local.atualizar();
+    expect(_temConteudo(disco, '2026-11-24'), isTrue);
+  });
+
+  test('modifiedTime novo com falha no download mantém o antigo', () async {
+    for (final erro in [
+      ErroGoogle('Backend error', 503),
+      ErroGoogle('Too many requests', 429),
+      Offline('sem rede'),
+    ]) {
+      final f = FonteFalsa(
+        arquivos: [_arq('2026-11-26')],
+        conteudos: {'id-2026-11-26': _doDia('2026-11-26')},
+      );
+      final disco = ArmazenamentoMemoria();
+      await _local(f, disco).atualizar();
+      f.arquivos[0] = _arq(
+        '2026-11-26',
+        modificado: '2026-11-26T13:00:00.000Z',
+      );
+      f.conteudos['id-2026-11-26'] = erro;
+      final v = await _local(f, disco).atualizar();
+      expect(v.situacao, SituacaoRelatorios.semConexao, reason: '$erro');
+      expect(v.itens.single.termometro!.total, 22);
+      expect(v.atual!.data, '2026-11-26');
+      expect(_temConteudo(disco, '2026-11-26'), isTrue);
+      // A próxima atualização tenta de novo e troca pelo novo.
+      f.conteudos['id-2026-11-26'] = _doDia('2026-11-26')
+        ..['titulo'] = 'Versão nova';
+      final v2 = await _local(f, disco).atualizar();
+      expect(v2.situacao, SituacaoRelatorios.ok);
+      expect(v2.atual!.titulo, 'Versão nova');
+      expect(f.downloads, 3);
+    }
+  });
+
+  test('abrir marca inválido e avisa com mensagem clara', () async {
+    for (final erro in <Object>[
+      RespostaInvalida('Resposta inválida do Google.', 200),
+      const FormatException('x'),
+      ErroGoogle('File not found', 404),
+      <String, Object?>{},
+    ]) {
+      final f = FonteFalsa(
+        arquivos: [_arq('2026-11-25'), _arq('2026-11-26')],
+        conteudos: {
+          'id-2026-11-26': _doDia('2026-11-26'),
+          'id-2026-11-25': erro,
+        },
+      );
+      final disco = ArmazenamentoMemoria();
+      final local = _local(f, disco, limite: 1);
+      await local.atualizar();
+      await expectLater(
+        local.abrir(_nome('2026-11-25')),
+        throwsA(
+          isA<ErroValidacao>().having(
+            (e) => e.mensagem,
+            'mensagem',
+            textoRelatorioInvalido,
+          ),
+        ),
+        reason: '$erro',
+      );
+      expect((_indice(disco)[_nome('2026-11-25')]! as Map)['invalido'], isTrue);
+      final v = await local.atualizar();
+      expect(v.itens.map((r) => r.data), ['2026-11-26']);
+      expect(f.downloads, 2);
+    }
+  });
+
+  test('a atualização só lê do disco o conteúdo do escolhido', () async {
+    final datas = ['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26'];
+    final f = FonteFalsa(
+      arquivos: [for (final d in datas) _arq(d)],
+      conteudos: {for (final d in datas) 'id-$d': _doDia(d)},
+    );
+    final disco = DiscoContado();
+    await _local(f, disco).atualizar();
+    disco.leituras.clear();
+    final v = await _local(f, disco).atualizar();
+    expect(v.atual!.data, '2026-11-26');
+    expect(disco.leituras, ['relatorios/${_nome('2026-11-26')}']);
+  });
+
+  test('índice corrompido mas legível: entradas estranhas saem', () async {
+    final disco = ArmazenamentoMemoria()
+      ..gravar(
+        arquivoIndiceRelatorios,
+        jsonEncode({
+          'versao': 1,
+          'aberto': 5,
+          'arquivos': {
+            'x': 1,
+            _nome('2026-11-23'): 'texto',
+            _nome('2026-11-24'): {'id': 3, 'modificado': 'm'},
+            _nome('2026-11-25'): {
+              'id': 'id-2026-11-25',
+              'modificado': '2026-11-26T12:00:00.000Z',
+              'invalido': 'sim',
+              'termometro': 'sete',
+            },
+            _nome('2026-11-26'): {
+              'id': 'id-2026-11-26',
+              'modificado': '2026-11-26T12:00:00.000Z',
+              'invalido': false,
+              'termometro': {'positiva': 'sete', 'mista': 2, 'neutra': null},
+            },
+          },
+        }),
+      );
+    final f = FonteFalsa();
+    final v = await _local(f, disco).emCache();
+    expect(v.itens.map((r) => r.data), ['2026-11-26', '2026-11-25']);
+    expect(v.itens.first.termometro!.total, 2);
+    expect(v.itens.last.termometro, isNull);
+    for (final outro in [
+      '{"arquivos": {"x": 1}}',
+      '{"arquivos": [1]}',
+      '[1]',
+    ]) {
+      disco.gravar(arquivoIndiceRelatorios, outro);
+      expect((await _local(f, disco).emCache()).itens, isEmpty, reason: outro);
+    }
   });
 
   test('0, 1 e 60 ativos', () async {
