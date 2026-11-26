@@ -464,6 +464,31 @@ class VisaoNoticias {
   final Set<String> novas;
 }
 
+/// `semConexao`: o que está em cache, com aviso; `novoLogin`: o token não tem
+/// o `drive.readonly`.
+enum SituacaoRelatorios { ok, semConexao, semConta, novoLogin }
+
+class VisaoRelatorios {
+  const VisaoRelatorios({
+    required this.itens,
+    required this.hoje,
+    this.atual,
+    this.ehHoje = false,
+    this.situacao = SituacaoRelatorios.ok,
+  });
+
+  /// Do mais recente para o mais antigo (`ordenarRelatorios`).
+  final List<ResumoRelatorio> itens;
+
+  /// `AAAA-MM-DD` em Brasília.
+  final String hoje;
+
+  /// Conteúdo do escolhido (`escolherRelatorio`), se estiver em cache.
+  final Relatorio? atual;
+  final bool ehHoje;
+  final SituacaoRelatorios situacao;
+}
+
 class ImagemBytes {
   const ImagemBytes({required this.bytes, required this.svg});
 
