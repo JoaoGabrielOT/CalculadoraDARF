@@ -110,7 +110,7 @@ RenovarToken criarRenovadorWeb(ClienteHttp http, Uri api) => (atual) async {
     tokenUri: atual.tokenUri,
     clientId: atual.clientId,
     clientSecret: atual.clientSecret,
-    scopes: atual.scopes,
+    scopes: escoposDaResposta(dados['scope']) ?? atual.scopes,
     expiry: dura is num
         ? DateTime.fromMicrosecondsSinceEpoch(
             arredondar((ambiente.agora() + dura) * 1000000, 0).toInt(),

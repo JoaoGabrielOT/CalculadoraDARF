@@ -78,7 +78,7 @@ test('inicio válido -> 302 para o Google com PKCE e cookie', async () => {
   assert.equal(p.get('response_type'), 'code');
   assert.equal(
     p.get('scope'),
-    'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/spreadsheets.readonly',
+    'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly',
   );
   assert.equal(p.get('access_type'), 'offline');
   assert.equal(p.get('prompt'), 'consent');
@@ -297,7 +297,7 @@ test('token com pacote válido -> 200 com access_token', async () => {
   const f = fetchFalso(200, json({ access_token: 'at', expires_in: 3599, scope: 'x', token_type: 'Bearer' }));
   const r = await postar(criarToken(dep(f)), json({ pacote: pacoteOk() }));
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { access_token: 'at', expires_in: 3599 });
+  assert.deepEqual(await r.json(), { access_token: 'at', expires_in: 3599, scope: 'x' });
   assert.equal(r.headers.get('cache-control'), 'no-store');
   assert.equal(r.headers.get('access-control-allow-origin'), ORIGEM);
   const ch = f.chamadas[0];
@@ -307,6 +307,13 @@ test('token com pacote válido -> 200 com access_token', async () => {
   assert.equal(corpo.get('refresh_token'), 'rt-1');
   assert.equal(corpo.get('client_id'), env.GOOGLE_CLIENT_ID);
   assert.equal(corpo.get('client_secret'), 'segredo-falso');
+});
+
+test('token: Google sem scope -> corpo sem a chave scope', async () => {
+  const f = fetchFalso(200, json({ access_token: 'at', expires_in: 3599, token_type: 'Bearer' }));
+  const r = await postar(criarToken(dep(f)), json({ pacote: pacoteOk() }));
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { access_token: 'at', expires_in: 3599 });
 });
 
 test('token: Google devolve refresh_token novo -> pacote novo', async () => {

@@ -202,7 +202,7 @@ Future<String> loginNavegador(
     tokenUri: cliente.tokenUri,
     clientId: cliente.clientId,
     clientSecret: cliente.clientSecret,
-    scopes: List.of(escoposGoogle),
+    scopes: escoposDaResposta(tok['scope']) ?? List.of(escoposGoogle),
     expiry: DateTime.fromMicrosecondsSinceEpoch(
       arredondar((ambiente.agora() + segundos - 60) * 1000000, 0).toInt(),
       isUtc: true,

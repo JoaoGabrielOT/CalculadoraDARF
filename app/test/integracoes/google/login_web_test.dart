@@ -164,6 +164,25 @@ void main() {
       expect(t.valido(ambiente.agora()), isTrue);
     });
 
+    test('200 com scope → escopos devolvidos no token', () async {
+      final renovar = renovador(
+        () async => json(200, {
+          'access_token': 'a',
+          'expires_in': 3599,
+          'scope': 'x y',
+        }),
+      );
+      expect((await renovar(_tokenPacote())).scopes, ['x', 'y']);
+    });
+
+    test('200 sem scope → mantém os escopos do token atual', () async {
+      final renovar = renovador(
+        () async => json(200, {'access_token': 'a', 'expires_in': 3599}),
+      );
+      final atual = _tokenPacote()..scopes = ['antigo'];
+      expect((await renovar(atual)).scopes, ['antigo']);
+    });
+
     test('200 com pacote novo → refreshToken trocado', () async {
       final renovar = renovador(
         () async => json(200, {

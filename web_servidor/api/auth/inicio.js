@@ -6,7 +6,7 @@ import { COOKIE, NONCE, config, origensDeVolta } from '../_lib/oauth.js';
 // Os mesmos de escoposGoogle (app/lib/integracoes/google/constantes.dart).
 const ESCOPOS = [
   'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/spreadsheets.readonly',
 ];
 

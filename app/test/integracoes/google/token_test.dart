@@ -122,7 +122,15 @@ void main() {
 
   test('scopes ausente assume os escopos do app', () {
     final j = _exemplo()..remove('scopes');
-    expect(TokenGoogle.fromJson(j).scopes, _escopos);
+    expect(TokenGoogle.fromJson(j).scopes, escoposGoogle);
+  });
+
+  test('escopos do app trocam metadata por drive.readonly', () {
+    expect(escoposGoogle, [
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/spreadsheets.readonly',
+    ]);
   });
 
   test('sem refresh_token, client_id ou client_secret → LoginNecessario("Faça login com o Google.")', () {
@@ -171,8 +179,8 @@ void main() {
       'client_id': 'c.apps.googleusercontent.com',
       'client_secret': 's',
       'refresh_token': '1//r',
-      'scope': _escopos.join(' '),
     });
+    expect(p.formulario.containsKey('scope'), isFalse);
     expect(t.token, 'ya29.novo');
     expect(t.refreshToken, '1//novo');
     expect(
@@ -193,9 +201,51 @@ void main() {
       ]);
       final t = await renovarToken(_http(f), _token());
       expect(t.refreshToken, '1//r');
-      expect(t.scopes, _escopos);
+      expect(t.scopes, escoposGoogle);
     },
   );
+
+  test('renovarToken: grava os escopos devolvidos pelo Google', () async {
+    final f = ClienteFalso.fila([
+      RespostaFalsa(
+        200,
+        json: {
+          'access_token': 'n',
+          'expires_in': 3599,
+          'scope': 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets.readonly',
+        },
+      ),
+    ]);
+    final t = await renovarToken(_http(f), _token());
+    expect(t.scopes, [
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/spreadsheets.readonly',
+    ]);
+  });
+
+  test('renovarToken sem scope na resposta mantém os do token', () async {
+    final f = ClienteFalso.fila([
+      RespostaFalsa(200, json: {'access_token': 'n', 'expires_in': 3599}),
+    ]);
+    final t = await renovarToken(
+      _http(f),
+      _token()..scopes = List.of(_escopos),
+    );
+    expect(t.scopes, _escopos);
+  });
+
+  test('escoposDaResposta: texto vira lista; outro tipo ou vazio → null', () {
+    expect(escoposDaResposta(' a  b '), ['a', 'b']);
+    for (final v in [
+      null,
+      '',
+      '   ',
+      3,
+      ['a'],
+    ]) {
+      expect(escoposDaResposta(v), isNull, reason: '$v');
+    }
+  });
 
   test('renovarToken: 400 invalid_grant → LoginNecessario("Sessão expirada. Faça login novamente.")', () async {
     for (final s in [400, 401]) {

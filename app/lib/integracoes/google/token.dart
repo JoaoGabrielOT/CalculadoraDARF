@@ -152,6 +152,14 @@ TokenGoogle? lerToken(Armazenamento a) {
 void gravarToken(Armazenamento a, TokenGoogle t) =>
     a.gravar(arquivoToken, jsonEncode(t.toJson()));
 
+/// `scope` da resposta do Google (texto separado por espaço) → escopos
+/// concedidos; outro tipo ou vazio → `null` (quem chama mantém os que havia).
+List<String>? escoposDaResposta(Object? scope) {
+  if (scope is! String) return null;
+  final lista = scope.split(' ').where((e) => e.isNotEmpty).toList();
+  return lista.isEmpty ? null : lista;
+}
+
 /// google_sync.py:121-128: renova com o `refresh_token`; devolve o token novo.
 Future<TokenGoogle> renovarToken(ClienteHttp http, TokenGoogle t) async {
   final refresh = t.refreshToken;
@@ -165,8 +173,9 @@ Future<TokenGoogle> renovarToken(ClienteHttp http, TokenGoogle t) async {
         'grant_type': 'refresh_token',
         'client_id': t.clientId,
         'client_secret': t.clientSecret,
+        // sem `scope`: o Google devolve os escopos já concedidos, e um token
+        // antigo não é recusado por não ter os escopos novos
         'refresh_token': refresh,
-        'scope': escoposGoogle.join(' '),
       },
     );
   } on ErroConexao catch (e) {
@@ -197,7 +206,7 @@ Future<TokenGoogle> renovarToken(ClienteHttp http, TokenGoogle t) async {
     tokenUri: t.tokenUri,
     clientId: t.clientId,
     clientSecret: t.clientSecret,
-    scopes: t.scopes,
+    scopes: escoposDaResposta(dados['scope']) ?? t.scopes,
     expiry: dura is num
         ? DateTime.fromMicrosecondsSinceEpoch(
             arredondar((ambiente.agora() + dura) * 1000000, 0).toInt(),

@@ -215,6 +215,27 @@ void main() {
     },
   );
 
+  test('login grava os escopos concedidos', () async {
+    final m = _Montagem([
+      RespostaFalsa(
+        200,
+        json: {
+          'access_token': 'ya29.a',
+          'refresh_token': '1//r',
+          'expires_in': 3599,
+          'scope': 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets.readonly',
+        },
+      ),
+      _about(),
+    ]);
+    await m.login(_retornarComCodigo);
+    final salvo = jsonDecode(m.armazenamento.ler('token.json')!) as Map;
+    expect(salvo['scopes'], [
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/spreadsheets.readonly',
+    ]);
+  });
+
   test('favicon.ico recebe 404 e o login continua esperando', () async {
     final m = _Montagem([_tokenOk(), _about()]);
     final statusFavicon = Completer<int>();

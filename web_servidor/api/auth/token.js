@@ -42,6 +42,8 @@ export function criar(dep) {
             return json(503, { erro: 'indisponivel' }, SEM_CACHE);
           }
           const saida = { access_token: dados.access_token, expires_in: dados.expires_in };
+          // Escopos concedidos: o app grava no token (sem eles, mantém os que havia).
+          if (typeof dados.scope === 'string') saida.scope = dados.scope;
           if (typeof dados.refresh_token === 'string' && dados.refresh_token) {
             saida.pacote = cifrar({ k: 'sessao', r: dados.refresh_token, t: dep.agora() }, cfg.chave);
           }
