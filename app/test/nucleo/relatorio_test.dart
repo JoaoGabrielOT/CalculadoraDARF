@@ -251,4 +251,69 @@ void main() {
     expect(() => Relatorio.deJson([1, 2]), throwsFormatException);
     expect(() => Relatorio.deJson(null), throwsFormatException);
   });
+
+  test('número infinito não trava', () {
+    final r = Relatorio.deJson({
+      'schemaVersion': double.infinity,
+      'ativos': [
+        {
+          'posicao': double.infinity,
+          'ticker': 'A',
+          'preco': {'valor': double.infinity},
+        },
+      ],
+      'origemAtivos': {'quantidade': double.infinity},
+    });
+    expect(r.schemaVersion, 1);
+    expect(r.ativos.single.posicao, isNull);
+    expect(r.origemAtivos!.quantidade, isNull);
+    expect(r.ativos.single.preco!.valor, isNull);
+    expect(Relatorio.deJson({'schemaVersion': double.nan}).schemaVersion, 1);
+  });
+
+  test('enum ignora maiúsculas e espaços', () {
+    expect(leituraDe(' Positiva '), Leitura.positiva);
+    expect(direcaoDe('QUEDA'), Direcao.queda);
+  });
+
+  test(
+    'termômetro: negativos viram 0; sem chaves numéricas conta pelos ativos',
+    () {
+      final neg = Relatorio.deJson({
+        'termometro': {'positiva': -3, 'mista': 2},
+      });
+      expect((neg.termometro.positiva, neg.termometro.mista), (0, 2));
+      for (final t in [
+        <String, Object?>{},
+        {'positiva': 'x', 'outra': 1},
+      ]) {
+        final r = Relatorio.deJson({
+          'termometro': t,
+          'ativos': [
+            {'ticker': 'A', 'leitura': 'mista'},
+          ],
+        });
+        expect(r.termometroDoJson, isFalse);
+        expect(r.termometro.mista, 1);
+        expect(r.termometroDiverge, isFalse);
+      }
+    },
+  );
+
+  test('tipo errado dentro dos sub-objetos', () {
+    final r = Relatorio.deJson({
+      'termometro': 'x',
+      'indicadores': [null, 3],
+      'ativos': [
+        {
+          'ticker': 'A',
+          'preco': {'valor': '3,45', 'texto': 'R\$ 3,45'},
+        },
+      ],
+    });
+    expect(r.indicadores, isEmpty);
+    expect(r.termometroDoJson, isFalse);
+    expect(r.ativos.single.preco!.valor, isNull);
+    expect(r.ativos.single.preco!.texto, 'R\$ 3,45');
+  });
 }

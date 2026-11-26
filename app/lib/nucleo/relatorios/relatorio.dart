@@ -9,18 +9,31 @@ enum Leitura { positiva, mista, neutra, negativa }
 
 enum Direcao { alta, queda, neutra }
 
-Leitura leituraDe(Object? v) =>
-    Leitura.values.firstWhere((l) => l.name == v, orElse: () => Leitura.neutra);
+String? _chave(Object? v) => v is String ? v.trim().toLowerCase() : null;
 
-Direcao direcaoDe(Object? v) =>
-    Direcao.values.firstWhere((d) => d.name == v, orElse: () => Direcao.neutra);
+Leitura leituraDe(Object? v) => Leitura.values.firstWhere(
+  (l) => l.name == _chave(v),
+  orElse: () => Leitura.neutra,
+);
+
+Direcao direcaoDe(Object? v) => Direcao.values.firstWhere(
+  (d) => d.name == _chave(v),
+  orElse: () => Direcao.neutra,
+);
 
 String? _texto(Object? v) => v is String && v.trim().isNotEmpty ? v : null;
 
-int? _inteiro(Object? v) =>
-    v is int ? v : (v is num && v == v.truncate() ? v.toInt() : null);
+int? _inteiro(Object? v) => v is int
+    ? v
+    : (v is num && v.isFinite && v == v.truncate() ? v.toInt() : null);
 
-double? _numero(Object? v) => v is num ? v.toDouble() : null;
+double? _numero(Object? v) => v is num && v.isFinite ? v.toDouble() : null;
+
+/// Contagem do termômetro: negativo ou inválido vale 0.
+int _naoNegativo(Object? v) {
+  final n = _inteiro(v) ?? 0;
+  return n < 0 ? 0 : n;
+}
 
 List<Object?> _lista(Object? v) => v is List ? v : const [];
 
@@ -104,10 +117,10 @@ class Termometro {
   };
 
   static Termometro deJson(Map<String, Object?> m) => Termometro(
-    positiva: _inteiro(m['positiva']) ?? 0,
-    mista: _inteiro(m['mista']) ?? 0,
-    neutra: _inteiro(m['neutra']) ?? 0,
-    negativa: _inteiro(m['negativa']) ?? 0,
+    positiva: _naoNegativo(m['positiva']),
+    mista: _naoNegativo(m['mista']),
+    neutra: _naoNegativo(m['neutra']),
+    negativa: _naoNegativo(m['negativa']),
   );
 
   static Termometro contar(Iterable<Leitura> leituras) {
@@ -405,7 +418,12 @@ class Relatorio {
         return pa.compareTo(pb);
       },
     );
-    final tj = _mapa(m['termometro']);
+    var tj = _mapa(m['termometro']);
+    // Sem nenhuma das quatro chaves numéricas, vale como ausente.
+    if (tj != null &&
+        !Leitura.values.any((l) => _inteiro(tj![l.name]) != null)) {
+      tj = null;
+    }
     return Relatorio(
       schemaVersion: _inteiro(m['schemaVersion']) ?? 1,
       tipo: _texto(m['tipo']),
