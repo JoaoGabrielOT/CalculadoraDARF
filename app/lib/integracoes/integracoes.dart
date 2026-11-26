@@ -11,6 +11,7 @@ export 'google/login.dart';
 export 'google/login_web.dart';
 export 'google/pedidos.dart';
 export 'google/planilha.dart';
+export 'google/relatorios.dart';
 export 'google/sessao.dart';
 export 'google/token.dart';
 export 'http/cliente.dart';

@@ -429,15 +429,144 @@ void main() {
 
   for (final corpo in ['<html>erro</html>', '[1, 2]']) {
     test(
-      'req: corpo 200 que não é objeto JSON ($corpo) → ErroGoogle',
+      'req: corpo 200 que não é objeto JSON ($corpo) → RespostaInvalida',
       () async {
         final (s, _, _) = _montar([_about(), RespostaFalsa(200, texto: corpo)]);
         await s.iniciar(_token());
         await expectLater(
           s.req('GET', '$urlSheets/x'),
-          _erro<ErroGoogle>('Resposta inválida do Google.'),
+          _erro<RespostaInvalida>('Resposta inválida do Google.'),
         );
       },
     );
   }
+
+  for (final status in [429, 500, 503]) {
+    test('req: $status continua ErroGoogle, não RespostaInvalida', () async {
+      final (s, _, _) = _montar([
+        _about(),
+        RespostaFalsa(status, texto: '<html>erro</html>'),
+      ]);
+      await s.iniciar(_token());
+      await expectLater(
+        s.req('GET', '$urlDrive/files'),
+        throwsA(
+          isA<ErroGoogle>()
+              .having((e) => e.status, 'status', status)
+              .having((e) => e, 'tipo', isNot(isA<RespostaInvalida>())),
+        ),
+      );
+    });
+  }
+
+  group('403 de escopo', () {
+    Future<Object?> pedir(Object corpo) async {
+      final (s, _, _) = _montar([_about(), RespostaFalsa(403, json: corpo)]);
+      await s.iniciar(_token());
+      try {
+        await s.req('GET', '$urlDrive/files');
+      } catch (e) {
+        return e;
+      }
+      return null;
+    }
+
+    test(
+      'errors[].reason insufficientPermissions → EscopoInsuficiente',
+      () async {
+        final e = await pedir({
+          'error': {
+            'code': 403,
+            'message': 'Request had insufficient authentication scopes.',
+            'errors': [
+              {'reason': 'insufficientPermissions'},
+            ],
+            'status': 'PERMISSION_DENIED',
+          },
+        });
+        expect(
+          e,
+          isA<EscopoInsuficiente>()
+              .having((e) => e.status, 'status', 403)
+              .having(
+                (e) => e.mensagem,
+                'mensagem',
+                'Request had insufficient authentication scopes.',
+              ),
+        );
+      },
+    );
+
+    test(
+      'details[].reason ACCESS_TOKEN_SCOPE_INSUFFICIENT → EscopoInsuficiente',
+      () async {
+        final e = await pedir({
+          'error': {
+            'code': 403,
+            'message': 'Request had insufficient authentication scopes.',
+            'status': 'PERMISSION_DENIED',
+            'details': [
+              {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                'reason': 'ACCESS_TOKEN_SCOPE_INSUFFICIENT',
+              },
+            ],
+          },
+        });
+        expect(
+          e,
+          isA<EscopoInsuficiente>().having((e) => e.status, 'status', 403),
+        );
+      },
+    );
+
+    test('outro motivo de 403 → ErroGoogle comum', () async {
+      final e = await pedir({
+        'error': {
+          'code': 403,
+          'message': 'The user does not have sufficient permissions for file.',
+          'errors': [
+            {'reason': 'insufficientFilePermissions'},
+          ],
+        },
+      });
+      expect(e, isA<ErroGoogle>().having((e) => e.status, 'status', 403));
+      expect(e, isNot(isA<EscopoInsuficiente>()));
+    });
+
+    test('403 sem JSON → ErroGoogle comum', () async {
+      final (s, _, _) = _montar([
+        _about(),
+        RespostaFalsa(403, texto: 'proibido'),
+      ]);
+      await s.iniciar(_token());
+      await expectLater(
+        s.req('GET', '$urlDrive/files'),
+        throwsA(
+          isA<ErroGoogle>()
+              .having((e) => e.mensagem, 'mensagem', 'proibido')
+              .having((e) => e, 'tipo', isNot(isA<EscopoInsuficiente>())),
+        ),
+      );
+    });
+  });
+
+  test(
+    'escopos: null sem sessão; os do token.json depois de carregar',
+    () async {
+      const antigos = [
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive.metadata.readonly',
+        'https://www.googleapis.com/auth/spreadsheets.readonly',
+      ];
+      final (s, _, a) = _montar([_about()]);
+      expect(s.escopos, isNull);
+      final t = _token()..scopes = List.of(antigos);
+      gravarToken(a, t);
+      await s.carregarToken();
+      expect(s.escopos, antigos);
+      s.sair();
+      expect(s.escopos, isNull);
+    },
+  );
 }

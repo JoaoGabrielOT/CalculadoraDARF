@@ -45,6 +45,12 @@ class SessaoGoogle {
 
   String? get email => _email;
 
+  /// Escopos do token em memória; `null` sem sessão.
+  List<String>? get escopos {
+    final t = _token;
+    return t == null ? null : List.unmodifiable(t.scopes);
+  }
+
   bool temToken() => armazenamento.existe(arquivoToken);
 
   /// Lê o `token.json`, renova se preciso (e grava) e abre a sessão.
@@ -166,25 +172,47 @@ class SessaoGoogle {
       r = await enviar();
       if (r.statusCode == 401) throw LoginNecessario(_msgSessao);
     }
-    if (r.statusCode >= 400) throw ErroGoogle(_mensagem(r), r.statusCode);
+    if (r.statusCode >= 400) {
+      final erro = _erroDoCorpo(r);
+      if (r.statusCode == 403 && _faltaEscopo(erro)) {
+        throw EscopoInsuficiente(_mensagem(r, erro), r.statusCode);
+      }
+      throw ErroGoogle(_mensagem(r, erro), r.statusCode);
+    }
     if (r.bodyBytes.isEmpty) return <String, Object?>{};
     try {
       return await decodificarJson(r.bodyBytes, executar)
           as Map<String, Object?>;
     } on FormatException {
-      throw ErroGoogle(_msgInvalida);
+      throw RespostaInvalida(_msgInvalida);
     } on TypeError {
-      throw ErroGoogle(_msgInvalida);
+      throw RespostaInvalida(_msgInvalida);
     }
   }
 
-  String _mensagem(pkg.Response r) {
+  /// O objeto `error` do corpo JSON de um erro do Google, se houver.
+  Map<String, Object?>? _erroDoCorpo(pkg.Response r) {
     try {
       final dados = jsonDecode(utf8.decode(r.bodyBytes));
       final erro = (dados as Map<String, Object?>)['error'];
-      final msg = (erro as Map<String, Object?>)['message'];
-      if (msg is String) return msg;
-    } catch (_) {}
+      return erro as Map<String, Object?>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// `errors[].reason` (v3) ou `details[].reason` (google.rpc.ErrorInfo).
+  bool _faltaEscopo(Map<String, Object?>? erro) {
+    bool tem(Object? lista, String motivo) =>
+        lista is List && lista.any((i) => i is Map && i['reason'] == motivo);
+    return erro != null &&
+        (tem(erro['errors'], 'insufficientPermissions') ||
+            tem(erro['details'], 'ACCESS_TOKEN_SCOPE_INSUFFICIENT'));
+  }
+
+  String _mensagem(pkg.Response r, Map<String, Object?>? erro) {
+    final msg = erro?['message'];
+    if (msg is String) return msg;
     final texto = utf8.decode(r.bodyBytes, allowMalformed: true);
     return String.fromCharCodes(texto.runes.take(300));
   }
