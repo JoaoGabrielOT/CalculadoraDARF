@@ -10,7 +10,15 @@ class ArmazenamentoArquivos implements Armazenamento {
 
   final String pasta;
 
-  File _arquivo(String nome) => File('$pasta${Platform.pathSeparator}$nome');
+  File _arquivo(String nome) {
+    if (nome.startsWith('/') ||
+        nome.startsWith('\\') ||
+        RegExp(r'^[A-Za-z]:').hasMatch(nome) ||
+        nome.split(RegExp(r'[/\\]')).contains('..')) {
+      throw ArgumentError.value(nome, 'nome', 'fora da pasta do app');
+    }
+    return File('$pasta${Platform.pathSeparator}$nome');
+  }
 
   @override
   String? ler(String nome) {

@@ -20,25 +20,34 @@ void main() {
   setUp(limpar);
   tearDown(limpar);
 
+  /// Enche o localStorage com [tamanho] caracteres por bloco até a recusa.
+  void encher(int tamanho, String rotulo) {
+    final kv = chaveValorDoNavegador()!;
+    for (var i = 0; i < 200; i++) {
+      try {
+        kv.definir('darf:enchimento-$rotulo-$i', 'x' * tamanho);
+      } catch (_) {
+        return;
+      }
+    }
+    fail('o localStorage deveria recusar');
+  }
+
   test('localStorage cheio: os relatórios saem e o mês é gravado', () {
     final kv = chaveValorDoNavegador()!;
     final a = ArmazenamentoChaveValor(kv);
     a.gravar('relatorios/indice.json', 'i' * 1000);
-    a.gravar('relatorios/relatorio-abertura-2026-11-26.json', 'r' * 1000);
+    a.gravar('relatorios/peso.json', 'p' * 300000);
     // Enche fora de relatorios/, para o descarte não limpar o enchimento.
-    var cheio = false;
-    for (var i = 0; i < 100 && !cheio; i++) {
-      try {
-        kv.definir('darf:enchimento-$i', 'x' * 1000000);
-      } catch (_) {
-        cheio = true;
-      }
-    }
-    expect(cheio, isTrue, reason: 'o localStorage deveria recusar');
-    // Libera só o suficiente para o mês caber depois do descarte.
-    kv.remover('darf:enchimento-0');
-    a.gravar('relatorios/outro.json', 'o' * 1000);
-    expect(() => a.gravar('2026-11.json', 'x' * 200000), returnsNormally);
+    encher(1000000, 'g');
+    encher(1000, 'p');
+    expect(
+      () => kv.definir('darf:teste', 'x' * 200000),
+      throwsA(anything),
+      reason: 'sem folga: o descarte é necessário',
+    );
+    kv.remover('darf:teste');
+    a.gravar('2026-11.json', 'x' * 200000);
     expect(a.ler('2026-11.json'), 'x' * 200000);
     expect(kv.chaves().where((c) => c.startsWith('darf:relatorios/')), isEmpty);
   });

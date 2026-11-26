@@ -286,6 +286,21 @@ void main() {
       expect(a.listar().where((n) => n.contains('relatorios')), isEmpty);
     });
 
+    test('rejeita nomes que saem da pasta', () {
+      final a = ArmazenamentoArquivos(pasta.path);
+      for (final nome in [
+        '../x.json',
+        'a/../../x',
+        r'a\..\x',
+        '/x',
+        r'\x',
+        'C:x',
+      ]) {
+        expect(() => a.gravar(nome, '1'), throwsArgumentError, reason: nome);
+        expect(() => a.ler(nome), throwsArgumentError, reason: nome);
+      }
+    });
+
     test('ler, existe e apagar', () {
       final a = ArmazenamentoArquivos(pasta.path);
       expect(a.ler('2026-10.json'), isNull);
