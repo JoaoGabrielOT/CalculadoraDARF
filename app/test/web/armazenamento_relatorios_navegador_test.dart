@@ -21,11 +21,11 @@ void main() {
   tearDown(limpar);
 
   /// Enche o localStorage com [tamanho] caracteres por bloco até a recusa.
-  void encher(int tamanho, String rotulo) {
+  void encher(int tamanho, int limite) {
     final kv = chaveValorDoNavegador()!;
-    for (var i = 0; i < 200; i++) {
+    for (var i = 0; i < limite; i++) {
       try {
-        kv.definir('darf:enchimento-$rotulo-$i', 'x' * tamanho);
+        kv.definir('darf:enchimento-$tamanho-$i', 'x' * tamanho);
       } catch (_) {
         return;
       }
@@ -39,8 +39,9 @@ void main() {
     a.gravar('relatorios/indice.json', 'i' * 1000);
     a.gravar('relatorios/peso.json', 'p' * 300000);
     // Enche fora de relatorios/, para o descarte não limpar o enchimento.
-    encher(1000000, 'g');
-    encher(1000, 'p');
+    encher(1000000, 100);
+    encher(10000, 200);
+    encher(100, 200);
     expect(
       () => kv.definir('darf:teste', 'x' * 200000),
       throwsA(anything),
