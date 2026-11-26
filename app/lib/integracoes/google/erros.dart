@@ -24,6 +24,16 @@ class EscopoInsuficiente extends ErroGoogle {
   EscopoInsuficiente([super.mensagem, super.status]);
 }
 
+/// "Entrar de novo" que voltou com outra conta Google: recusado sem trocar a
+/// sessão nem o token.
+class OutraConta extends ErroGoogle {
+  OutraConta(String email) : super(textoOutraConta(email));
+}
+
+String textoOutraConta(String email) =>
+    'Entre com a mesma conta ($email). Para trocar de conta, use Sair na aba '
+    'Conta.';
+
 /// Resposta 200 cujo corpo não é um objeto JSON.
 class RespostaInvalida extends ErroGoogle {
   RespostaInvalida([super.mensagem, super.status]);

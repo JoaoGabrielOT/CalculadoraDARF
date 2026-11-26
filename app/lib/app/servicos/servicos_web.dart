@@ -48,6 +48,7 @@ ServicosApp criarServicosWeb({
       origem: origem,
       irPara: irPara,
       nonces: guardaNonceDoNavegador(),
+      armazenamento: armazenamento,
     ),
     aoSair: (t) {
       final pacote = t?.refreshToken;

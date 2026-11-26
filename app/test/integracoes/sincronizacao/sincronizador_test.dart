@@ -46,9 +46,17 @@ class ContaGoogleFalsa implements ContaGoogle {
     return email = 'ana@gmail.com';
   }
 
+  /// `mesmaConta` recebido no último login.
+  String? mesmaConta;
+
   @override
-  Future<String> login(AbrirUrl abrirUrl, {Future<void>? cancelar}) async {
+  Future<String> login(
+    AbrirUrl abrirUrl, {
+    Future<void>? cancelar,
+    String? mesmaConta,
+  }) async {
     chamadas.add('login');
+    this.mesmaConta = mesmaConta;
     final segurar = segurarLogin;
     if (segurar != null) {
       await Future.any<void>([
@@ -613,6 +621,31 @@ void testesLogin() {
     expect(c.sync.ocupado, isFalse);
     expect(c.sync.status, StatusSync.ok);
   });
+
+  test('conectar repassa a conta atual ao login', () async {
+    final c = _Cenario(conta: ContaGoogleFalsa(email: null));
+    c.conta.achada = 'p';
+    await c.sync.conectar((_) async {});
+    expect(c.conta.mesmaConta, isNull);
+    await c.sync.conectar((_) async {}, mesmaConta: 'ana@gmail.com');
+    expect(c.conta.mesmaConta, 'ana@gmail.com');
+  });
+
+  test(
+    'login de novo com a conta aberta que falha volta ao status de antes',
+    () async {
+      final c = _Cenario();
+      c.conta.achada = 'p';
+      await c.sync.sincronizar();
+      expect(c.sync.status, StatusSync.ok);
+      c.conta.falhaLogin = ErroGoogle('O login foi cancelado.');
+      await c.sync.conectar((_) async {}, mesmaConta: 'ana@gmail.com');
+      expect(c.sync.status, StatusSync.ok);
+      expect(c.status.last, StatusSync.ok);
+      expect(c.avisos.last, 'O login foi cancelado.');
+      expect(c.sync.ocupado, isFalse);
+    },
+  );
 
   test('cancelarLogin encerra o login com a mensagem e status off', () async {
     final c = _Cenario(conta: ContaGoogleFalsa(email: null));

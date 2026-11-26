@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:calculadoradarf/app/app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
 import 'package:calculadoradarf/app/telas/login_web/tela_login_web.dart';
 import 'package:calculadoradarf/app/web/entrada_web.dart';
+import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +41,7 @@ void main() {
     String? nonce = 'n1',
     bool trava = true,
     bool armazenamento = true,
+    http.Client? cliente,
   }) async {
     return s = await prepararServicosWeb(
       endereco: Uri.parse(endereco),
@@ -48,10 +52,79 @@ void main() {
       irPara: (_) async {},
       abrirUrl: (_) async => true,
       avisar: (t, x) => avisos.add((t, x)),
-      cliente: MockClient((_) async => http.Response('', 503)),
+      cliente: cliente ?? MockClient((_) async => http.Response('', 503)),
       timers: false,
     );
   }
+
+  group('volta do "entrar de novo"', () {
+    late List<http.Request> pedidos;
+    late String antes;
+
+    http.Client googleCom(String email) => MockClient((r) async {
+      pedidos.add(r);
+      if (r.url.path == '/api/auth/token') {
+        return http.Response(
+          jsonEncode({'access_token': 'at-novo', 'expires_in': 3599}),
+          200,
+        );
+      }
+      if (r.url.path == '/drive/v3/about') {
+        return http.Response(
+          jsonEncode({
+            'user': {'emailAddress': email},
+          }),
+          200,
+        );
+      }
+      return http.Response('', 503);
+    });
+
+    setUp(() {
+      pedidos = [];
+      gravarPacoteWeb(a, 'v1.${'z' * 40}');
+      antes = a.ler('token.json')!;
+      guardarMesmaContaWeb(a, 'ana@gmail.com');
+    });
+
+    test('outra conta: mantém o token, revoga o novo e avisa', () async {
+      await preparar(
+        'https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1',
+        cliente: googleCom('bia@gmail.com'),
+      );
+      expect(a.ler('token.json'), antes);
+      expect(a.existe(arquivoMesmaConta), isFalse);
+      expect(avisos, [
+        (
+          'Login não concluído',
+          'Entre com a mesma conta (ana@gmail.com). Para trocar de conta, '
+              'use Sair na aba Conta.',
+        ),
+      ]);
+      final sair = pedidos.where((r) => r.url.path == '/api/auth/sair');
+      expect(jsonDecode(sair.single.body), {'pacote': _pacote});
+    });
+
+    test('a mesma conta: grava o token novo', () async {
+      await preparar(
+        'https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1',
+        cliente: googleCom('ana@gmail.com'),
+      );
+      expect(a.ler('token.json'), contains(_pacote));
+      expect(avisos, isEmpty);
+    });
+
+    test('sem token antigo a marca é ignorada', () async {
+      a.apagar('token.json');
+      await preparar(
+        'https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1',
+        cliente: googleCom('bia@gmail.com'),
+      );
+      expect(a.ler('token.json'), contains(_pacote));
+      expect(pedidos, isEmpty);
+      expect(a.existe(arquivoMesmaConta), isFalse);
+    });
+  });
 
   test(
     'outra aba com a trava: ErroOutraAba sem tocar no armazenamento',
@@ -78,7 +151,9 @@ void main() {
   });
 
   test('retorno com pacote: grava o token.json e limpa o endereço', () async {
-    await preparar('https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1');
+    await preparar(
+      'https://calculadora-darf-web.vercel.app/#auth=$_pacote&n=n1',
+    );
     expect(a.ler('token.json'), contains(_pacote));
     expect(limpezas, 1);
     expect(avisos, isEmpty);

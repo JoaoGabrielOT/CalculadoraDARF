@@ -37,10 +37,44 @@ void gravarPacoteWeb(Armazenamento a, String pacote) => gravarToken(
   ),
 );
 
-/// `$api/auth/inicio?volta=<origem>&n=<nonce>`.
-Uri urlInicioLogin(Uri api, Uri origem, String nonce) =>
-    Uri.parse('$api/auth/inicio')
-        .replace(queryParameters: {'volta': origem.origin, 'n': nonce});
+/// `$api/auth/inicio?volta=<origem>&n=<nonce>`, com `&hint=<dica>` (a conta
+/// atual) no "entrar de novo".
+Uri urlInicioLogin(Uri api, Uri origem, String nonce, {String? dica}) =>
+    Uri.parse('$api/auth/inicio').replace(
+      queryParameters: {'volta': origem.origin, 'n': nonce, 'hint': ?dica},
+    );
+
+/// Conta do "entrar de novo", guardada na ida ao login e conferida na volta
+/// (`gravarPacoteDaMesmaConta`).
+const arquivoMesmaConta = 'login_mesma_conta.json';
+
+/// Guarda [email] para a volta do login; `null` apaga.
+void guardarMesmaContaWeb(Armazenamento a, String? email) {
+  if (email == null) {
+    a.apagar(arquivoMesmaConta);
+  } else {
+    a.gravar(arquivoMesmaConta, jsonEncode({'email': email}));
+  }
+}
+
+/// Devolve a conta guardada na ida e a apaga; ilegível vale como nenhuma.
+String? consumirMesmaContaWeb(Armazenamento a) {
+  String? email;
+  try {
+    final texto = a.ler(arquivoMesmaConta);
+    final j = texto == null ? null : jsonDecode(texto);
+    final e = j is Map ? j['email'] : null;
+    email = e is String && e.isNotEmpty ? e : null;
+  } catch (_) {
+    email = null;
+  }
+  try {
+    a.apagar(arquivoMesmaConta);
+  } catch (_) {
+    // a marca fica; a próxima ida ao login a regrava
+  }
+  return email;
+}
 
 /// 32 bytes aleatórios em base64url sem `=` (43 caracteres).
 String _gerarNonce() {
@@ -51,17 +85,20 @@ String _gerarNonce() {
 }
 
 /// Login da Web: guarda um nonce e sai da página rumo ao servidor. O futuro só
-/// termina com erro; o resultado chega na volta, por [lerRetornoLogin].
+/// termina com erro; o resultado chega na volta, por [lerRetornoLogin]. Com
+/// `mesmaConta` a conta vai como `hint` e fica em [armazenamento] para a volta.
 FazerLogin criarLoginWeb({
   required Uri api,
   required Uri origem,
   required Future<void> Function(Uri url) irPara,
   required GuardaNonce nonces,
-}) => (_, {Future<void>? cancelar}) async {
+  Armazenamento? armazenamento,
+}) => (_, {Future<void>? cancelar, String? mesmaConta}) async {
   final n = _gerarNonce();
   try {
     nonces.guardar(n);
-    await irPara(urlInicioLogin(api, origem, n));
+    if (armazenamento != null) guardarMesmaContaWeb(armazenamento, mesmaConta);
+    await irPara(urlInicioLogin(api, origem, n, dica: mesmaConta));
   } catch (_) {
     throw ErroGoogle(_msgLogin);
   }
@@ -133,6 +170,40 @@ Future<void> revogarWeb(ClienteHttp http, Uri api, String pacote) async {
       corpo: jsonEncode({'pacote': pacote}),
     );
   } catch (_) {}
+}
+
+/// Volta do "entrar de novo" com [pacote]: só fica se for da conta
+/// [mesmaConta] (renova pelo servidor e consulta o e-mail). Outra conta, ou
+/// sem conseguir conferir, revoga o pacote novo e o `token.json` anterior
+/// continua; devolve o texto do aviso. Da mesma conta, grava o token já
+/// renovado e devolve `null`.
+Future<String?> gravarPacoteDaMesmaConta(
+  Armazenamento a,
+  String pacote, {
+  required String mesmaConta,
+  required ClienteHttp http,
+  required Uri api,
+}) async {
+  var atual = pacote;
+  try {
+    final novo = await criarRenovadorWeb(http, api)(
+      TokenGoogle(
+        refreshToken: pacote,
+        clientId: marcadorServidor,
+        clientSecret: marcadorServidor,
+      ),
+    );
+    atual = novo.refreshToken ?? pacote;
+    if (await emailDaConta(http, novo.token!) == mesmaConta) {
+      gravarToken(a, novo);
+      return null;
+    }
+    await revogarWeb(http, api, atual);
+    return textoOutraConta(mesmaConta);
+  } catch (_) {
+    await revogarWeb(http, api, atual);
+    return _msgLogin;
+  }
 }
 
 /// O que o servidor devolveu no fragmento do endereço.

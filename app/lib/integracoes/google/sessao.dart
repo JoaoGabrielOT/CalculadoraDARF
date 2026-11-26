@@ -18,6 +18,45 @@ const _msgInvalida = 'Resposta inválida do Google.';
 const _msgNaN =
     'Há um valor inválido (NaN ou infinito) nos dados; nada foi enviado ao Google.';
 
+/// E-mail (em minúsculas) do `about` do Drive.
+String _emailDoAbout(Map<String, Object?> r) {
+  final user = r['user'];
+  final endereco = user is Map ? user['emailAddress'] : null;
+  if (endereco is! String) {
+    throw ErroGoogle('Resposta do Google sem o e-mail da conta.');
+  }
+  return endereco.toLowerCase();
+}
+
+/// E-mail da conta dona do token de acesso [acesso], sem abrir sessão nem
+/// gravar nada: a conferência do "entrar de novo" antes de trocar o token.
+Future<String> emailDaConta(ClienteHttp http, String acesso) async {
+  final pkg.Response r;
+  try {
+    r = await http.enviar(
+      'GET',
+      Uri.parse('$urlDrive/about')
+          .replace(queryParameters: {'fields': 'user(emailAddress)'}),
+      cabecalhos: {'Authorization': 'Bearer $acesso'},
+      tempoLimite: const Duration(seconds: 30),
+    );
+  } on ErroConexao catch (e) {
+    throw Offline(e.mensagem);
+  }
+  if (r.statusCode >= 400) {
+    throw ErroGoogle('Resposta do Google: HTTP ${r.statusCode}', r.statusCode);
+  }
+  try {
+    return _emailDoAbout(
+      jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, Object?>,
+    );
+  } on FormatException {
+    throw RespostaInvalida(_msgInvalida);
+  } on TypeError {
+    throw RespostaInvalida(_msgInvalida);
+  }
+}
+
 /// Troca o token vencido por um novo (no app, [renovarToken]; na Web, pelo
 /// servidor).
 typedef RenovarToken = Future<TokenGoogle> Function(TokenGoogle atual);
@@ -76,12 +115,7 @@ class SessaoGoogle {
       params: {'fields': 'user(emailAddress)'},
     );
     if (geracao != _geracao) throw LoginNecessario(_msgLogin);
-    final user = r['user'];
-    final endereco = user is Map ? user['emailAddress'] : null;
-    if (endereco is! String) {
-      throw ErroGoogle('Resposta do Google sem o e-mail da conta.');
-    }
-    return _email = endereco.toLowerCase();
+    return _email = _emailDoAbout(r);
   }
 
   void sair() {

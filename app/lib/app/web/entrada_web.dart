@@ -10,6 +10,8 @@ import '../servicos/api.dart';
 import '../servicos/servicos_web.dart';
 import 'endereco_api.dart';
 
+const _tituloLogin = 'Login não concluído';
+
 /// A trava de aba única já está com outra aba ou janela.
 class ErroOutraAba implements Exception {
   const ErroOutraAba();
@@ -50,6 +52,7 @@ Future<ServicosApp> prepararServicosWeb({
   final retorno = lerRetornoLogin(endereco, nonceEsperado: nonceEsperado);
   if (retorno != null) limparEndereco();
   if (!await travarAba()) throw const ErroOutraAba();
+  final c = cliente ?? http.Client();
   var armazenamento = armazenamentoNavegador;
   if (armazenamento == null) {
     armazenamento = ArmazenamentoMemoria();
@@ -59,7 +62,21 @@ Future<ServicosApp> prepararServicosWeb({
           'funciona, mas será preciso entrar de novo a cada visita.',
     );
   }
+  final mesmaConta = retorno == null
+      ? null
+      : consumirMesmaContaWeb(armazenamento);
   switch (retorno) {
+    case RetornoPacote(:final pacote)
+        when mesmaConta != null && armazenamento.existe(arquivoToken):
+      // "entrar de novo": outra conta não substitui a sessão que havia
+      final recusa = await gravarPacoteDaMesmaConta(
+        armazenamento,
+        pacote,
+        mesmaConta: mesmaConta,
+        http: ClienteHttp(c, tempoLimite: const Duration(seconds: 30)),
+        api: enderecoApi(endereco),
+      );
+      if (recusa != null) avisar(_tituloLogin, recusa);
     case RetornoPacote(:final pacote):
       gravarPacoteWeb(armazenamento, pacote);
     case final RetornoErro e:
@@ -75,7 +92,7 @@ Future<ServicosApp> prepararServicosWeb({
     armazenamento: armazenamento,
     irPara: irPara,
     abrirUrl: abrirUrl,
-    cliente: cliente,
+    cliente: c,
     timers: timers,
   );
 }

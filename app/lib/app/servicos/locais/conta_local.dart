@@ -141,7 +141,7 @@ class ContaLocal {
       return;
     }
     try {
-      await _sync.conectar(_abrirUrl);
+      await _sync.conectar(_abrirUrl, mesmaConta: _conta.email);
     } finally {
       _reconciliar();
     }

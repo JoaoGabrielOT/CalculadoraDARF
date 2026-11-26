@@ -60,6 +60,7 @@ class _Montagem {
     Duration tempoLimite = const Duration(seconds: 600),
     Esperar? esperar,
     Future<void>? cancelar,
+    String? mesmaConta,
   }) => loginNavegador(
     sessao,
     _cliente,
@@ -70,6 +71,7 @@ class _Montagem {
     },
     tempoLimite: tempoLimite,
     cancelar: cancelar,
+    mesmaConta: mesmaConta,
     esperar:
         esperar ??
         (d) async {
@@ -158,6 +160,91 @@ void main() {
       'code_challenge_method',
       'state',
     ]);
+  });
+
+  test('URL de autorização com a conta atual leva o login_hint', () {
+    final url = urlAutorizacao(
+      _cliente,
+      redirect: 'http://127.0.0.1:5000/',
+      desafio: 'DES',
+      estado: 'EST',
+      dica: 'ana@gmail.com',
+    );
+    expect(url.queryParameters['login_hint'], 'ana@gmail.com');
+  });
+
+  group('entrar de novo (mesmaConta)', () {
+    RespostaFalsa aboutDe(String email) => RespostaFalsa(
+      200,
+      json: {
+        'user': {'emailAddress': email},
+      },
+    );
+
+    /// Sessão de ana aberta com o token antigo, como antes do "entrar de novo".
+    Future<String> sessaoAberta(_Montagem m) async {
+      final antigo = TokenGoogle(
+        token: 'ya29.antigo',
+        refreshToken: '1//antigo',
+        clientId: 'c',
+        clientSecret: 's',
+        expiry: DateTime.utc(2100),
+      );
+      gravarToken(m.armazenamento, antigo);
+      expect(await m.sessao.iniciar(antigo), 'ana@gmail.com');
+      return m.armazenamento.ler('token.json')!;
+    }
+
+    test('outra conta: recusa sem gravar nem trocar a sessão', () async {
+      final m = _Montagem([
+        aboutDe('Ana@Gmail.com'),
+        _tokenOk(),
+        aboutDe('bia@gmail.com'),
+      ]);
+      final antes = await sessaoAberta(m);
+
+      await expectLater(
+        m.login(_retornarComCodigo, mesmaConta: 'ana@gmail.com'),
+        _erro<OutraConta>(
+          'Entre com a mesma conta (ana@gmail.com). Para trocar de conta, '
+          'use Sair na aba Conta.',
+        ),
+      );
+
+      expect(m.urlAberta!.queryParameters['login_hint'], 'ana@gmail.com');
+      expect(m.armazenamento.ler('token.json'), antes);
+      expect(m.sessao.email, 'ana@gmail.com');
+      // a conferência usou o token novo sem instalá-lo
+      final about = m.falso.pedidos.last;
+      expect(about.url.path, '/drive/v3/about');
+      expect(about.cabecalhos['authorization'], 'Bearer ya29.a');
+      expect(m.falso.pedidos, hasLength(3));
+    });
+
+    test('a mesma conta: grava o token novo e abre a sessão', () async {
+      final m = _Montagem([
+        aboutDe('ana@gmail.com'),
+        _tokenOk(),
+        aboutDe('ANA@gmail.com'),
+        aboutDe('ana@gmail.com'),
+      ]);
+      await sessaoAberta(m);
+
+      final email = await m.login(
+        _retornarComCodigo,
+        mesmaConta: 'ana@gmail.com',
+      );
+
+      expect(email, 'ana@gmail.com');
+      final salvo = jsonDecode(m.armazenamento.ler('token.json')!) as Map;
+      expect(salvo['token'], 'ya29.a');
+    });
+
+    test('login inicial não leva login_hint', () async {
+      final m = _Montagem([_tokenOk(), _about()]);
+      await m.login(_retornarComCodigo);
+      expect(m.urlAberta!.queryParameters.containsKey('login_hint'), isFalse);
+    });
   });
 
   test(

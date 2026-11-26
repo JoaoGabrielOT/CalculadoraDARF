@@ -48,7 +48,7 @@ void main() {
         r.url.queryParameters['q'] == consultaRelatorios) {
       return listagem ?? http.Response('', 503);
     }
-    if (r.url.path == '/drive/v3/files/r1' &&
+    if (r.url.path.startsWith('/drive/v3/files/') &&
         r.url.queryParameters['alt'] == 'media') {
       return http.Response.bytes(
         utf8.encode(jsonEncode(fixtureRelatorio())),
@@ -148,6 +148,7 @@ void main() {
   // sem a pessoa sair (test/app/telas/login_web_test.dart).
 
   test('conectar sai da página rumo ao login do servidor', () async {
+    guardarMesmaContaWeb(a, 'x@y.com');
     await s.iniciar();
     unawaited(s.conectar());
     await pumpEventQueue();
@@ -162,6 +163,8 @@ void main() {
       ),
     );
     expect(ida.queryParameters['n'], hasLength(43));
+    expect(ida.queryParameters.containsKey('hint'), isFalse);
+    expect(a.existe(arquivoMesmaConta), isFalse);
     expect((await s.conta()).status, StatusSync.login);
     await s.cancelarLogin();
   });
@@ -277,13 +280,13 @@ void main() {
       expect((await s.conta()).email, 'eu@x.com');
     });
 
-    test('só 5 relatórios guardam o conteúdo', () async {
+    test('só os 5 mais recentes guardam o conteúdo', () async {
       listagem = http.Response(
         jsonEncode({
           'files': [
             for (var d = 10; d < 17; d++)
               {
-                'id': 'r1',
+                'id': 'r$d',
                 'name': 'relatorio-abertura-2026-10-$d.json',
                 'modifiedTime': '2026-11-26T12:00:00.000Z',
               },
@@ -300,9 +303,74 @@ void main() {
         kv.chaves().where(
           (c) => c.startsWith('darf:relatorios/relatorio-abertura-'),
         ),
-        hasLength(5),
+        unorderedEquals([
+          for (var d = 12; d < 17; d++)
+            'darf:relatorios/relatorio-abertura-2026-10-$d.json',
+        ]),
+      );
+      expect(
+        pedidos
+            .where((r) => r.url.queryParameters['alt'] == 'media')
+            .map((r) => r.url.pathSegments.last),
+        unorderedEquals(['r12', 'r13', 'r14', 'r15', 'r16']),
       );
     });
+  });
+
+  /// Token de acesso ainda válido, com os escopos novos.
+  void tokenValido() => gravarToken(
+    a,
+    TokenGoogle(
+      token: 'at-drive',
+      refreshToken: _pacote,
+      clientId: marcadorServidor,
+      clientSecret: marcadorServidor,
+      expiry: DateTime.now().toUtc().add(const Duration(hours: 1)),
+    ),
+  );
+
+  test('entrar de novo leva a conta atual e a guarda para a volta', () async {
+    tokenValido();
+    await s.iniciar();
+    await (s as ServicosReais).tickSync();
+    unawaited(s.entrarDeNovoGoogle());
+    await pumpEventQueue();
+
+    expect(idas.single.queryParameters['hint'], 'eu@x.com');
+    expect(consumirMesmaContaWeb(a), 'eu@x.com');
+    await s.cancelarLogin();
+    expect((await s.conta()).email, 'eu@x.com');
+  });
+
+  test('sair apaga o cache dos relatórios', () async {
+    listagem = http.Response(
+      jsonEncode({
+        'files': [
+          {
+            'id': 'r1',
+            'name': _nomeRelatorio,
+            'modifiedTime': '2026-11-26T12:00:00.000Z',
+          },
+        ],
+      }),
+      200,
+    );
+    tokenValido();
+    await s.iniciar();
+    await (s as ServicosReais).tickSync();
+    expect((await s.atualizarRelatorios()).itens, hasLength(1));
+    expect(
+      kv.chaves().where((c) => c.startsWith('darf:relatorios/')),
+      isNotEmpty,
+    );
+
+    await s.sair();
+    await pumpEventQueue();
+
+    final v = await s.relatorios();
+    expect(v.situacao, SituacaoRelatorios.semConta);
+    expect(v.itens, isEmpty);
+    expect(kv.chaves().where((c) => c.startsWith('darf:relatorios/')), isEmpty);
   });
 
   test('sem atualizador', () {

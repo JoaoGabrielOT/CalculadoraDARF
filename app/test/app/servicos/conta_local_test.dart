@@ -247,6 +247,52 @@ void main() {
       expect(c.local.estado().ocupado, isFalse);
     });
 
+    test('reconectar com outra conta recusa: nada vai à planilha', () async {
+      final c = _Cenario()..comPlanilha();
+      await c.local.sincronizarAgora();
+      expect(c.local.estado().status, StatusSync.ok);
+      c.conta.chamadas.clear();
+      c.eventos.clear();
+      c.conta.emailLogin = 'bia@gmail.com';
+
+      await c.local.reconectar();
+
+      expect(c.conta.mesmaConta, 'ana@gmail.com');
+      expect(c.conta.chamadas, ['login']);
+      expect(c.local.estado().email, 'ana@gmail.com');
+      expect(c.local.estado().status, StatusSync.ok);
+      expect(c.local.estado().ocupado, isFalse);
+      final aviso = c.avisos.single;
+      expect(aviso.titulo, 'Login não concluído');
+      expect(
+        aviso.texto,
+        'Entre com a mesma conta (ana@gmail.com). Para trocar de conta, '
+        'use Sair na aba Conta.',
+      );
+    });
+
+    test('reconectar cancelado volta ao status de antes', () async {
+      final c = _Cenario()..comPlanilha();
+      await c.local.sincronizarAgora();
+      c.conta.segurarLogin = Completer<void>().future;
+      final f = c.local.reconectar();
+      await _pausa(10);
+      expect(c.local.estado().status, StatusSync.login);
+      await c.local.cancelarLogin();
+      await f;
+      expect(c.local.estado().status, StatusSync.ok);
+      expect(c.estados.last.status, StatusSync.ok);
+      expect(c.estados.last.ocupado, isFalse);
+    });
+
+    test('conectar sem sessão não pede a mesma conta', () async {
+      final c = _Cenario(email: null);
+      c.conta.achada = 'sid1';
+      await c.local.conectar();
+      expect(c.conta.chamadas.first, 'login');
+      expect(c.conta.mesmaConta, isNull);
+    });
+
     test('reconectar sem credencial avisa e não chama login', () async {
       final c = _Cenario();
       c.conta.credencial = false;

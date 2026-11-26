@@ -48,8 +48,54 @@ void main() {
     );
   });
 
+  test('URL de início com a conta atual leva o hint', () {
+    final url = urlInicioLogin(
+      api,
+      Uri.parse('https://calculadora-darf.onrender.com/#/'),
+      _nonce,
+      dica: 'ana@gmail.com',
+    );
+    expect(url.queryParameters, {
+      'volta': 'https://calculadora-darf.onrender.com',
+      'n': _nonce,
+      'hint': 'ana@gmail.com',
+    });
+  });
+
   group('criarLoginWeb', () {
     final origem = Uri.parse('https://calculadora-darf.onrender.com/#/');
+
+    test('mesmaConta: hint na ida e a conta guardada para a volta', () async {
+      final a = ArmazenamentoMemoria();
+      final idas = <Uri>[];
+      final login = criarLoginWeb(
+        api: api,
+        origem: origem,
+        nonces: GuardaNonceMemoria(),
+        armazenamento: a,
+        irPara: (url) async => idas.add(url),
+      );
+      unawaited(login((_) async {}, mesmaConta: 'ana@gmail.com'));
+      await pumpEventQueue();
+      expect(idas.single.queryParameters['hint'], 'ana@gmail.com');
+      expect(a.existe(arquivoMesmaConta), isTrue);
+
+      // login sem a conta atual apaga a marca
+      unawaited(login((_) async {}));
+      await pumpEventQueue();
+      expect(idas.last.queryParameters.containsKey('hint'), isFalse);
+      expect(consumirMesmaContaWeb(a), isNull);
+    });
+
+    test('consumirMesmaContaWeb devolve a conta e apaga', () {
+      final a = ArmazenamentoMemoria();
+      guardarMesmaContaWeb(a, 'ana@gmail.com');
+      expect(consumirMesmaContaWeb(a), 'ana@gmail.com');
+      expect(consumirMesmaContaWeb(a), isNull);
+      a.gravar(arquivoMesmaConta, '{quebrado');
+      expect(consumirMesmaContaWeb(a), isNull);
+      expect(a.existe(arquivoMesmaConta), isFalse);
+    });
 
     test('guarda o nonce, vai à URL uma vez e não termina', () async {
       final nonces = GuardaNonceMemoria();
@@ -117,6 +163,84 @@ void main() {
           login((_) async {}),
           _erro<ErroGoogle>('O login não foi concluído.'),
         );
+      },
+    );
+  });
+
+  group('gravarPacoteDaMesmaConta', () {
+    late List<http.Request> pedidos;
+    late ArmazenamentoMemoria a;
+    late String antes;
+
+    Future<String?> gravar(String email, {int statusToken = 200}) {
+      pedidos = [];
+      a = ArmazenamentoMemoria();
+      gravarPacoteWeb(a, 'v1.antigo');
+      antes = a.ler('token.json')!;
+      final cliente = MockClient((r) async {
+        pedidos.add(r);
+        if (r.url.path == '/api/auth/token') {
+          return http.Response(
+            jsonEncode({
+              'access_token': 'at-novo',
+              'expires_in': 3599,
+              'pacote': 'v1.girado',
+            }),
+            statusToken,
+          );
+        }
+        if (r.url.path == '/drive/v3/about') {
+          return http.Response(
+            jsonEncode({
+              'user': {'emailAddress': email},
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 200);
+      });
+      return gravarPacoteDaMesmaConta(
+        a,
+        _pacote,
+        mesmaConta: 'ana@gmail.com',
+        http: ClienteHttp(cliente),
+        api: api,
+      );
+    }
+
+    test('outra conta: revoga o pacote novo e o token antigo fica', () async {
+      expect(
+        await gravar('bia@gmail.com'),
+        'Entre com a mesma conta (ana@gmail.com). Para trocar de conta, '
+        'use Sair na aba Conta.',
+      );
+      expect(a.ler('token.json'), antes);
+      expect(jsonDecode(pedidos[0].body), {'pacote': _pacote});
+      expect(pedidos[1].url.host, 'www.googleapis.com');
+      expect(pedidos[1].headers['Authorization'], 'Bearer at-novo');
+      final sair = pedidos.last;
+      expect(sair.url.toString(), '$api/auth/sair');
+      expect(jsonDecode(sair.body), {'pacote': 'v1.girado'});
+    });
+
+    test('a mesma conta: grava o token novo já renovado', () async {
+      expect(await gravar('Ana@Gmail.com'), isNull);
+      final t = lerToken(a)!;
+      expect((t.token, t.refreshToken), ('at-novo', 'v1.girado'));
+      expect(pedidos.where((r) => r.url.path == '/api/auth/sair'), isEmpty);
+    });
+
+    test(
+      'sem confirmar a conta: o token antigo fica e o novo é revogado',
+      () async {
+        expect(
+          await gravar('ana@gmail.com', statusToken: 503),
+          'O login não foi concluído.',
+        );
+        expect(a.ler('token.json'), antes);
+        final sair = pedidos.last;
+        expect(sair.url.path, '/api/auth/sair');
+        expect(jsonDecode(sair.body), {'pacote': _pacote});
       },
     );
   });

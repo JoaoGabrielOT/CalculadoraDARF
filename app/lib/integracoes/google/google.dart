@@ -11,6 +11,7 @@ import 'token.dart';
 typedef FazerLogin = Future<String> Function(
   AbrirUrl abrirUrl, {
   Future<void>? cancelar,
+  String? mesmaConta,
 });
 
 /// O que o sincronizador precisa da conta Google (a fachada [Google] e os
@@ -20,7 +21,14 @@ abstract interface class ContaGoogle {
   bool get temCredencial;
   bool temToken();
   Future<String> carregarToken();
-  Future<String> login(AbrirUrl abrirUrl, {Future<void>? cancelar});
+
+  /// [mesmaConta] ("entrar de novo" com a sessão aberta): outra conta é
+  /// recusada com [OutraConta], sem trocar o token nem a sessão.
+  Future<String> login(
+    AbrirUrl abrirUrl, {
+    Future<void>? cancelar,
+    String? mesmaConta,
+  });
   void sair();
   Future<String?> buscarPlanilha([String dono = 'me']);
   Future<bool> planilhaExiste(String sid);
@@ -64,10 +72,18 @@ class Google implements ContaGoogle {
   Future<String> carregarToken() => sessao.carregarToken();
 
   @override
-  Future<String> login(AbrirUrl abrirUrl, {Future<void>? cancelar}) async {
+  Future<String> login(
+    AbrirUrl abrirUrl, {
+    Future<void>? cancelar,
+    String? mesmaConta,
+  }) async {
     final fazerLogin = this.fazerLogin;
     if (fazerLogin != null) {
-      return await fazerLogin(abrirUrl, cancelar: cancelar);
+      return await fazerLogin(
+        abrirUrl,
+        cancelar: cancelar,
+        mesmaConta: mesmaConta,
+      );
     }
     final cliente = this.cliente;
     if (cliente == null) {
@@ -79,6 +95,7 @@ class Google implements ContaGoogle {
       httpLogin,
       abrirUrl,
       cancelar: cancelar,
+      mesmaConta: mesmaConta,
     );
   }
 

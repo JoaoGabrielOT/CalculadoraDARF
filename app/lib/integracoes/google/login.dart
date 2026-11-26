@@ -42,12 +42,14 @@ String desafioPkce(String verificador) => base64Url
   return (verificador: verificador, desafio: desafioPkce(verificador));
 }
 
-/// google_sync.py:197-200.
+/// google_sync.py:197-200; [dica] (`login_hint`) é a conta atual no "entrar
+/// de novo".
 Uri urlAutorizacao(
   ClienteOAuth cliente, {
   required String redirect,
   required String desafio,
   required String estado,
+  String? dica,
 }) => Uri.parse(cliente.authUri).replace(
   queryParameters: {
     'client_id': cliente.clientId,
@@ -59,6 +61,7 @@ Uri urlAutorizacao(
     'code_challenge': desafio,
     'code_challenge_method': 'S256',
     'state': estado,
+    'login_hint': ?dica,
   },
 );
 
@@ -67,7 +70,9 @@ String? _valor(Map<String, List<String>> q, String chave) =>
     (q[chave] ?? const []).where((v) => v.isNotEmpty).firstOrNull;
 
 /// google_sync.py:148-244: login com PKCE e servidor loopback; devolve o
-/// e-mail da conta e deixa o `token.json` gravado.
+/// e-mail da conta e deixa o `token.json` gravado. Com [mesmaConta] ("entrar
+/// de novo"), outra conta lança [OutraConta] antes de gravar o token ou trocar
+/// a sessão.
 Future<String> loginNavegador(
   SessaoGoogle sessao,
   ClienteOAuth cliente,
@@ -76,6 +81,7 @@ Future<String> loginNavegador(
   Duration tempoLimite = const Duration(seconds: 600),
   Esperar? esperar,
   Future<void>? cancelar,
+  String? mesmaConta,
 }) async {
   final dormir = esperar ?? Future<void>.delayed;
   final pkce = gerarPkce();
@@ -127,6 +133,7 @@ Future<String> loginNavegador(
         redirect: redirect,
         desafio: pkce.desafio,
         estado: estado,
+        dica: mesmaConta,
       ),
     );
     try {
@@ -208,15 +215,23 @@ Future<String> loginNavegador(
       isUtc: true,
     ),
   );
-  gravarToken(sessao.armazenamento, token);
-  while (true) {
-    try {
-      return await sessao.iniciar(token);
-    } on Offline {
-      if (ambiente.agora() > prazo) rethrow;
-      await dormir(const Duration(seconds: 2));
+  Future<T> repetindo<T>(Future<T> Function() pedido) async {
+    while (true) {
+      try {
+        return await pedido();
+      } on Offline {
+        if (ambiente.agora() > prazo) rethrow;
+        await dormir(const Duration(seconds: 2));
+      }
     }
   }
+
+  if (mesmaConta != null &&
+      await repetindo(() => emailDaConta(sessao.http, acesso)) != mesmaConta) {
+    throw OutraConta(mesmaConta);
+  }
+  gravarToken(sessao.armazenamento, token);
+  return repetindo(() => sessao.iniciar(token));
 }
 
 Future<pkg.Response> _trocarCodigo(

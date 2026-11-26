@@ -572,6 +572,61 @@ void main() {
     },
   );
 
+  test('limpar apaga o índice e todos os conteúdos (sair da conta)', () async {
+    final f = FonteFalsa(
+      arquivos: [_arq('2026-11-25'), _arq('2026-11-26')],
+      conteudos: {
+        'id-2026-11-26': _doDia('2026-11-26'),
+        'id-2026-11-25': _doDia('2026-11-25'),
+      },
+    );
+    final disco = ArmazenamentoMemoria();
+    final local = _local(f, disco);
+    await local.atualizar();
+    // conteúdo órfão (fora do índice) também sai
+    disco.gravar('relatorios/relatorio-abertura-2026-01-02.json', '{}');
+    disco.gravar('config.json', '{}');
+
+    await local.limpar();
+
+    expect(disco.listar(), ['config.json']);
+    expect((await local.emCache()).itens, isEmpty);
+  });
+
+  test(
+    'limpar com o disco recusando gravações esquece o que está na memória',
+    () async {
+      final f = FonteFalsa(
+        arquivos: [_arq('2026-11-26')],
+        conteudos: {'id-2026-11-26': _doDia('2026-11-26')},
+      );
+      final local = _local(f, DiscoCheio());
+      expect((await local.atualizar()).atual, isNotNull);
+      await local.limpar();
+      final v = await local.emCache();
+      expect(v.itens, isEmpty);
+      expect(v.atual, isNull);
+    },
+  );
+
+  test('emCache sem conta nem token: semConta, sem itens', () async {
+    final f = FonteFalsa(
+      arquivos: [_arq('2026-11-26')],
+      conteudos: {'id-2026-11-26': _doDia('2026-11-26')},
+    );
+    final disco = ArmazenamentoMemoria();
+    await _local(f, disco).atualizar();
+    final v = await _local(f, disco, conta: ContaFalsa()).emCache();
+    expect(v.situacao, SituacaoRelatorios.semConta);
+    expect(v.itens, isEmpty);
+    // com o token (sessão ainda abrindo) o cache aparece
+    final comToken = ContaFalsa()..token = true;
+    expect(
+      (await _local(f, disco, conta: comToken).emCache()).itens,
+      hasLength(1),
+    );
+  });
+
   test('emCache mostra o que está guardado sem pedir nada', () async {
     final f = FonteFalsa(
       arquivos: [_arq('2026-11-25'), _arq('2026-11-26')],

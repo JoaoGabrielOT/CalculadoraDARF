@@ -131,8 +131,30 @@ class RelatoriosLocal {
 
   String get _hoje => hojeBrasilia(ambiente.agoraBr());
 
+  /// Sem conta nem token (saiu da conta): `semConta`, sem o cache.
   Future<VisaoRelatorios> emCache() async =>
-      _visao(_lerIndice(), SituacaoRelatorios.ok);
+      conta.email == null && !conta.temToken()
+      ? _semConta()
+      : _visao(_lerIndice(), SituacaoRelatorios.ok);
+
+  /// Sair da conta: apaga o índice e os conteúdos já, e de novo depois do que
+  /// estiver em curso na fila (um `atualizar` em voo regravaria o índice).
+  Future<void> limpar() {
+    _limparAgora();
+    return _naFila(() async => _limparAgora());
+  }
+
+  void _limparAgora() {
+    _pendente = null;
+    _naMemoria.clear();
+    final nomes = <String>{
+      for (final nome in _indiceDoDisco().arquivos.keys) _caminho(nome),
+      // conteúdos fora do índice (o disco do app lista só a raiz)
+      ...disco.listar().where((n) => n.startsWith('relatorios/')),
+    }..remove(arquivoIndiceRelatorios);
+    nomes.forEach(_apagar);
+    _apagar(arquivoIndiceRelatorios);
+  }
 
   /// Lista a pasta e baixa o que mudou; chamadas simultâneas compartilham o
   /// mesmo pedido.
@@ -176,11 +198,7 @@ class RelatoriosLocal {
     if (conta.email == null) {
       return conta.temToken()
           ? _visao(_lerIndice(), SituacaoRelatorios.semConexao)
-          : VisaoRelatorios(
-              itens: const [],
-              hoje: _hoje,
-              situacao: SituacaoRelatorios.semConta,
-            );
+          : _semConta();
     }
     if (!podeLerRelatorios(fonte.escopos)) return _novoLogin();
     final List<ArquivoRelatorio> arquivos;
@@ -299,6 +317,12 @@ class RelatoriosLocal {
 
   bool _temConteudo(String nome) =>
       _naMemoria.containsKey(nome) || disco.existe(_caminho(nome));
+
+  VisaoRelatorios _semConta() => VisaoRelatorios(
+    itens: const [],
+    hoje: _hoje,
+    situacao: SituacaoRelatorios.semConta,
+  );
 
   VisaoRelatorios _novoLogin() => VisaoRelatorios(
     itens: const [],

@@ -103,6 +103,34 @@ test('inicio válido -> 302 para o Google com PKCE e cookie', async () => {
   assert.equal(p.get('code_challenge'), desafio);
 });
 
+test('inicio sem hint não manda login_hint', async () => {
+  const { GET } = criarInicio(dep());
+  const r = await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}`, { origem: null }));
+  assert.equal(r.status, 302);
+  assert.equal(new URL(r.headers.get('location')).searchParams.has('login_hint'), false);
+});
+
+test('inicio com hint de e-mail -> login_hint para o Google', async () => {
+  const { GET } = criarInicio(dep());
+  const hint = encodeURIComponent('ana@gmail.com');
+  const r = await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}&hint=${hint}`, { origem: null }));
+  assert.equal(r.status, 302);
+  assert.equal(new URL(r.headers.get('location')).searchParams.get('login_hint'), 'ana@gmail.com');
+});
+
+test('inicio com hint inválido -> 400 sem cookie', async () => {
+  const { GET } = criarInicio(dep());
+  const longo = `${'a'.repeat(250)}@x.com`;
+  for (const hint of ['', 'sem-arroba', 'a b@x.com', 'a@b', '<script>@x.com', longo]) {
+    const r = await GET(
+      pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}&hint=${encodeURIComponent(hint)}`, { origem: null }),
+    );
+    assert.equal(r.status, 400, hint);
+    assert.deepEqual(await r.json(), { erro: 'hint' });
+    assert.equal(r.headers.get('set-cookie'), null);
+  }
+});
+
 test('inicio com a configuração de produção recusa localhost -> 400', async () => {
   const { GET } = criarInicio(dep());
   for (const volta of ['http://localhost:8080', 'http://127.0.0.1:8080']) {

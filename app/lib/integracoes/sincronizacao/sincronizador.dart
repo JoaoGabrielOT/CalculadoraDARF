@@ -140,17 +140,24 @@ class Sincronizador {
     }
   }
 
-  Future<void> conectar(AbrirUrl abrirUrl) async {
+  /// [mesmaConta]: login de novo com a sessão aberta (a conta recusa outra).
+  /// Se falhar com a conta ainda aberta, o status volta ao de antes.
+  Future<void> conectar(AbrirUrl abrirUrl, {String? mesmaConta}) async {
     if (ocupado) return;
     final geracao = _geracao;
+    final antes = _status;
     final cancelamento = _cancelamento = Completer<void>();
     _logando = true;
     _definirStatus(StatusSync.login);
     try {
-      await conta.login(abrirUrl, cancelar: cancelamento.future);
+      await conta.login(
+        abrirUrl,
+        cancelar: cancelamento.future,
+        mesmaConta: mesmaConta,
+      );
     } catch (e) {
       if (geracao != _geracao) return;
-      _definirStatus(StatusSync.off);
+      _definirStatus(conta.email != null ? antes : StatusSync.off);
       final texto = e.toString();
       _avisar(texto.isEmpty ? 'O login não foi concluído.' : texto);
       return;

@@ -71,17 +71,22 @@ void main() {
 
   test('fazerLogin sem cliente: temCredencial e login delega', () async {
     Future<void>? recebido;
+    String? conta;
     final cancelar = Completer<void>().future;
     final g = _google(
       null,
-      fazerLogin: (abrirUrl, {cancelar}) async {
+      fazerLogin: (abrirUrl, {cancelar, mesmaConta}) async {
         recebido = cancelar;
+        conta = mesmaConta;
         return 'ana@gmail.com';
       },
     );
     expect(g.temCredencial, isTrue);
     expect(await g.login((_) async {}, cancelar: cancelar), 'ana@gmail.com');
     expect(recebido, same(cancelar));
+    expect(conta, isNull);
+    await g.login((_) async {}, mesmaConta: 'ana@gmail.com');
+    expect(conta, 'ana@gmail.com');
   });
 
   test('sair entrega o token do pacote ao aoSair e apaga o token.json', () {

@@ -20,6 +20,12 @@ class ContaFalsa implements ContaGoogle {
   String? planilhaAmigo;
   Map<String, List<Linha>> abasAmigo = normalizarLeitura({});
 
+  /// Conta com que o usuário entra no navegador.
+  String emailLogin = 'ana@gmail.com';
+
+  /// `mesmaConta` recebido no último login.
+  String? mesmaConta;
+
   @override
   bool get temCredencial => credencial;
 
@@ -29,9 +35,16 @@ class ContaFalsa implements ContaGoogle {
   @override
   Future<String> carregarToken() async => email = 'ana@gmail.com';
 
+  /// Como a conta real: com [mesmaConta], outra conta é recusada antes de
+  /// trocar o token ou a sessão.
   @override
-  Future<String> login(AbrirUrl abrirUrl, {Future<void>? cancelar}) async {
+  Future<String> login(
+    AbrirUrl abrirUrl, {
+    Future<void>? cancelar,
+    String? mesmaConta,
+  }) async {
     chamadas.add('login');
+    this.mesmaConta = mesmaConta;
     final segurar = segurarLogin;
     if (segurar != null) {
       await Future.any<void>([
@@ -42,7 +55,10 @@ class ContaFalsa implements ContaGoogle {
           ),
       ]);
     }
-    return email = 'ana@gmail.com';
+    if (mesmaConta != null && emailLogin != mesmaConta) {
+      throw OutraConta(mesmaConta);
+    }
+    return email = emailLogin;
   }
 
   @override

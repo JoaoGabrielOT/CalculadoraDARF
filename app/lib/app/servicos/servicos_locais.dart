@@ -332,8 +332,14 @@ class ServicosLocais implements ServicosApp {
   @override
   Future<void> cancelarLogin() => _conta.cancelarLogin();
 
+  /// Sair também apaga o cache dos relatórios (sem esperar um `atualizar` em
+  /// voo: `relatorios()` já responde `semConta`).
   @override
-  Future<void> sair() => _conta.sair();
+  Future<void> sair() async {
+    await _conta.sair();
+    final relatorios = _relatoriosLocal;
+    if (relatorios != null) unawaited(relatorios.limpar());
+  }
 
   @override
   Future<void> sincronizarAgora() => _conta.sincronizarAgora();
