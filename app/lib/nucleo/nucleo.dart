@@ -44,6 +44,7 @@ export 'planilha/reconstrucao.dart';
 export 'planilha/sincronizacao.dart';
 export 'posicoes.dart';
 export 'radar.dart';
+export 'relatorios/relatorio.dart';
 export 'repositorio.dart';
 export 'sugestoes/cenario.dart';
 export 'sugestoes/patrimonio.dart';

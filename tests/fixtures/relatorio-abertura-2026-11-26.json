@@ -1,0 +1,1095 @@
+{
+  "schemaVersion": 1,
+  "tipo": "abertura",
+  "data": "2026-11-26",
+  "dataExtenso": "Quinta-feira, 26 de novembro de 2026",
+  "geradoEm": "2026-11-26T15:40:00-03:00",
+  "titulo": "Relatório de Abertura de Mercado — 26/11/2026",
+  "origemAtivos": {
+    "planilha": "Calculadora DARF",
+    "aba": "Radar",
+    "quantidade": 22
+  },
+  "avisosTopo": [
+    "Edição gerada às 15h40, com o pregão já aberto. Nos próximos dias úteis, o relatório fica pronto antes das 9h30."
+  ],
+  "indicadores": [
+    {
+      "nome": "Ibovespa",
+      "valor": "174.204 pts",
+      "variacao": "+4,51%",
+      "direcao": "alta",
+      "contexto": "às 11h40 · ontem: 166.684,61 (+1,58%)"
+    },
+    {
+      "nome": "Dólar",
+      "valor": "R$ 5,7147",
+      "variacao": "-1,78%",
+      "direcao": "queda",
+      "contexto": "mínima do dia · ontem: R$ 5,8168 (-1,59%)"
+    },
+    {
+      "nome": "IPCA-15 (inflação)",
+      "valor": "0,22%",
+      "variacao": null,
+      "direcao": "neutra",
+      "contexto": "abaixo da menor estimativa (0,27%)"
+    },
+    {
+      "nome": "Juros futuros (jan/29)",
+      "valor": "14,48%",
+      "variacao": "-0,18 p.p.",
+      "direcao": "queda",
+      "contexto": "às 9h17"
+    },
+    {
+      "nome": "Petróleo Brent",
+      "valor": "US$ 94,77",
+      "variacao": "+0,17%",
+      "direcao": "alta",
+      "contexto": "às 8h12"
+    },
+    {
+      "nome": "Minério (China)",
+      "valor": "US$ 99,48",
+      "variacao": "+1,07%",
+      "direcao": "alta",
+      "contexto": "Bolsa de Dalian"
+    }
+  ],
+  "alertas": [
+    "Bolsas dos EUA fechadas hoje (feriado de Ação de Graças). Menos negócios no Brasil e os BDRs (T1TW34 e GOGL34) ficam sem referência de Nova York."
+  ],
+  "resumo": "O Ibovespa fechou ontem em 166.684,61 pontos (+1,58%) e hoje dispara, chegando a 174.204 pontos (+4,51%) por volta das 11h40. Há dois motivos principais: a prévia da inflação (IPCA-15) veio em 0,22%, abaixo da menor estimativa, e surgiram rumores de que Luiz Carlos Trabuco, presidente do Conselho do Bradesco, assuma o Ministério da Fazenda. O dólar cai e chegou a R$ 5,7147, e os juros futuros também recuam. As bolsas americanas estão fechadas pelo feriado de Ação de Graças. No radar ficam a proposta de tarifas dos EUA de 20% a 40% sobre 14 parceiros (prevista para fevereiro ou março de 2027) e a queda acumulada do Ibovespa no 4º trimestre: -10,55%.",
+  "termometro": {
+    "positiva": 7,
+    "mista": 7,
+    "neutra": 3,
+    "negativa": 5
+  },
+  "ativos": [
+    {
+      "posicao": 0,
+      "ticker": "CSNA3",
+      "empresa": "Companhia Siderúrgica Nacional",
+      "descricao": "CSN · siderurgia e mineração",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "A família Steinbruch, por meio de suas holdings.",
+      "preco": {
+        "texto": "R$ 3,45",
+        "valor": 3.45,
+        "moeda": "BRL",
+        "data": "2026-11-25",
+        "variacao": "+6,48%",
+        "direcao": "alta",
+        "observacao": "no dia"
+      },
+      "precoExterior": null,
+      "noticias": "Prejuízo de R$ 1,247 bilhão no 3º trimestre de 2026 (um ano antes, lucro de R$ 76 milhões). Depois do balanço, a ação caiu cerca de 10% e foi ao menor nível em 10 anos. Vencem R$ 7,8 bi em dívidas em 2027 e R$ 6,2 bi em 2028, contra R$ 12,2 bi em caixa.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente com data.",
+        "itens": []
+      },
+      "riscos": "Dívida alta e prejuízo; o preço oscila muito.",
+      "fontes": [
+        {
+          "nome": "InfoMoney",
+          "url": "https://www.infomoney.com.br/mercados/ibovespa-hoje-bolsa-de-valores-ao-vivo-26112026/"
+        },
+        {
+          "nome": "Acionista",
+          "url": "https://acionista.com.br/resultado-csn-3-trimestre-2026/"
+        },
+        {
+          "nome": "InvestNews",
+          "url": "https://investnews.com.br/investimentos/csn-afunda-10-e-atinge-menor-patamar-em-10-anos-apos-prejuizo-bilionario/?noamp=mobile"
+        }
+      ]
+    },
+    {
+      "posicao": 1,
+      "ticker": "T1TW34",
+      "empresa": "Take-Two Interactive Software, Inc.",
+      "descricao": "Take-Two (BDR) · games, dona da Rockstar",
+      "tipoAtivo": "bdr",
+      "leitura": "positiva",
+      "explicacao": "BDR é um recibo negociado na B3 que representa uma ação estrangeira. O preço acompanha a ação nos EUA e o dólar.",
+      "dono": "Capital espalhado entre muitos acionistas, principalmente grandes fundos.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": {
+        "ticker": "TTWO",
+        "bolsa": "Nasdaq",
+        "texto": "US$ 216,54",
+        "valor": 216.54,
+        "moeda": "USD",
+        "data": "2026-11-18",
+        "variacao": "+6,18%",
+        "direcao": "alta"
+      },
+      "noticias": "O GTA VI saiu em 19/11 com nota 99 no Metacritic e vendeu mais de 17 milhões de cópias, passando de US$ 1,6 bilhão (Sensor Tower). A previsão de vendas do ano fiscal 2027 foi mantida em US$ 8,0 a 8,2 bilhões.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente com data.",
+        "itens": []
+      },
+      "riscos": "Com a Nasdaq fechada hoje, o BDR fica sem referência; a queda do dólar pesa no preço em reais.",
+      "fontes": [
+        {
+          "nome": "Beinsure",
+          "url": "https://beinsure.com/news/take-two-ttwo-stock-price-forecast-gta-vi-launch-drives-wall-street-upside/"
+        },
+        {
+          "nome": "Stocktwits",
+          "url": "https://stocktwits.com/news-articles/markets/equity/gta-vi-sales-top-1-6-b-take-two-console-partners-microsoft-and-sony-shares-rise/cNbiPZlR9is"
+        },
+        {
+          "nome": "Motley Fool",
+          "url": "https://www.fool.com/investing/2026/11/10/why-take-two-stock-s-got-game-today/"
+        }
+      ]
+    },
+    {
+      "posicao": 2,
+      "ticker": "TAEE11",
+      "empresa": "Transmissora Aliança de Energia Elétrica S.A.",
+      "descricao": "Taesa · transmissão de energia",
+      "tipoAtivo": "unit",
+      "leitura": "neutra",
+      "explicacao": null,
+      "dono": "A Cemig e a colombiana ISA dividem o controle.",
+      "preco": {
+        "texto": "R$ 41,34",
+        "valor": 41.34,
+        "moeda": "BRL",
+        "data": "2026-11-11",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro regulatório de R$ 363,8 milhões no 3T26 (+12,5%). Dividendos de R$ 1,06 por unit, pagos em 27/01/2027 a quem tinha a ação em 16/11. Quem comprar agora não recebe esse dividendo.",
+      "especialistas": {
+        "resumo": "BTG: venda, preço-alvo R$ 40 (11/11/2026).",
+        "itens": [
+          {
+            "casa": "BTG Pactual",
+            "recomendacao": "venda",
+            "precoAlvo": "R$ 40,00",
+            "data": "2026-11-11",
+            "url": "https://content.btgpactual.com/research/home/acoes/ativo/TAEE11"
+          }
+        ]
+      },
+      "riscos": "Potencial de alta limitado; é uma ação defensiva, que tende a oscilar menos.",
+      "fontes": [
+        {
+          "nome": "BTG Pactual",
+          "url": "https://content.btgpactual.com/research/home/acoes/ativo/TAEE11"
+        },
+        {
+          "nome": "Visno",
+          "url": "https://visnoinvest.com.br/news/16443/taesa-taee11-registra-lucro-de-r-3638-mi-no-3t26-alta-de-125"
+        },
+        {
+          "nome": "Fundamentei",
+          "url": "https://fundamentei.com/en-US/br/cmig4"
+        }
+      ]
+    },
+    {
+      "posicao": 3,
+      "ticker": "BPAC11",
+      "empresa": "Banco BTG Pactual S.A.",
+      "descricao": "BTG Pactual · banco",
+      "tipoAtivo": "unit",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Os sócios do banco.",
+      "preco": {
+        "texto": "R$ 55,72",
+        "valor": 55.72,
+        "moeda": "BRL",
+        "data": "2026-11-10",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "Entre 20/10 e 11/11 caiu de R$ 81,71 para R$ 55,95 (-31,5%)."
+      },
+      "precoExterior": null,
+      "noticias": "Lucro ajustado recorde de R$ 5,3 bilhões no 3T26 (+17%). O banco aprovou a recompra de até R$ 2 bilhões em ações em 18 meses.",
+      "especialistas": {
+        "resumo": "De 74 analistas, 37 recomendam compra, 18 manutenção e 19 venda; preço-alvo médio R$ 65,94 (consenso de 10/11).",
+        "itens": [
+          {
+            "casa": "Consenso (Clube Acionista)",
+            "recomendacao": "37 compra / 18 manutenção / 19 venda",
+            "precoAlvo": "R$ 65,94",
+            "data": "2026-11-10",
+            "url": "https://acionista.com.br/bpac11-recua-mas-o-ranking-aponta-outra-direcao/"
+          }
+        ]
+      },
+      "riscos": "Muito sensível ao humor político e fiscal.",
+      "fontes": [
+        {
+          "nome": "Altarenda",
+          "url": "https://altarendablog.com.br/?p=104213"
+        },
+        {
+          "nome": "Visno",
+          "url": "https://visnoinvest.com.br/news/16458/btg-pactual-bpac11-aprova-recompra-de-ate-r-2-bi-em-acoes"
+        },
+        {
+          "nome": "brapi",
+          "url": "https://brapi.dev/news/btg-supera-consenso-e-lucra-r-5-3-bi-no-3t26-com-e7482742"
+        },
+        {
+          "nome": "Acionista",
+          "url": "https://acionista.com.br/bpac11-recua-mas-o-ranking-aponta-outra-direcao/"
+        }
+      ]
+    },
+    {
+      "posicao": 4,
+      "ticker": "VBBR3",
+      "empresa": "Vibra Energia S.A.",
+      "descricao": "Vibra · combustíveis",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Capital espalhado, sem controlador.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 2,46 bilhões no 3T26 (+504%). Anunciou R$ 499 milhões em JCP (juros sobre capital próprio, uma forma de dividendo), com pagamento previsto para novembro de 2027.",
+      "especialistas": {
+        "resumo": "A Ativa viu o resultado bem acima do esperado, mas manteve recomendação neutra.",
+        "itens": [
+          {
+            "casa": "Ativa Investimentos",
+            "recomendacao": "neutra",
+            "precoAlvo": null,
+            "data": "2026-11",
+            "url": "https://euqueroinvestir.com/acoes/vibra-vbbr3-ativa-ve-ebitda-23-acima-do-esperado-mas-mantem-recomendacao-neutra"
+          }
+        ]
+      },
+      "riscos": "O diesel segue 81% abaixo do preço internacional (Abicom).",
+      "fontes": [
+        {
+          "nome": "NovaCana",
+          "url": "https://www.novacana.com/noticias/vibra-tem-lucro-de-r-2-46-bilhoes-no-3-trimestre-de-2026-alta-de-504"
+        },
+        {
+          "nome": "Visno",
+          "url": "https://visnoinvest.com.br/news/16105/vibra-vbbr3-registra-lucro-liquido-de-r-25-bi-no-3t26"
+        },
+        {
+          "nome": "EuQueroInvestir",
+          "url": "https://euqueroinvestir.com/acoes/vibra-vbbr3-ativa-ve-ebitda-23-acima-do-esperado-mas-mantem-recomendacao-neutra"
+        }
+      ]
+    },
+    {
+      "posicao": 5,
+      "ticker": "BBAS3",
+      "empresa": "Banco do Brasil S.A.",
+      "descricao": "Banco do Brasil · banco",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "A União (governo federal).",
+      "preco": {
+        "texto": "R$ 15,31",
+        "valor": 15.31,
+        "moeda": "BRL",
+        "data": "2026-11-12",
+        "variacao": "-9,35%",
+        "direcao": "queda",
+        "observacao": "durante o pregão"
+      },
+      "precoExterior": null,
+      "noticias": "Lucro ajustado de R$ 1,3 bilhão no 3T26 (-66,5%), quando o mercado esperava R$ 3,5 bilhões. O banco cortou pela metade a previsão de lucro e passará a pagar só o dividendo mínimo obrigatório.",
+      "especialistas": {
+        "resumo": "Citi: venda, preço-alvo cortado de R$ 22,40 para R$ 15 (fim de outubro).",
+        "itens": [
+          {
+            "casa": "Citi",
+            "recomendacao": "venda",
+            "precoAlvo": "R$ 15,00",
+            "data": "2026-10",
+            "url": "https://bpmoney.com.br/?p=431447"
+          }
+        ]
+      },
+      "riscos": "Inadimplência em alta, principalmente no agronegócio.",
+      "fontes": [
+        {
+          "nome": "Status Invest",
+          "url": "https://statusinvest.com.br/noticias/?p=8767"
+        },
+        {
+          "nome": "Acionista",
+          "url": "https://acionista.com.br/banco-do-brasil-bbas3-queda-3t26/"
+        },
+        {
+          "nome": "BP Money",
+          "url": "https://bpmoney.com.br/?p=431447"
+        }
+      ]
+    },
+    {
+      "posicao": 6,
+      "ticker": "BBDC4",
+      "empresa": "Banco Bradesco S.A.",
+      "descricao": "Bradesco · banco",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "A holding Cidade de Deus e a Fundação Bradesco.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "+4,19% em 25/11"
+      },
+      "precoExterior": null,
+      "noticias": "Rumor de que Luiz Carlos Trabuco, presidente do Conselho do banco, assuma o Ministério da Fazenda.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente com data.",
+        "itens": []
+      },
+      "riscos": "A alta se apoia em rumor; um desmentido pode reverter o movimento.",
+      "fontes": [
+        {
+          "nome": "InfoMoney",
+          "url": "https://www.infomoney.com.br/mercados/ibovespa-hoje-bolsa-de-valores-ao-vivo-26112026/"
+        },
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://seudinheiro.com/2026/bolsa-dolar/ibovespa-dispara-mais-de-3-e-dolar-recua-a-r-572-o-que-anima-o-mercado-hoje-davs"
+        }
+      ]
+    },
+    {
+      "posicao": 7,
+      "ticker": "RENT3",
+      "empresa": "Localiza Rent a Car S.A.",
+      "descricao": "Localiza · aluguel de carros",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Capital espalhado; os fundadores têm uma fatia relevante.",
+      "preco": {
+        "texto": "R$ 29,58",
+        "valor": 29.58,
+        "moeda": "BRL",
+        "data": "2026-11-12",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "-32,11% no ano"
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 1,125 bilhão no 3T26 (+29,1%).",
+      "especialistas": {
+        "resumo": "Citi: compra, preço-alvo elevado de R$ 45 para R$ 56 (14/10/2026).",
+        "itens": [
+          {
+            "casa": "Citi",
+            "recomendacao": "compra",
+            "precoAlvo": "R$ 56,00",
+            "data": "2026-10-14",
+            "url": "https://bpmoney.com.br/?p=427234"
+          }
+        ]
+      },
+      "riscos": "A empresa depende de crédito: juros menores ajudam, juros maiores atrapalham.",
+      "fontes": [
+        {
+          "nome": "EuQueroInvestir",
+          "url": "https://euqueroinvestir.com/acoes/localiza-rent3-lucro-3t26-resultados"
+        },
+        {
+          "nome": "BP Money",
+          "url": "https://bpmoney.com.br/?p=427234"
+        },
+        {
+          "nome": "MarketScreener",
+          "url": "https://sa.marketscreener.com/quote/stock/LOCALIZA-RENT-A-CAR-S-A-6497794/"
+        }
+      ]
+    },
+    {
+      "posicao": 8,
+      "ticker": "CMIG4",
+      "empresa": "Companhia Energética de Minas Gerais - CEMIG",
+      "descricao": "Cemig · energia (MG)",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "O governo de Minas Gerais é o principal acionista.",
+      "preco": {
+        "texto": "R$ 10,72",
+        "valor": 10.72,
+        "moeda": "BRL",
+        "data": "2026-11-11",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 1,717 bilhão no 3T26 (+115,5%).",
+      "especialistas": {
+        "resumo": "Sem recomendação recente com data.",
+        "itens": []
+      },
+      "riscos": "Decisões do governo estadual e regras do setor elétrico.",
+      "fontes": [
+        {
+          "nome": "Visno",
+          "url": "https://visnoinvest.com.br/news/16516/cemig-cmig4-registra-lucro-de-r-17-bi-no-3t26"
+        },
+        {
+          "nome": "Status Invest",
+          "url": "https://statusinvest.com.br/acoes/cmig4"
+        }
+      ]
+    },
+    {
+      "posicao": 9,
+      "ticker": "PETR4",
+      "empresa": "Petróleo Brasileiro S.A. - Petrobras",
+      "descricao": "Petrobras · petróleo",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "A União.",
+      "preco": {
+        "texto": "R$ 43,90",
+        "valor": 43.9,
+        "moeda": "BRL",
+        "data": "2026-11-11",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "durante o pregão; +2,00% em 25/11"
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 39,7 bilhões no 3T26 (+21,5%). A projeção de produção de 2026 subiu para 2,7 a 2,8 milhões de barris por dia.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente com data.",
+        "itens": []
+      },
+      "riscos": "Interferência política nos preços: o diesel está 81% abaixo do preço internacional.",
+      "fontes": [
+        {
+          "nome": "Times Brasil",
+          "url": "https://timesbrasil.com.br/empresas-e-negocios/acoes-da-petrobras-caem-2-apos-divulgacao-de-resultados-do-terceiro-trimestre/"
+        },
+        {
+          "nome": "Status Invest",
+          "url": "https://statusinvest.com.br/noticias/petr4-petrobras-revisa-capex-producao-2026/amp/"
+        },
+        {
+          "nome": "InfoMoney",
+          "url": "https://www.infomoney.com.br/mercados/ibovespa-hoje-bolsa-de-valores-ao-vivo-26112026/"
+        }
+      ]
+    },
+    {
+      "posicao": 10,
+      "ticker": "EMBJ3",
+      "empresa": "Embraer S.A.",
+      "descricao": "Embraer · aviões",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Capital espalhado; a União tem uma ação especial com poder de veto em alguns temas.",
+      "preco": {
+        "texto": "R$ 103,20",
+        "valor": 103.2,
+        "moeda": "BRL",
+        "data": "2026-11-25",
+        "variacao": "-4,00%",
+        "direcao": "queda",
+        "observacao": "maior queda do Ibovespa no dia"
+      },
+      "precoExterior": null,
+      "noticias": "A proposta dos EUA de tarifas de 20% a 40% sobre 14 parceiros pode afetar exportações de aviões e açúcar. No 3T26, a empresa elevou a previsão de receita para US$ 8,4 a 8,6 bilhões.",
+      "especialistas": {
+        "resumo": "BB-BI: compra, preço-alvo de R$ 123 para o fim de 2027 (10/11/2026).",
+        "itens": [
+          {
+            "casa": "BB-BI",
+            "recomendacao": "compra",
+            "precoAlvo": "R$ 123,00 (fim de 2027)",
+            "data": "2026-11-10",
+            "url": "https://investalk.bb.com.br/noticias/mercado/EMBJ-3T26"
+          }
+        ]
+      },
+      "riscos": "As tarifas americanas.",
+      "fontes": [
+        {
+          "nome": "InfoMoney",
+          "url": "https://www.infomoney.com.br/mercados/ibovespa-hoje-bolsa-de-valores-ao-vivo-26112026/"
+        },
+        {
+          "nome": "SP Diário",
+          "url": "https://spdiario.com.br/noticias/economia/ibovespa-dispara-quase-4-e-dolar-recua-com-possivel-indicacao-de-trabuco-para-a-fazenda.html"
+        },
+        {
+          "nome": "Suno",
+          "url": "https://www.suno.com.br/noticias/?p=670079"
+        },
+        {
+          "nome": "BB-BI",
+          "url": "https://investalk.bb.com.br/noticias/mercado/EMBJ-3T26"
+        }
+      ]
+    },
+    {
+      "posicao": 11,
+      "ticker": "PRIO3",
+      "empresa": "Prio S.A.",
+      "descricao": "PRIO · petróleo",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Capital espalhado.",
+      "preco": {
+        "texto": "R$ 60,48",
+        "valor": 60.48,
+        "moeda": "BRL",
+        "data": "2026-11-06",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "-15,40% na semana"
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de US$ 516,6 milhões no 3T26 (+707%) e produção recorde de 191,6 mil barris por dia.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente com data.",
+        "itens": []
+      },
+      "riscos": "O preço do petróleo, que caiu cerca de 8% em um único dia (4/11). Os dados de produção de novembro saem no início de dezembro.",
+      "fontes": [
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/lucro-da-prio-prio3-explode-707-com-producao-recorde-e-brent-mais-caro-123695/"
+        },
+        {
+          "nome": "MarketScreener",
+          "url": "https://sa.marketscreener.com/quote/stock/PRIO-S-A-22619676/"
+        }
+      ]
+    },
+    {
+      "posicao": 12,
+      "ticker": "LREN3",
+      "empresa": "Lojas Renner S.A.",
+      "descricao": "Lojas Renner · varejo de moda",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "Sem controlador; 94,42% das ações circulam livremente na bolsa.",
+      "preco": {
+        "texto": "R$ 10,05",
+        "valor": 10.05,
+        "moeda": "BRL",
+        "data": "2026-10-27",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "-26,02% no ano"
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 246,4 milhões no 3T26 (-11,8%). A empresa deixou de divulgar projeções de crescimento de receita.",
+      "especialistas": {
+        "resumo": "Genial: guidance cai, receita decepciona (05/11).",
+        "itens": [
+          {
+            "casa": "Genial Investimentos",
+            "recomendacao": "avaliação negativa do 3T26",
+            "precoAlvo": null,
+            "data": "2026-11-05",
+            "url": "https://analisa.genialinvestimentos.com.br/acoes/LREN3/Lojas-Renner-LREN3--Resultado-do-3T26-Guidance-Cai-Receita-Decepciona-e-Lucro-Comparavel-Tambem-Fica-Abaixo/"
+          }
+        ]
+      },
+      "riscos": "Consumo fraco; a Black Friday é amanhã (27/11).",
+      "fontes": [
+        {
+          "nome": "Jornal do Comércio",
+          "url": "https://www.jornaldocomercio.com/economia/2026/11/1269501-lojas-renner-tem-lucro-liquido-de-rs-246-mi-no-3tri26-queda-anual-de-118.html"
+        },
+        {
+          "nome": "Genial",
+          "url": "https://analisa.genialinvestimentos.com.br/acoes/LREN3/Lojas-Renner-LREN3--Resultado-do-3T26-Guidance-Cai-Receita-Decepciona-e-Lucro-Comparavel-Tambem-Fica-Abaixo/"
+        },
+        {
+          "nome": "MarketScreener",
+          "url": "https://ae.marketscreener.com/quote/stock/LOJAS-RENNER-S-A-6496311/"
+        }
+      ]
+    },
+    {
+      "posicao": 13,
+      "ticker": "VALE3",
+      "empresa": "Vale S.A.",
+      "descricao": "Vale · minério",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Não tem um controlador definido.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "+3,10% em 25/11; hoje cerca de +2%"
+      },
+      "precoExterior": null,
+      "noticias": "Hoje acompanha a alta de 1,07% do minério na China. Por outro lado, o lucro do 3T26 foi de US$ 1,255 bilhão (-53%).",
+      "especialistas": {
+        "resumo": "Ágora: compra, preço-alvo R$ 110 (após o 3T26).",
+        "itens": [
+          {
+            "casa": "Ágora Investimentos",
+            "recomendacao": "compra",
+            "precoAlvo": "R$ 110,00",
+            "data": "2026-10",
+            "url": "https://acionista.com.br/vale3-apresenta-resultados-fracos-e-mantem-ganhos/"
+          }
+        ]
+      },
+      "riscos": "Preço do minério e demanda da China.",
+      "fontes": [
+        {
+          "nome": "SpaceMoney",
+          "url": "https://www.spacemoney.com.br/investimentos/acoes/ibovespa-hoje/ibovespa-alta-ipca-15-fazenda-trabuco"
+        },
+        {
+          "nome": "Suno",
+          "url": "https://www.suno.com.br/noticias/?p=669055"
+        },
+        {
+          "nome": "Acionista",
+          "url": "https://acionista.com.br/vale3-apresenta-resultados-fracos-e-mantem-ganhos/"
+        }
+      ]
+    },
+    {
+      "posicao": 14,
+      "ticker": "GOGL34",
+      "empresa": "Alphabet Inc.",
+      "descricao": "Alphabet (BDR) · Google",
+      "tipoAtivo": "bdr",
+      "leitura": "mista",
+      "explicacao": "BDR é um recibo negociado na B3 que representa uma ação estrangeira. O preço acompanha a ação nos EUA e o dólar.",
+      "dono": "Os fundadores Larry Page e Sergey Brin controlam os votos.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": {
+        "ticker": "GOOGL",
+        "bolsa": "Nasdaq",
+        "texto": "US$ 280,20",
+        "valor": 280.2,
+        "moeda": "USD",
+        "data": "2026-11-17",
+        "variacao": "-19,3% entre 31/07 e 10/11",
+        "direcao": "queda"
+      },
+      "noticias": "Há um prazo em 1º/12/2026 numa ação coletiva de investidores.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente com data.",
+        "itens": []
+      },
+      "riscos": "Nasdaq fechada hoje; a queda do dólar pesa no preço em reais.",
+      "fontes": [
+        {
+          "nome": "Trefis",
+          "url": "https://www.trefis.com/data/companies/GOOGL?from=ANET-2026-05-11"
+        },
+        {
+          "nome": "Benzinga",
+          "url": "https://kr.benzinga.com/quote/GOOGL/charts"
+        },
+        {
+          "nome": "StockAnalysis",
+          "url": "https://stockanalysis.com/stocks/googl/?r=1104a"
+        }
+      ]
+    },
+    {
+      "posicao": 15,
+      "ticker": "MGLU3",
+      "empresa": "Magazine Luiza S.A.",
+      "descricao": "Magazine Luiza · varejo",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "A família Trajano.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "A ação subiu 14% depois do 3T26, mesmo com prejuízo de R$ 10,7 milhões.",
+      "especialistas": {
+        "resumo": "O BofA mudou a recomendação e vê espaço para alta; o Safra alerta para o consumo de caixa.",
+        "itens": [
+          {
+            "casa": "BofA",
+            "recomendacao": "recomendação elevada",
+            "precoAlvo": null,
+            "data": "2026-11",
+            "url": "https://www.suno.com.br/noticias/?p=670161"
+          }
+        ]
+      },
+      "riscos": "Juros altos; a Black Friday é amanhã.",
+      "fontes": [
+        {
+          "nome": "Suno (3T26)",
+          "url": "https://www.suno.com.br/noticias/?p=670116"
+        },
+        {
+          "nome": "Suno (BofA e Safra)",
+          "url": "https://www.suno.com.br/noticias/?p=670161"
+        }
+      ]
+    },
+    {
+      "posicao": 16,
+      "ticker": "CPFE3",
+      "empresa": "CPFL Energia S.A.",
+      "descricao": "CPFL Energia · energia",
+      "tipoAtivo": "acao",
+      "leitura": "neutra",
+      "explicacao": null,
+      "dono": "A chinesa State Grid.",
+      "preco": {
+        "texto": "R$ 44,42",
+        "valor": 44.42,
+        "moeda": "BRL",
+        "data": "2026-11-11",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 1,289 bilhão no 3T26 (-6,4%).",
+      "especialistas": {
+        "resumo": "Itaú BBA e Bradesco BBI elevaram o preço-alvo, mas só um indica compra (01/10/2026).",
+        "itens": [
+          {
+            "casa": "Itaú BBA e Bradesco BBI",
+            "recomendacao": "alvos elevados; só um indica compra",
+            "precoAlvo": null,
+            "data": "2026-10-01",
+            "url": "https://bpmoney.com.br/tag/cpfe3/"
+          }
+        ]
+      },
+      "riscos": "Regras do setor elétrico.",
+      "fontes": [
+        {
+          "nome": "Visno",
+          "url": "https://visnoinvest.com.br/news/16509/cpfl-energia-cpfe3-registra-lucro-de-r-13-bi-no-3t26"
+        },
+        {
+          "nome": "Investimentos.com.br",
+          "url": "https://investimentos.com.br/empresa/cpfl-energia/"
+        },
+        {
+          "nome": "BP Money",
+          "url": "https://bpmoney.com.br/tag/cpfe3/"
+        }
+      ]
+    },
+    {
+      "posicao": 17,
+      "ticker": "MBRF3",
+      "empresa": "MBRF Global Foods Company S.A.",
+      "descricao": "MBRF (Marfrig + BRF) · carnes",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Marcos Molina, acionista controlador da Marfrig.",
+      "preco": {
+        "texto": "R$ 18,01",
+        "valor": 18.01,
+        "moeda": "BRL",
+        "data": "2026-11-25",
+        "variacao": "-1,58%",
+        "direcao": "queda",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 210 milhões no 3T26 (+123,5%). Aprovou a recompra de até 15 milhões de ações.",
+      "especialistas": {
+        "resumo": "BB-BI: neutra, preço-alvo R$ 26,20 para dez/2026 (13/11/2026).",
+        "itens": [
+          {
+            "casa": "BB-BI",
+            "recomendacao": "neutra",
+            "precoAlvo": "R$ 26,20 (dez/2026)",
+            "data": "2026-11-13",
+            "url": "https://acionista.com.br/mbrf3-resultados-3t26-recomendacao-neutra/"
+          }
+        ]
+      },
+      "riscos": "Dívida líquida de R$ 45 bilhões.",
+      "fontes": [
+        {
+          "nome": "Times Brasil",
+          "url": "https://timesbrasil.com.br/empresas-e-negocios/mbrf-tem-lucro-de-r-210-milhoes-no-3o-trimestre-alta-de-1235/"
+        },
+        {
+          "nome": "Visno",
+          "url": "https://visnoinvest.com.br/news/16524/mbrf-mbrf3-aprova-novo-programa-de-recompra-de-ate-15-mi-de-acoes"
+        },
+        {
+          "nome": "Acionista",
+          "url": "https://acionista.com.br/mbrf3-resultados-3t26-recomendacao-neutra/"
+        },
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/lucro-da-mbrf-mbrf3-mais-que-dobra-e-chega-a-r-210-milhoes-no-3t26-123871/"
+        }
+      ]
+    },
+    {
+      "posicao": 18,
+      "ticker": "WEGE3",
+      "empresa": "WEG S.A.",
+      "descricao": "WEG · motores elétricos",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "As famílias fundadoras.",
+      "preco": {
+        "texto": "R$ 45,21",
+        "valor": 45.21,
+        "moeda": "BRL",
+        "data": "2026-10-21",
+        "variacao": "-7,34%",
+        "direcao": "queda",
+        "observacao": "no dia do balanço"
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 1,67 bilhão no 3T26, abaixo do esperado; a ação caiu 11% na semana e foi ao menor nível em mais de 3 anos.",
+      "especialistas": {
+        "resumo": "BTG: compra, preço-alvo R$ 65 (24/10/2026).",
+        "itens": [
+          {
+            "casa": "BTG Pactual",
+            "recomendacao": "compra",
+            "precoAlvo": "R$ 65,00",
+            "data": "2026-10-24",
+            "url": "https://investidor10.com.br/noticias/weg-wege3-lidera-perdas-do-ibov-na-semana-do-balanco-o-que-pesou-no-3t26-123471/"
+          }
+        ]
+      },
+      "riscos": "Cerca de 63% da receita vem do exterior, então dólar em queda e tarifas pesam.",
+      "fontes": [
+        {
+          "nome": "brapi",
+          "url": "https://brapi.dev/news/weg-lucra-r-1-67-bi-no-3t26-abaixo-do-consenso-e-59ab1b25"
+        },
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/weg-wege3-lidera-perdas-do-ibov-na-semana-do-balanco-o-que-pesou-no-3t26-123471/"
+        },
+        {
+          "nome": "Acionista",
+          "url": "https://acionista.com.br/wege3-sobe-na-contramao-o-que-sustenta-a-acao/"
+        }
+      ]
+    },
+    {
+      "posicao": 19,
+      "ticker": "RURA11",
+      "empresa": "Itau Asset Rural Fiagro - Imobiliario",
+      "descricao": "Itaú Asset Rural Fiagro · fundo do agro",
+      "tipoAtivo": "fundo",
+      "leitura": "neutra",
+      "explicacao": "Não é uma ação: é um fundo que empresta dinheiro ao agronegócio e repassa rendimentos mensais aos cotistas.",
+      "dono": "Os cotistas. A administradora é a Intrag e a gestora é a Itaú Asset.",
+      "preco": {
+        "texto": "R$ 7,90",
+        "valor": 7.9,
+        "moeda": "BRL",
+        "data": "2026-10-30",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "cotação-base"
+      },
+      "precoExterior": null,
+      "noticias": "Pagou R$ 0,10 por cota em 09/11, referente a outubro (1,27% no mês).",
+      "especialistas": {
+        "resumo": "Não se aplica.",
+        "itens": []
+      },
+      "riscos": "Calote de produtores rurais, que já pesa nos resultados do Banco do Brasil.",
+      "fontes": [
+        {
+          "nome": "B3 (aviso de rendimento)",
+          "url": "https://fnet.bmfbovespa.com.br/fnet/publico/exibirDocumento?cvm=true&id=1365632"
+        },
+        {
+          "nome": "FIIs.com.br",
+          "url": "https://fiis.com.br/?p=461608"
+        }
+      ]
+    },
+    {
+      "posicao": 20,
+      "ticker": "HAPV3",
+      "empresa": "Hapvida Participações e Investimentos S.A.",
+      "descricao": "Hapvida · planos de saúde",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "A família Pinheiro, fundadora.",
+      "preco": {
+        "texto": "R$ 5,99",
+        "valor": 5.99,
+        "moeda": "BRL",
+        "data": "2026-11-17",
+        "variacao": "+10,11%",
+        "direcao": "alta",
+        "observacao": "um dia depois de cair 4,23%"
+      },
+      "precoExterior": null,
+      "noticias": "Lucro ajustado de R$ 107 milhões no 3T26 (-68,3%) e perda de 235 mil clientes.",
+      "especialistas": {
+        "resumo": "O Citi cortou o preço-alvo para R$ 10.",
+        "itens": [
+          {
+            "casa": "Citi",
+            "recomendacao": "preço-alvo cortado",
+            "precoAlvo": "R$ 10,00",
+            "data": null,
+            "url": "https://bpmoney.com.br/?p=433181"
+          }
+        ]
+      },
+      "riscos": "Perda de clientes, custos médicos e oscilação muito forte.",
+      "fontes": [
+        {
+          "nome": "Times Brasil",
+          "url": "https://timesbrasil.com.br/empresas-e-negocios/hapvida-perde-235-mil-clientes-e-ve-lucro-cair-68-no-terceiro-trimestre/"
+        },
+        {
+          "nome": "brapi",
+          "url": "https://brapi.dev/news/hapvida-salta-10-sem-fato-novo-mas-analistas-mantem-cautela-com-margens-ae0d0f76"
+        },
+        {
+          "nome": "BP Money",
+          "url": "https://bpmoney.com.br/?p=433181"
+        }
+      ]
+    },
+    {
+      "posicao": 21,
+      "ticker": "TIMS3",
+      "empresa": "TIM S.A.",
+      "descricao": "TIM · telefonia",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "A TIM italiana, cujo principal acionista é a Poste Italiane. O CEO da Poste disse que a TIM Brasil não é estratégica.",
+      "preco": {
+        "texto": "R$ 19,01",
+        "valor": 19.01,
+        "moeda": "BRL",
+        "data": "2026-10-27",
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 991 milhões no 3T26 (-18%), com receita +5,3%. Assembleia em 30/11/2026 para incorporar a I-Systems. A empresa prevê distribuir R$ 5,3 a 5,5 bilhões aos acionistas em 2026.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente com data.",
+        "itens": []
+      },
+      "riscos": "Possível mudança no acionista controlador.",
+      "fontes": [
+        {
+          "nome": "Rio Times",
+          "url": "https://www.riotimesonline.com/?p=787069"
+        },
+        {
+          "nome": "Visno",
+          "url": "https://visnoinvest.com.br/news/16334/tim-tims3-registra-lucro-liquido-normalizado-de-r-11-bi-no-3t26"
+        },
+        {
+          "nome": "Acionista",
+          "url": "https://acionista.com.br/tim-tims3-cresce-receita-de-servicos-58-nos-nove-meses-de-2026/"
+        },
+        {
+          "nome": "MarketScreener",
+          "url": "https://sa.marketscreener.com/quote/stock/TIM-S-A-119084153/"
+        }
+      ]
+    }
+  ],
+  "educacaoRisco": {
+    "titulo": "Como limitar o risco a 1% do capital",
+    "formula": "Quantidade = (1% do capital) ÷ (preço de entrada − preço de saída de proteção)",
+    "exemplo": "Capital de R$ 10.000 → risco máximo de R$ 100. Entrada a R$ 20,00 e saída de proteção a R$ 19,00 → risco de R$ 1,00 por ação → 100 ações (R$ 2.000).",
+    "alerta": "Se o preço abrir com um salto abaixo da proteção, a perda pode passar de 1%."
+  },
+  "aviso": "Este relatório é educacional e não é recomendação personalizada de investimento. Decisões de compra ou venda podem gerar perdas. Day trade e swing trade envolvem risco de perda. Os controladores sem link foram informados com base na estrutura acionária pública conhecida e não foram reconfirmados hoje.",
+  "fontesCenario": [
+    {
+      "nome": "InfoMoney",
+      "url": "https://www.infomoney.com.br/mercados/ibovespa-hoje-bolsa-de-valores-ao-vivo-26112026/"
+    },
+    {
+      "nome": "Seu Dinheiro",
+      "url": "https://seudinheiro.com/2026/bolsa-dolar/ibovespa-dispara-mais-de-3-e-dolar-recua-a-r-572-o-que-anima-o-mercado-hoje-davs"
+    },
+    {
+      "nome": "SpaceMoney",
+      "url": "https://www.spacemoney.com.br/investimentos/acoes/ibovespa-hoje/ibovespa-alta-ipca-15-fazenda-trabuco"
+    },
+    {
+      "nome": "SP Diário",
+      "url": "https://spdiario.com.br/noticias/economia/ibovespa-dispara-quase-4-e-dolar-recua-com-possivel-indicacao-de-trabuco-para-a-fazenda.html"
+    }
+  ]
+}
