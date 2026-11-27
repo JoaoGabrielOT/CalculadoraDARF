@@ -120,6 +120,33 @@ class SeloLeitura extends StatelessWidget {
   }
 }
 
+/// Selo "★ Destaque" (leitura positiva com especialistas indicando compra).
+class SeloDestaque extends StatelessWidget {
+  const SeloDestaque({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const SeloLeitura(Leitura.positiva, texto: '★ Destaque');
+}
+
+/// "2 compra", "1 neutra", "0 venda" em verde, cinza e vermelho da paleta.
+class SelosPlacar extends StatelessWidget {
+  const SelosPlacar(this.placar, {super.key});
+
+  final Placar placar;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 6,
+    runSpacing: 4,
+    children: [
+      SeloLeitura(Leitura.positiva, texto: '${placar.compra} compra'),
+      SeloLeitura(Leitura.neutra, texto: '${placar.neutra} neutra'),
+      SeloLeitura(Leitura.negativa, texto: '${placar.venda} venda'),
+    ],
+  );
+}
+
 /// Variação em pílula com a cor e a seta da direção.
 class PilulaDirecao extends StatelessWidget {
   const PilulaDirecao(this.variacao, this.direcao, {super.key});

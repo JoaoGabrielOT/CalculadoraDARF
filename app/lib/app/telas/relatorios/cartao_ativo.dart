@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../nucleo/relatorios/destaques.dart';
 import '../../../nucleo/relatorios/relatorio.dart';
 import '../../componentes/cartao.dart';
 import '../../tema/cores_app.dart';
@@ -22,6 +23,8 @@ class CartaoAtivo extends StatelessWidget {
     final (corLeitura, _) = PaletaRelatorio.coresLeitura(a.leitura);
     final esp = a.especialistas;
     final preco = a.preco, exterior = a.precoExterior;
+    final destaque = emDestaque(a);
+    final placar = placarDe(esp);
     return Cartao(
       key: Key('cartao-${a.ticker}'),
       padding: EdgeInsets.zero,
@@ -29,7 +32,23 @@ class CartaoAtivo extends StatelessWidget {
         borderRadius: BorderRadius.circular(c.raioCartao),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: corLeitura, width: 5)),
+            border: destaque
+                ? Border(
+                    left: BorderSide(color: corLeitura, width: 5),
+                    top: const BorderSide(
+                      color: PaletaRelatorio.positivaTexto,
+                      width: 2,
+                    ),
+                    right: const BorderSide(
+                      color: PaletaRelatorio.positivaTexto,
+                      width: 2,
+                    ),
+                    bottom: const BorderSide(
+                      color: PaletaRelatorio.positivaTexto,
+                      width: 2,
+                    ),
+                  )
+                : Border(left: BorderSide(color: corLeitura, width: 5)),
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
@@ -50,6 +69,7 @@ class CartaoAtivo extends StatelessWidget {
                       ),
                     ),
                     SeloLeitura(a.leitura),
+                    if (destaque) _SeloDestaqueCartao(a.ticker),
                   ],
                 ),
                 if (a.descricao case final d?)
@@ -88,15 +108,32 @@ class CartaoAtivo extends StatelessWidget {
                       ),
                   ]),
                 if (a.noticias case final n?) _Campo('Notícias', [_texto(n)]),
-                if (esp.resumo != null || esp.itens.isNotEmpty)
+                if (esp.resumo != null ||
+                    esp.itens.isNotEmpty ||
+                    placar.total > 0)
                   _Campo('Especialistas', [
                     if (esp.resumo case final r?) _texto(r),
+                    if (placar.total > 0) _PlacarCartao(a.ticker, placar),
                     for (final i in esp.itens)
                       if (_textoItem(i) case final t when t.isNotEmpty)
-                        LinkRelatorio(
-                          texto: t,
-                          url: i.url,
-                          aoAbrir: aoAbrirLink,
+                        Wrap(
+                          spacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            LinkRelatorio(
+                              texto: t,
+                              url: i.url,
+                              aoAbrir: aoAbrirLink,
+                            ),
+                            if (i.potencial case final p?)
+                              Text(
+                                p,
+                                style: TextStyle(
+                                  color: c.textoSuave,
+                                  fontSize: 12,
+                                ),
+                              ),
+                          ],
                         ),
                   ]),
                 if (a.riscos case final r?) _Campo('Riscos', [_texto(r)]),
@@ -122,6 +159,29 @@ class CartaoAtivo extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A chave fica no selo, dentro deste invólucro sem chave: tickers repetidos
+/// não viram chaves duplicadas entre irmãos.
+class _SeloDestaqueCartao extends StatelessWidget {
+  const _SeloDestaqueCartao(this.ticker);
+
+  final String ticker;
+
+  @override
+  Widget build(BuildContext context) =>
+      SeloDestaque(key: Key('selo-destaque-$ticker'));
+}
+
+class _PlacarCartao extends StatelessWidget {
+  const _PlacarCartao(this.ticker, this.placar);
+
+  final String ticker;
+  final Placar placar;
+
+  @override
+  Widget build(BuildContext context) =>
+      SelosPlacar(placar, key: Key('placar-$ticker'));
 }
 
 Widget _texto(String s) =>

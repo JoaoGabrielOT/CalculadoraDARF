@@ -566,6 +566,53 @@ void main() {
       }
     }
 
+    // Aba Relatórios rolada até os destaques (com a tabela) e até o cartão de
+    // um ativo em destaque.
+    for (final (variante, chave) in [
+      ('destaques', 'secao-destaques'),
+      ('cartao', 'cartao-RENT3'),
+    ]) {
+      for (final tema in _temas.entries) {
+        if (tema.key == 'moderno') continue;
+        for (final tamanho in _tamanhos.entries) {
+          final nome = 'relatorios_${variante}_${tema.key}_${tamanho.key}';
+          testWidgets(nome, (t) async {
+            debugDisableShadows = false;
+            try {
+              await montarApp(
+                t,
+                servicos: _servicos(),
+                tema: tema.value,
+                tamanho: tamanho.value,
+              );
+              await t.pumpAndSettle();
+              Provider.of<EstadoApp>(
+                t.element(find.byType(Casca)),
+                listen: false,
+              ).irPara(Aba.relatorios);
+              await t.pumpAndSettle();
+              final alvo = find.byKey(Key(chave));
+              for (var i = 0; i < 60 && alvo.evaluate().isEmpty; i++) {
+                await t.drag(
+                  find.byType(CustomScrollView).first,
+                  const Offset(0, -300),
+                );
+                await t.pumpAndSettle();
+              }
+              await Scrollable.ensureVisible(t.element(alvo), alignment: 0.05);
+              await _decodificarImagens(t);
+              await expectLater(
+                find.byKey(chaveCaptura),
+                matchesGoldenFile('arquivos/$nome.png'),
+              );
+            } finally {
+              debugDisableShadows = true;
+            }
+          });
+        }
+      }
+    }
+
     for (final aba in Aba.values) {
       for (final tema in _temas.entries) {
         for (final tamanho in _tamanhos.entries) {

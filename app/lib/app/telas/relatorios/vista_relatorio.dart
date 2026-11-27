@@ -5,6 +5,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../nucleo/relatorios/destaques.dart';
 import '../../../nucleo/relatorios/relatorio.dart';
 import '../../componentes/cartao.dart';
 import '../../tema/cores_app.dart';
@@ -37,6 +38,12 @@ class VistaRelatorio extends StatelessWidget {
       ),
     );
     final edu = r.educacaoRisco;
+    // Calculada uma vez: termômetro, destaques, tabela e cartões usam a mesma.
+    final ativos = ordenarParaExibicao(r.ativos);
+    final destaques = [
+      for (final a in ativos)
+        if (emDestaque(a)) a,
+    ];
     return CustomScrollView(
       slivers: [
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -58,7 +65,8 @@ class VistaRelatorio extends StatelessWidget {
               ),
             ),
           ),
-        bloco(_Termometro(r)),
+        bloco(_Termometro(r.termometro, ativos)),
+        if (destaques.isNotEmpty) bloco(_Destaques(destaques)),
         if (r.ativos.isEmpty)
           bloco(
             Text(
@@ -68,7 +76,7 @@ class VistaRelatorio extends StatelessWidget {
             ),
           )
         else ...[
-          bloco(_TabelaResumo(r.ativos)),
+          bloco(_TabelaResumo(ativos)),
           // Cabeçalho de h; os cartões vêm preguiçosos logo abaixo.
           bloco(
             KeyedSubtree(key: const Key('secao-h'), child: _titulo('Ativos')),
@@ -76,10 +84,10 @@ class VistaRelatorio extends StatelessWidget {
           SliverPadding(
             padding: EdgeInsets.symmetric(horizontal: margem),
             sliver: SliverList.builder(
-              itemCount: r.ativos.length,
+              itemCount: ativos.length,
               itemBuilder: (context, i) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: CartaoAtivo(r.ativos[i], aoAbrirLink: aoAbrirLink),
+                child: CartaoAtivo(ativos[i], aoAbrirLink: aoAbrirLink),
               ),
             ),
           ),
@@ -345,9 +353,12 @@ class _Indicadores extends StatelessWidget {
 // --- f) termômetro
 
 class _Termometro extends StatelessWidget {
-  const _Termometro(this.r);
+  const _Termometro(this.termometro, this.ativos);
 
-  final Relatorio r;
+  final Termometro termometro;
+
+  /// Na ordem de exibição.
+  final List<AtivoRelatorio> ativos;
 
   @override
   Widget build(BuildContext context) {
@@ -359,18 +370,14 @@ class _Termometro extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           spacing: 10,
           children: [
-            if (r.ativos.isNotEmpty)
+            if (ativos.isNotEmpty)
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: [
-                  for (final l in Leitura.values)
-                    for (final a in r.ativos)
-                      if (a.leitura == l) _SeloTermometro(a),
-                ],
+                children: [for (final a in ativos) _SeloTermometro(a)],
               ),
             // Divergente das leituras: valem os números do JSON.
-            Text(textoTermometro(r.termometro)),
+            Text(textoTermometro(termometro)),
           ],
         ),
       ),
@@ -391,6 +398,79 @@ class _SeloTermometro extends StatelessWidget {
     key: Key('selo-termometro-${ativo.ticker}'),
     texto: ativo.ticker,
   );
+}
+
+// --- sinais mais favoráveis (entre f e g)
+
+class _Destaques extends StatelessWidget {
+  const _Destaques(this.ativos);
+
+  final List<AtivoRelatorio> ativos;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    return _Secao(
+      key: const Key('secao-destaques'),
+      titulo: 'Sinais mais favoráveis',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: c.cartao,
+          borderRadius: BorderRadius.circular(c.raioCartao),
+          border: Border.all(color: PaletaRelatorio.positivaTexto, width: 2),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 10,
+            children: [
+              for (final a in ativos) _LinhaDestaque(a),
+              Text(
+                'Leitura positiva e especialistas indicando compra. Não é '
+                'previsão nem recomendação.',
+                style: TextStyle(color: c.textoSuave, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A chave fica na coluna, dentro deste invólucro sem chave: tickers repetidos
+/// não viram chaves duplicadas entre irmãos.
+class _LinhaDestaque extends StatelessWidget {
+  const _LinhaDestaque(this.ativo);
+
+  final AtivoRelatorio ativo;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final a = ativo;
+    return Column(
+      key: Key('destaque-${a.ticker}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 2,
+      children: [
+        Text(
+          '★ ${a.ticker}',
+          style: const TextStyle(
+            color: PaletaRelatorio.positivaTexto,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (a.descricao case final d?)
+          Text(d, style: TextStyle(color: c.textoSuave, fontSize: 12)),
+        Text(textoPreco(a.preco), style: const TextStyle(fontSize: 13)),
+        if (a.especialistas.resumo case final r?)
+          Text(r, style: const TextStyle(fontSize: 13)),
+      ],
+    );
+  }
 }
 
 // --- g) tabela-resumo
@@ -444,16 +524,27 @@ class _TabelaResumo extends StatelessWidget {
         for (final a in ativos)
           TableRow(
             decoration: BoxDecoration(
+              color: emDestaque(a)
+                  ? PaletaRelatorio.positivaTexto.withValues(alpha: 0.12)
+                  : null,
               border: Border(top: BorderSide(color: c.linha)),
             ),
             children: [
               celula(
-                Text(
-                  a.ticker,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (emDestaque(a)) _EstrelaTabela(a.ticker),
+                    Flexible(
+                      child: Text(
+                        a.ticker,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               celula(Text(textoPreco(a.preco), style: texto)),
@@ -486,6 +577,27 @@ class _TabelaResumo extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A chave fica na estrela, dentro deste invólucro sem chave.
+class _EstrelaTabela extends StatelessWidget {
+  const _EstrelaTabela(this.ticker);
+
+  final String ticker;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 4),
+    child: Text(
+      '★',
+      key: Key('estrela-tabela-$ticker'),
+      style: const TextStyle(
+        color: PaletaRelatorio.positivaTexto,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
 }
 
 // --- i) educação de risco

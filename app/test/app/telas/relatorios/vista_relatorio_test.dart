@@ -2,6 +2,7 @@ import 'package:calculadoradarf/app/componentes/cartao.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:calculadoradarf/app/telas/relatorios/paleta_relatorio.dart';
 import 'package:calculadoradarf/app/telas/relatorios/vista_relatorio.dart';
+import 'package:calculadoradarf/nucleo/relatorios/destaques.dart';
 import 'package:calculadoradarf/nucleo/relatorios/relatorio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -196,12 +197,8 @@ void main() {
             return dy != 0 ? dy : a.$2.dx.compareTo(b.$2.dx);
           });
       final ordem = [for (final p in posicoes) p.$1];
-      final esperado = [
-        for (final l in Leitura.values)
-          for (final a in r.ativos)
-            if (a.leitura == l) a.ticker,
-      ];
-      expect(ordem, esperado);
+      final exibicao = ordenarParaExibicao(r.ativos);
+      expect(ordem, [for (final a in exibicao) a.ticker]);
       // Grupos fixos da fixture: 7 positivas, 7 mistas, 3 neutras, 5 negativas.
       final leitura = {for (final a in r.ativos) a.ticker: a.leitura};
       for (final (ini, fim, l) in [
@@ -216,7 +213,7 @@ void main() {
           reason: l.name,
         );
       }
-      expect(ordem.first, 'T1TW34');
+      expect(ordem.first, 'RENT3');
       expect(ordem.last, 'HAPV3');
       expect(
         find.text('7 positivas · 7 mistas · 3 neutras · 5 negativas'),
@@ -257,13 +254,13 @@ void main() {
     );
   });
 
-  testWidgets('cartões na ordem de posição, com explicação só nos 3', (
+  testWidgets('cartões na ordem de leitura, com explicação só nos 3', (
     t,
   ) async {
     await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
     expect(
-      t.getTopLeft(find.byKey(const Key('cartao-CSNA3'))).dy,
-      lessThan(t.getTopLeft(find.byKey(const Key('cartao-T1TW34'))).dy),
+      t.getTopLeft(find.byKey(const Key('cartao-T1TW34'))).dy,
+      lessThan(t.getTopLeft(find.byKey(const Key('cartao-CSNA3'))).dy),
     );
     for (final tk in ['T1TW34', 'GOGL34', 'RURA11']) {
       expect(find.byKey(Key('explicacao-$tk')), findsOneWidget, reason: tk);
@@ -642,6 +639,150 @@ void main() {
     await montarComponente(t, _vista(r), tamanho: _pcAlto);
     await t.tap(find.text(url));
     expect(_links, [Uri.parse(url)]);
+  });
+
+  group('destaques e placar', () {
+    Relatorio r27() => Relatorio.deJson(fixtureRelatorio27());
+    double y(WidgetTester t, String k) => t.getTopLeft(find.byKey(Key(k))).dy;
+    Finder textoEm(String k, String s) =>
+        find.descendant(of: find.byKey(Key(k)), matching: find.text(s));
+
+    testWidgets('seção de destaques entre o termômetro e a tabela', (t) async {
+      await montarComponente(t, _vista(r27()), tamanho: _pcAlto);
+      final sec = find.byKey(const Key('secao-destaques'));
+      expect(sec, findsOneWidget);
+      expect(
+        find.descendant(of: sec, matching: find.text('Sinais mais favoráveis')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: sec,
+          matching: find.text(
+            'Leitura positiva e especialistas indicando compra. Não é '
+            'previsão nem recomendação.',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(y(t, 'destaque-EMBJ3'), lessThan(y(t, 'destaque-PRIO3')));
+      expect(y(t, 'secao-destaques'), greaterThan(y(t, 'secao-f')));
+      expect(y(t, 'secao-destaques'), lessThan(y(t, 'secao-g')));
+      expect(find.text('★ EMBJ3'), findsOneWidget);
+    });
+
+    testWidgets('linha do destaque: resumo; sem preço, "—"', (t) async {
+      await montarComponente(t, _vista(r27()), tamanho: _pcAlto);
+      final a = r27().ativos.firstWhere((a) => a.ticker == 'EMBJ3');
+      expect(
+        textoEm('destaque-EMBJ3', a.especialistas.resumo!),
+        findsOneWidget,
+      );
+      final json = fixtureRelatorio27();
+      for (final x in json['ativos'] as List) {
+        if ((x as Map)['ticker'] == 'EMBJ3') x.remove('preco');
+      }
+      await montarComponente(
+        t,
+        _vista(Relatorio.deJson(json)),
+        tamanho: _pcAlto,
+      );
+      expect(textoEm('destaque-EMBJ3', '—'), findsOneWidget);
+    });
+
+    testWidgets('sem destaque, a seção some', (t) async {
+      final json = fixtureRelatorio27();
+      for (final a in json['ativos'] as List) {
+        (a as Map)['leitura'] = 'negativa';
+      }
+      await montarComponente(t, _vista(Relatorio.deJson(json)), tamanho: _pc);
+      expect(find.byKey(const Key('secao-destaques')), findsNothing);
+      expect(find.text('Sinais mais favoráveis'), findsNothing);
+    });
+
+    testWidgets('cartões ordenados e selo de destaque', (t) async {
+      await montarComponente(t, _vista(r27()), tamanho: _pcAlto);
+      expect(y(t, 'cartao-EMBJ3'), lessThan(y(t, 'cartao-TAEE11')));
+      expect(y(t, 'cartao-TAEE11'), lessThan(y(t, 'cartao-T1TW34')));
+      for (final tk in ['CSNA3', 'BBAS3', 'LREN3', 'VALE3']) {
+        expect(y(t, 'cartao-$tk'), lessThan(y(t, 'cartao-NVDC34')));
+      }
+      expect(textoEm('selo-destaque-EMBJ3', '★ Destaque'), findsOneWidget);
+      expect(find.byKey(const Key('selo-destaque-WEGE3')), findsNothing);
+      Finder borda(String k) => find.descendant(
+        of: find.byKey(Key(k)),
+        matching: find.byWidgetPredicate((w) {
+          if (w is! DecoratedBox) return false;
+          final b = (w.decoration as BoxDecoration).border;
+          return b is Border &&
+              b.top.width == 2 &&
+              b.top.color == PaletaRelatorio.positivaTexto;
+        }),
+      );
+      expect(borda('cartao-EMBJ3'), findsOneWidget);
+      expect(borda('cartao-TAEE11'), findsNothing);
+    });
+
+    testWidgets('estrela na tabela só nos destaques', (t) async {
+      await montarComponente(t, _vista(r27()), tamanho: _pcAlto);
+      expect(find.byKey(const Key('estrela-tabela-PRIO3')), findsOneWidget);
+      expect(find.byKey(const Key('estrela-tabela-RENT3')), findsNothing);
+    });
+
+    testWidgets('placar e potencial no cartão', (t) async {
+      await montarComponente(t, _vista(r27()), tamanho: _pcAlto);
+      expect(textoEm('placar-GOGL34', '3 compra'), findsOneWidget);
+      expect(textoEm('placar-GOGL34', '1 neutra'), findsOneWidget);
+      expect(textoEm('placar-GOGL34', '0 venda'), findsOneWidget);
+      expect(find.byKey(const Key('placar-RURA11')), findsNothing);
+      expect(
+        textoEm('cartao-LREN3', '+79,6% até o alvo, com o preço de 26/11'),
+        findsOneWidget,
+      );
+      final selo = find
+          .descendant(
+            of: find.byKey(const Key('placar-GOGL34')),
+            matching: find.byType(Pilula),
+          )
+          .first;
+      expect(_coresSelo(t, selo).$1, PaletaRelatorio.positivaTexto);
+    });
+
+    testWidgets('fixture de 26/11: destaques e placar contado', (t) async {
+      final r = _fixture();
+      expect(
+        [
+          for (final a in ordenarParaExibicao(r.ativos).where(emDestaque))
+            a.ticker,
+        ],
+        ['RENT3', 'BPAC11'],
+      );
+      await montarComponente(t, _vista(r), tamanho: _pcAlto);
+      expect(y(t, 'destaque-RENT3'), lessThan(y(t, 'destaque-BPAC11')));
+      expect(textoEm('placar-RENT3', '1 compra'), findsOneWidget);
+    });
+
+    testWidgets('ticker repetido em destaque não quebra', (t) async {
+      final item = {
+        'ticker': 'DUPL3',
+        'leitura': 'positiva',
+        'especialistas': {
+          'consenso': 'compra',
+          'placar': {'compra': 2, 'neutra': 0, 'venda': 0},
+        },
+      };
+      await montarComponente(
+        t,
+        _vista(
+          Relatorio.deJson({
+            'ativos': [item, item],
+          }),
+        ),
+        tamanho: _pcAlto,
+      );
+      expect(t.takeException(), isNull);
+      expect(find.text('★ DUPL3'), findsNWidgets(2));
+    });
   });
 
   testWidgets('cores fixas: aviso, faixas, alerta e direções', (t) async {
