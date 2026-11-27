@@ -437,7 +437,17 @@ void main() {
       expect(temGuia(com({'resumo': 'r'})), isFalse);
     });
 
+    test('precoAlvoValor: NaN e infinito viram null; inteiro vira double', () {
+      double? v(Object? x) =>
+          ItemEspecialista.deJson({'precoAlvoValor': x})!.precoAlvoValor;
+      expect(v(double.nan), isNull);
+      expect(v(double.infinity), isNull);
+      expect(v(43), 43.0);
+      expect(v(43), isA<double>());
+    });
+
     test('fraseSemMotivo', () {
+      expect(fraseSemMotivo('Motivo: acha caro.', 'Acha caro.'), '');
       expect(
         fraseSemMotivo('O X indica MANTER. Motivo: acha caro.', 'Acha caro.'),
         'O X indica MANTER.',

@@ -8,9 +8,13 @@ String fraseSemMotivo(String frase, String? motivo) {
   if (motivo == null) return frase;
   final alvo = _semPonto(motivo);
   if (alvo.isEmpty) return frase;
-  final i = frase.lastIndexOf(' Motivo: ');
+  const marca = 'Motivo: ';
+  if (frase.startsWith(marca)) {
+    return _semPonto(frase.substring(marca.length)) == alvo ? '' : frase;
+  }
+  final i = frase.lastIndexOf(' $marca');
   if (i < 0) return frase;
-  final resto = frase.substring(i + ' Motivo: '.length);
+  final resto = frase.substring(i + marca.length + 1);
   return _semPonto(resto) == alvo ? frase.substring(0, i).trimRight() : frase;
 }
 

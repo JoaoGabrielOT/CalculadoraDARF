@@ -1072,6 +1072,35 @@ void main() {
       expect(find.textContaining('D · Compra · 01/11/2026'), findsOneWidget);
     });
 
+    testWidgets('sub-cartão só com motivo mostra recomendação, alvo e '
+        'potencial; frase igual ao motivo não vira Text vazio', (t) async {
+      await montarComponente(
+        t,
+        _vista(
+          um({
+            'itens': [
+              {'casa': 'A', 'fraseGuia': 'Motivo: m.', 'motivo': 'M'},
+              {
+                'casa': 'B',
+                'recomendacao': 'Neutro',
+                'precoAlvo': 'R\$ 10,00',
+                'potencial': '+5,0%',
+                'motivo': 'só motivo',
+              },
+            ],
+          }),
+        ),
+        tamanho: _pcAlto,
+      );
+      expect(
+        em('casa-ZZZ3-1', 'Neutro · alvo R\$ 10,00 · +5,0%'),
+        findsOneWidget,
+      );
+      expect(em('casa-ZZZ3-1', 'Motivo: só motivo'), findsOneWidget);
+      expect(em('casa-ZZZ3-0', ''), findsNothing);
+      expect(em('casa-ZZZ3-0', 'Motivo: M'), findsOneWidget);
+    });
+
     testWidgets('sem os campos, nada do guia aparece', (t) async {
       for (final f in [fixtureRelatorio(), fixtureRelatorio27()]) {
         await montarComponente(

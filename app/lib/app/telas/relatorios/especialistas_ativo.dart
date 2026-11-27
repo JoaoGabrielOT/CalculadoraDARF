@@ -159,6 +159,14 @@ class CasaEspecialista extends StatelessWidget {
     final frase = i.fraseGuia == null
         ? null
         : fraseSemMotivo(i.fraseGuia!, i.motivo);
+    // Sem a frase do guia, a recomendação, o alvo e o potencial da linha antiga.
+    final linhaAntiga = i.fraseGuia != null
+        ? ''
+        : juntar([
+            i.recomendacao,
+            if (i.precoAlvo case final p?) 'alvo $p',
+            i.potencial,
+          ]);
     return DecoratedBox(
       key: Key('casa-$ticker-$indice'),
       decoration: BoxDecoration(
@@ -192,6 +200,11 @@ class CasaEspecialista extends StatelessWidget {
                   ),
               ],
             ),
+            if (linhaAntiga.isNotEmpty)
+              Text(
+                linhaAntiga,
+                style: TextStyle(color: c.textoSuave, fontSize: 12),
+              ),
             if (frase != null && frase.isNotEmpty)
               Text(frase, style: const TextStyle(fontSize: 13, height: 1.35)),
             if (i.motivo case final m?)
