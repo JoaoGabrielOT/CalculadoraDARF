@@ -35,6 +35,10 @@ class ControleRelatorios extends ChangeNotifier {
   /// ou o mais recente).
   String? _escolhido;
 
+  /// Relatório tocado na lista cuja abertura ainda não terminou (ela espera
+  /// na fila do serviço o `atualizar` em curso).
+  String? _pedido;
+
   /// null enquanto a primeira leitura não chega.
   VisaoRelatorios? visao;
 
@@ -68,6 +72,7 @@ class ControleRelatorios extends ChangeNotifier {
     if (trocouConta) {
       // outra conta: nada do que estava aberto vale
       _escolhido = null;
+      _pedido = null;
       _geracaoAbrir++;
     }
     if (entrou || trocouConta) unawaited(atualizar());
@@ -104,12 +109,18 @@ class ControleRelatorios extends ChangeNotifier {
   void _aplicar(VisaoRelatorios nova) {
     visao = nova;
     final padrao = escolherRelatorio(nova.itens, nova.hoje).escolhido?.nome;
-    final escolhido = _escolhido;
+    // o tocado na lista vale como escolhido: a abertura dele vem depois
+    final escolhido = _escolhido ?? _pedido;
     if (escolhido != null && nova.itens.any((i) => i.nome == escolhido)) {
-      if (escolhido == padrao && nova.atual != null) aberto = nova.atual;
+      if (escolhido == _escolhido &&
+          escolhido == padrao &&
+          nova.atual != null) {
+        aberto = nova.atual;
+      }
       return;
     }
     _escolhido = null;
+    _pedido = null;
     _geracaoAbrir++;
     nomeAberto = padrao;
     aberto = nova.atual;
@@ -124,6 +135,7 @@ class ControleRelatorios extends ChangeNotifier {
 
   Future<void> _abrir(String nome, {required bool escolha}) async {
     final geracao = ++_geracaoAbrir;
+    if (escolha) _pedido = nome;
     try {
       final r = await _servicos.abrirRelatorio(nome);
       if (geracao != _geracaoAbrir) return;
@@ -134,6 +146,8 @@ class ControleRelatorios extends ChangeNotifier {
     } catch (e) {
       if (geracao != _geracaoAbrir || e is PedidoSuperado) return;
       erro = textoErro(e);
+    } finally {
+      if (geracao == _geracaoAbrir) _pedido = null;
     }
     notifyListeners();
   }
@@ -164,7 +178,9 @@ class ControleRelatorios extends ChangeNotifier {
     try {
       await _servicos.conectar();
     } catch (e) {
-      _estado.avisar('Login não concluído', textoErro(e));
+      if (e is! PedidoSuperado) {
+        _estado.avisar('Login não concluído', textoErro(e));
+      }
     }
   }
 

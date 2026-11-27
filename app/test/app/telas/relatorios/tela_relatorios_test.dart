@@ -10,6 +10,7 @@ import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -73,6 +74,19 @@ ServicosFalsos _servicos([VisaoRelatorios? visao]) => ServicosFalsos()
     _nome('2026-11-25'): _rel('2026-11-25', titulo: 'Relatório do dia 25'),
     _nome('2026-11-24'): _rel('2026-11-24', titulo: 'Relatório do dia 24'),
   };
+
+/// `abrirRelatorio` só responde depois de [antes]: imita a fila do serviço,
+/// em que a abertura espera o `atualizar` em curso.
+class _ServicosFila extends ServicosFalsos {
+  Future<void> antes = Future.value();
+
+  @override
+  Future<Relatorio> abrirRelatorio(String nome) async {
+    final r = super.abrirRelatorio(nome);
+    await antes;
+    return r;
+  }
+}
 
 class _Cena {
   _Cena(this.servicos, this.plataforma);
@@ -477,5 +491,151 @@ void main() {
       contains('abrirRelatorio(relatorio-abertura-2026-11-25.json)'),
     );
     expect(find.text('Relatório do dia 25'), findsOneWidget);
+  });
+
+  testWidgets('toque na lista durante a atualização não se perde', (t) async {
+    final s = _ServicosFila()
+      ..visaoRelatorios = _visao()
+      ..relatoriosAbertos = {
+        _nome('2026-11-25'): _rel('2026-11-25', titulo: 'Relatório do dia 25'),
+      };
+    await _montar(t, servicos: s);
+    final pasta = Completer<VisaoRelatorios>();
+    s.atualizarRelatoriosFn = () => pasta.future;
+    s.antes = pasta.future;
+    await t.tap(find.byKey(const Key('relatorios-atualizar')));
+    await t.pump();
+    await t.tap(_item('2026-11-25'));
+    await t.pump();
+    pasta.complete(_visao());
+    await t.pumpAndSettle();
+    expect(find.text('Relatório do dia 25'), findsOneWidget);
+    final item = t.widget<ListTile>(
+      find.descendant(of: _item('2026-11-25'), matching: find.byType(ListTile)),
+    );
+    expect(item.selected, isTrue);
+  });
+
+  testWidgets('sem conexão e sem itens: só a faixa de sem conexão', (t) async {
+    await _montar(
+      t,
+      servicos: _servicos(
+        _visao(
+          itens: const [],
+          semAtual: true,
+          ehHoje: false,
+          situacao: SituacaoRelatorios.semConexao,
+        ),
+      ),
+    );
+    expect(
+      find.text(
+        'Sem conexão. Os relatórios aparecem aqui quando houver internet.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(_textoVazio), findsNothing);
+    expect(find.text(_textoSemConexao), findsNothing);
+  });
+
+  testWidgets('Entrar com o Google superado não avisa', (t) async {
+    final s = _servicos(
+      _visao(
+        itens: const [],
+        semAtual: true,
+        situacao: SituacaoRelatorios.semConta,
+      ),
+    )..erros['conectar'] = PedidoSuperado('saiu');
+    await _montar(t, servicos: s);
+    await t.tap(find.text('Entrar com o Google'));
+    await t.pumpAndSettle();
+    expect(s.chamadas, contains('conectar()'));
+    expect(_estado(t).avisos, isEmpty);
+  });
+
+  for (final situacao in [
+    SituacaoRelatorios.novoLogin,
+    SituacaoRelatorios.semConta,
+  ]) {
+    testWidgets('${situacao.name}: a falha ao atualizar aparece', (t) async {
+      final s = _servicos(
+        _visao(itens: const [], semAtual: true, situacao: situacao),
+      );
+      await _montar(t, servicos: s);
+      s.erros['atualizarRelatorios'] = ErroValidacao('Falhou a leitura.');
+      _estado(t).irPara(Aba.caixa);
+      await t.pumpAndSettle();
+      _estado(t).irPara(Aba.relatorios);
+      await t.pumpAndSettle();
+      expect(find.text('Falhou a leitura.'), findsOneWidget);
+    });
+  }
+
+  group('listas preguiçosas', () {
+    final muitas = [
+      for (var d = 1; d <= 28; d++) '2026-10-${d.toString().padLeft(2, '0')}',
+    ].reversed.toList();
+
+    bool preguicosa(WidgetTester t, Finder lista) {
+      final v = t.widget<ListView>(lista);
+      return v.childrenDelegate is SliverChildBuilderDelegate && !v.shrinkWrap;
+    }
+
+    testWidgets('no PC, a coluna constrói só o que está à vista', (t) async {
+      await _montar(
+        t,
+        servicos: _servicos(_visao(ehHoje: false, itens: _itens(muitas))),
+      );
+      final lista = find.descendant(
+        of: _lista(),
+        matching: find.byType(ListView),
+      );
+      expect(preguicosa(t, lista), isTrue);
+      expect(_item(muitas.last), findsNothing);
+    });
+
+    testWidgets('no celular, a folha rola até o último', (t) async {
+      await _montar(
+        t,
+        tamanho: _celular,
+        servicos: _servicos(_visao(ehHoje: false, itens: _itens(muitas))),
+      );
+      await t.tap(find.text('Anteriores'));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      final lista = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(ListView),
+      );
+      expect(preguicosa(t, lista), isTrue);
+      expect(_item(muitas.last), findsNothing);
+      await t.scrollUntilVisible(
+        _item(muitas.last),
+        300,
+        scrollable: find.descendant(
+          of: lista,
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(_item(muitas.last), findsOneWidget);
+    });
+  });
+
+  testWidgets('no PC, o título da lista numa linha e Atualizar abaixo', (
+    t,
+  ) async {
+    await _montar(t);
+    final titulo = find.text('Relatórios anteriores');
+    final linha = t.renderObject<RenderParagraph>(titulo);
+    expect(linha.didExceedMaxLines, isFalse);
+    expect(
+      linha.getMaxIntrinsicWidth(double.infinity),
+      lessThanOrEqualTo(linha.size.width + .01),
+    );
+    expect(t.getSize(titulo).height, lessThan(30));
+    expect(
+      t.getTopLeft(find.byKey(const Key('relatorios-atualizar'))).dy,
+      greaterThanOrEqualTo(t.getBottomLeft(titulo).dy),
+    );
   });
 }

@@ -24,6 +24,8 @@ const textoHojeIndisponivel =
     'dias de pregão)';
 const textoRelatoriosSemConexao =
     'Sem conexão com o Google. Mostrando os relatórios salvos neste aparelho.';
+const textoRelatoriosSemConexaoVazio =
+    'Sem conexão. Os relatórios aparecem aqui quando houver internet.';
 const textoRelatoriosNovoLogin =
     'Para ver os relatórios, entre de novo com o Google';
 const textoRelatoriosSemConta =
@@ -53,12 +55,16 @@ class _Corpo extends StatelessWidget {
     final controle = context.watch<ControleRelatorios>();
     final email = context.select<EstadoApp, String?>((e) => e.conta.email);
     final visao = controle.visao;
+    final topoErro = [
+      if (controle.erro case final e?) _Faixa(e, icone: Icons.error_outline),
+    ];
     final Widget conteudo;
     if (visao == null) {
       conteudo = const Carregando();
     } else {
       conteudo = switch (visao.situacao) {
         SituacaoRelatorios.novoLogin => _Mensagem(
+          topo: topoErro,
           texto: textoRelatoriosNovoLogin,
           botao: email == null
               ? null
@@ -69,6 +75,7 @@ class _Corpo extends StatelessWidget {
           nota: 'A sincronização continua funcionando normalmente.',
         ),
         SituacaoRelatorios.semConta => _Mensagem(
+          topo: topoErro,
           texto: textoRelatoriosSemConta,
           botao: FilledButton(
             onPressed: () => unawaited(controle.entrar()),
@@ -98,15 +105,25 @@ class _Principal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final aberto = controle.aberto;
+    final semConexao = visao.situacao == SituacaoRelatorios.semConexao;
     final topo = [
-      if (visao.situacao == SituacaoRelatorios.semConexao)
-        const _Faixa(textoRelatoriosSemConexao, icone: Icons.cloud_off),
+      if (semConexao)
+        _Faixa(
+          visao.itens.isEmpty
+              ? textoRelatoriosSemConexaoVazio
+              : textoRelatoriosSemConexao,
+          icone: Icons.cloud_off,
+        ),
       if (controle.erro case final e?) _Faixa(e, icone: Icons.error_outline),
       if (!visao.ehHoje && visao.itens.isNotEmpty && aberto != null)
         _HojeIndisponivel(controle.itemAberto?.data ?? aberto.data),
     ];
     if (visao.itens.isEmpty) {
-      return _Mensagem(topo: topo, texto: textoRelatoriosVazio);
+      // sem conexão, a pasta pode não estar vazia: só a faixa
+      return _Mensagem(
+        topo: topo,
+        texto: semConexao ? null : textoRelatoriosVazio,
+      );
     }
     if (aberto == null) {
       return controle.erro == null ? const Carregando() : _Mensagem(topo: topo);
@@ -300,21 +317,29 @@ class _ItemRelatorio extends StatelessWidget {
   }
 }
 
-List<Widget> _itens(
+/// Lista preguiçosa dos relatórios: só os itens à vista são construídos.
+ListView _lista(
   ControleRelatorios controle,
   VisaoRelatorios visao, {
+  ScrollController? rolagem,
+  EdgeInsetsGeometry? padding,
   void Function()? antes,
-}) => [
-  for (final i in visao.itens)
-    _ItemRelatorio(
+}) => ListView.builder(
+  controller: rolagem,
+  padding: padding,
+  itemCount: visao.itens.length,
+  itemBuilder: (_, n) {
+    final i = visao.itens[n];
+    return _ItemRelatorio(
       i,
       aberto: i.nome == controle.nomeAberto,
       aoTocar: () {
         antes?.call();
         unawaited(controle.abrir(i.nome));
       },
-    ),
-];
+    );
+  },
+);
 
 const _tituloLista = Text(
   'Relatórios anteriores',
@@ -345,16 +370,16 @@ class _Expandido extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // o título numa linha só; o botão logo abaixo
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
-                    child: Row(
-                      children: [
-                        const Expanded(child: _tituloLista),
-                        _BotaoAtualizar(controle),
-                      ],
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 8,
+                      children: [_tituloLista, _BotaoAtualizar(controle)],
                     ),
                   ),
-                  Expanded(child: ListView(children: _itens(controle, visao))),
+                  Expanded(child: _lista(controle, visao)),
                 ],
               ),
             ),
@@ -407,27 +432,26 @@ class _Compacto extends StatelessWidget {
       child: Consumer<ControleRelatorios>(
         builder: (_, controle, _) {
           final visao = controle.visao ?? this.visao;
-          return ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(folha).height * .75,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+          // arrastar sobe a folha até 90% da tela; depois a lista rola
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: .6,
+            minChildSize: .3,
+            maxChildSize: .9,
+            builder: (_, rolagem) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Padding(
                   padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
                   child: _tituloLista,
                 ),
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
+                Expanded(
+                  child: _lista(
+                    controle,
+                    visao,
+                    rolagem: rolagem,
                     padding: const EdgeInsets.only(bottom: 16),
-                    children: _itens(
-                      controle,
-                      visao,
-                      antes: () => Navigator.of(folha).pop(),
-                    ),
+                    antes: () => Navigator.of(folha).pop(),
                   ),
                 ),
               ],
