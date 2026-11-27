@@ -541,12 +541,16 @@ jobs:
             if python -c "
           import sys, atualizador
           atualizador.VERSAO = '1.12.1'
-          info = atualizador.verificar(sys.argv[1])
-          if not info or info['versao'] != sys.argv[2]:
-              print('::error title=Atualizadores::atualizador Python 1.12 não detectou ' + sys.argv[2] + ' para ' + sys.argv[1] + ': ' + repr(info))
+          nivel = 'error' if sys.argv[3] == '3' else 'warning'
+          try:
+              info = atualizador.verificar(sys.argv[1])
+          except Exception as e:
+              info = 'erro: ' + repr(e)
+          if not isinstance(info, dict) or info.get('versao') != sys.argv[2]:
+              print('::' + nivel + ' title=Atualizadores::atualizador Python 1.12 não detectou ' + sys.argv[2] + ' para ' + sys.argv[1] + ' (tentativa ' + sys.argv[3] + '): ' + repr(info))
               sys.exit(1)
           print(sys.argv[1], info['versao'])
-          " "$nome" "$VERSAO"; then break; fi
+          " "$nome" "$VERSAO" "$tentativa"; then break; fi
             if [ "$tentativa" = 3 ]; then exit 1; fi
             echo "Tentativa $tentativa falhou; nova tentativa em 20 s"
             sleep 20
