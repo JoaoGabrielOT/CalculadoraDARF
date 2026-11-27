@@ -33,3 +33,11 @@ const caminhoFixtureRelatorio27 =
 Map<String, Object?> fixtureRelatorio27() =>
     (jsonDecode(File(caminhoFixtureRelatorio27).readAsStringSync()) as Map)
         .cast<String, Object?>();
+
+const caminhoFixtureRelatorioGuia =
+    '../tests/fixtures/relatorio-abertura-2026-11-27-guia.json';
+
+/// A fixture de 27/11 com os campos do guia (preço × alvo, motivo, frase).
+Map<String, Object?> fixtureRelatorioGuia() =>
+    (jsonDecode(File(caminhoFixtureRelatorioGuia).readAsStringSync()) as Map)
+        .cast<String, Object?>();

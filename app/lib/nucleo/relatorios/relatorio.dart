@@ -277,6 +277,11 @@ class ItemEspecialista {
     this.potencial,
     this.data,
     this.url,
+    this.precoAlvoValor,
+    this.moedaAlvo,
+    this.prazoAlvo,
+    this.motivo,
+    this.fraseGuia,
   });
 
   final String? casa;
@@ -289,6 +294,13 @@ class ItemEspecialista {
   final String? data;
   final String? url;
 
+  /// Alvo como número (só número JSON; texto vira null).
+  final double? precoAlvoValor;
+  final String? moedaAlvo;
+  final String? prazoAlvo;
+  final String? motivo;
+  final String? fraseGuia;
+
   static ItemEspecialista? deJson(Object? json) {
     final m = _mapa(json);
     if (m == null) return null;
@@ -300,6 +312,11 @@ class ItemEspecialista {
       potencial: _texto(m['potencial']),
       data: _texto(m['data']),
       url: _texto(m['url']),
+      precoAlvoValor: _numero(m['precoAlvoValor']),
+      moedaAlvo: _texto(m['moedaAlvo']),
+      prazoAlvo: _texto(m['prazoAlvo']),
+      motivo: _texto(m['motivo']),
+      fraseGuia: _texto(m['fraseGuia']),
     );
   }
 }
@@ -310,6 +327,12 @@ class Especialistas {
     this.consenso,
     this.placar,
     this.itens = const [],
+    this.precoReferencia,
+    this.alvoMedio,
+    this.alvoMin,
+    this.alvoMax,
+    this.potencialMedio,
+    this.guiaLeigo,
   });
 
   final String? resumo;
@@ -319,6 +342,14 @@ class Especialistas {
   final Placar? placar;
   final List<ItemEspecialista> itens;
 
+  /// Textos prontos do JSON (ex.: "R$ 56,90 em 26/11", "+18,9%").
+  final String? precoReferencia;
+  final String? alvoMedio;
+  final String? alvoMin;
+  final String? alvoMax;
+  final String? potencialMedio;
+  final String? guiaLeigo;
+
   static Especialistas deJson(Object? json) {
     final m = _mapa(json);
     if (m == null) return const Especialistas();
@@ -327,6 +358,12 @@ class Especialistas {
       consenso: _normalizado(m['consenso']),
       placar: Placar.deJson(m['placar']),
       itens: [for (final e in _lista(m['itens'])) ?ItemEspecialista.deJson(e)],
+      precoReferencia: _texto(m['precoReferencia']),
+      alvoMedio: _texto(m['alvoMedio']),
+      alvoMin: _texto(m['alvoMin']),
+      alvoMax: _texto(m['alvoMax']),
+      potencialMedio: _texto(m['potencialMedio']),
+      guiaLeigo: _texto(m['guiaLeigo']),
     );
   }
 }

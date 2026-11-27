@@ -1,3 +1,4 @@
+import 'package:calculadoradarf/nucleo/relatorios/guia.dart';
 import 'package:calculadoradarf/nucleo/relatorios/relatorio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -352,6 +353,104 @@ void main() {
       final r = Relatorio.deJson(fixtureRelatorio());
       final e = ativo(r, 'BPAC11').especialistas;
       expect((e.consenso, e.placar), (null, null));
+    });
+  });
+
+  group('guia dos especialistas', () {
+    AtivoRelatorio ativo(Relatorio r, String t) =>
+        r.ativos.firstWhere((a) => a.ticker == t);
+
+    test('fixture guia: campos de especialistas e itens', () {
+      final r = Relatorio.deJson(fixtureRelatorioGuia());
+      final e = ativo(r, 'BPAC11').especialistas;
+      expect(e.precoReferencia, 'R\$ 56,90 em 26/11');
+      expect(e.alvoMedio, 'R\$ 67,67');
+      expect(e.alvoMin, 'R\$ 60,00');
+      expect(e.alvoMax, 'R\$ 72,00');
+      expect(e.potencialMedio, '+18,9%');
+      expect(e.guiaLeigo, startsWith('2 de 3 casas indicam COMPRAR'));
+      expect(e.itens[0].motivo, startsWith('Mantém a visão positiva'));
+      expect(e.itens[0].fraseGuia, startsWith('O Safra indica COMPRAR'));
+      final t = ativo(r, 'TAEE11').especialistas.itens[1];
+      expect(t.precoAlvoValor, 43.5);
+      expect(t.moedaAlvo, 'BRL');
+      expect(t.prazoAlvo, 'fim de 2027');
+    });
+
+    test('precoAlvoValor em texto vira null', () {
+      expect(
+        ItemEspecialista.deJson({'precoAlvoValor': '43,5'})!.precoAlvoValor,
+        isNull,
+      );
+    });
+
+    test('fixture de 26/11 não tem os campos; temGuia', () {
+      final r = Relatorio.deJson(fixtureRelatorio());
+      final e = ativo(r, 'BPAC11').especialistas;
+      expect([
+        e.precoReferencia,
+        e.alvoMedio,
+        e.alvoMin,
+        e.alvoMax,
+        e.potencialMedio,
+        e.guiaLeigo,
+        e.itens[0].precoAlvoValor,
+        e.itens[0].moedaAlvo,
+        e.itens[0].prazoAlvo,
+        e.itens[0].motivo,
+        e.itens[0].fraseGuia,
+      ], everyElement(isNull));
+      expect(temGuia(r), isFalse);
+      expect(temGuia(Relatorio.deJson(fixtureRelatorio27())), isFalse);
+      expect(temGuia(Relatorio.deJson(fixtureRelatorioGuia())), isTrue);
+    });
+
+    test('temGuia por cada campo', () {
+      Relatorio com(Map<String, Object?> esp) => Relatorio.deJson({
+        'schemaVersion': 1,
+        'ativos': [
+          {'ticker': 'X', 'especialistas': esp},
+        ],
+      });
+      expect(temGuia(com({'guiaLeigo': 'a'})), isTrue);
+      expect(temGuia(com({'alvoMedio': 'R\$ 1'})), isTrue);
+      expect(
+        temGuia(
+          com({
+            'itens': [
+              {'fraseGuia': 'f'},
+            ],
+          }),
+        ),
+        isTrue,
+      );
+      expect(
+        temGuia(
+          com({
+            'itens': [
+              {'motivo': 'm'},
+            ],
+          }),
+        ),
+        isTrue,
+      );
+      expect(temGuia(com({'resumo': 'r'})), isFalse);
+    });
+
+    test('fraseSemMotivo', () {
+      expect(
+        fraseSemMotivo('O X indica MANTER. Motivo: acha caro.', 'Acha caro.'),
+        'O X indica MANTER.',
+      );
+      expect(
+        fraseSemMotivo('O X indica MANTER. Motivo: acha caro.', ' ACHA CARO '),
+        'O X indica MANTER.',
+      );
+      expect(
+        fraseSemMotivo('O X indica MANTER. Motivo: acha caro.', 'Outro.'),
+        'O X indica MANTER. Motivo: acha caro.',
+      );
+      expect(fraseSemMotivo('O X indica MANTER.', null), 'O X indica MANTER.');
     });
   });
 }

@@ -8,6 +8,7 @@ import '../../../nucleo/relatorios/destaques.dart';
 import '../../../nucleo/relatorios/relatorio.dart';
 import '../../componentes/cartao.dart';
 import '../../tema/cores_app.dart';
+import 'especialistas_ativo.dart';
 import 'paleta_relatorio.dart';
 
 class CartaoAtivo extends StatelessWidget {
@@ -109,13 +110,27 @@ class CartaoAtivo extends StatelessWidget {
                   ]),
                 if (a.noticias case final n?) _Campo('Notícias', [_texto(n)]),
                 if (esp.resumo != null ||
+                    esp.guiaLeigo != null ||
+                    esp.alvoMedio != null ||
                     esp.itens.isNotEmpty ||
                     placar.total > 0)
                   _Campo('Especialistas', [
-                    if (esp.resumo case final r?) _texto(r),
+                    if (esp.guiaLeigo case final g?)
+                      GuiaAtivo(a.ticker, g)
+                    else if (esp.resumo case final r?)
+                      _texto(r),
+                    if (esp.alvoMedio != null)
+                      ComparacaoAlvo(a.ticker, esp, textoPreco(preco)),
                     if (placar.total > 0) _PlacarCartao(a.ticker, placar),
-                    for (final i in esp.itens)
-                      if (_textoItem(i) case final t
+                    for (final (n, i) in esp.itens.indexed)
+                      if (itemComGuia(i))
+                        CasaEspecialista(
+                          a.ticker,
+                          n,
+                          i,
+                          aoAbrirLink: aoAbrirLink,
+                        )
+                      else if (_textoItem(i) case final t
                           when t.isNotEmpty || i.potencial != null)
                         Wrap(
                           spacing: 8,

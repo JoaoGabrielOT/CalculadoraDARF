@@ -872,4 +872,231 @@ void main() {
       const Color(0xFFF1F3F4),
     ));
   });
+
+  group('guia dos especialistas', () {
+    Relatorio guia() => Relatorio.deJson(fixtureRelatorioGuia());
+    double y(WidgetTester t, String k) => t.getTopLeft(find.byKey(Key(k))).dy;
+    Finder em(String k, String s) =>
+        find.descendant(of: find.byKey(Key(k)), matching: find.text(s));
+    Finder emContendo(String k, String s) => find.descendant(
+      of: find.byKey(Key(k)),
+      matching: find.textContaining(s),
+    );
+    Finder pilulaDe(Finder texto) =>
+        find.ancestor(of: texto, matching: find.byType(Pilula));
+    const explicacao =
+        'Preço-alvo é quanto a casa acha que a ação vai valer no prazo '
+        'indicado (em geral 12 meses). Não é preço para comprar nem para '
+        'vender.';
+
+    /// Um ativo só, com os especialistas montados no teste.
+    Relatorio um(Map<String, Object?> esp, {Object? preco}) =>
+        Relatorio.deJson({
+          'schemaVersion': 1,
+          'ativos': [
+            {'ticker': 'ZZZ3', 'preco': ?preco, 'especialistas': esp},
+          ],
+        });
+
+    testWidgets('explicação no topo, entre o cabeçalho e a legenda', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: _pcAlto);
+      expect(em('explicacao-preco-alvo', explicacao), findsOneWidget);
+      expect(
+        _fundo(t, find.byKey(const Key('explicacao-preco-alvo'))),
+        PaletaRelatorio.azulFundo,
+      );
+      expect(y(t, 'explicacao-preco-alvo'), greaterThan(y(t, 'secao-a')));
+      expect(y(t, 'explicacao-preco-alvo'), lessThan(y(t, 'secao-f')));
+    });
+
+    testWidgets('guiaLeigo no cartão, em caixa azul', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: _pcAlto);
+      final e = guia().ativos.firstWhere((a) => a.ticker == 'BPAC11');
+      expect(em('guia-BPAC11', e.especialistas.guiaLeigo!), findsOneWidget);
+      expect(
+        _fundo(t, find.byKey(const Key('guia-BPAC11'))),
+        PaletaRelatorio.azulFundo,
+      );
+      expect(find.byKey(const Key('guia-CSNA3')), findsOneWidget);
+      expect(find.byKey(const Key('placar-BPAC11')), findsOneWidget);
+    });
+
+    testWidgets('comparação do BPAC11', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: _pcAlto);
+      for (final s in [
+        'Último preço',
+        'R\$ 56,90 em 26/11',
+        'Alvo médio',
+        'R\$ 67,67',
+        '+18,9%',
+        'Faixa dos alvos: R\$ 60,00 a R\$ 72,00',
+      ]) {
+        expect(em('comparacao-BPAC11', s), findsOneWidget, reason: s);
+      }
+      expect(_coresSelo(t, pilulaDe(em('comparacao-BPAC11', '+18,9%'))), (
+        PaletaRelatorio.positivaTexto,
+        PaletaRelatorio.positivaFundo,
+      ));
+    });
+
+    testWidgets('faixa com min igual a max; sem alvo médio, sem comparação', (
+      t,
+    ) async {
+      await montarComponente(t, _vista(guia()), tamanho: _pcAlto);
+      expect(
+        em('comparacao-TAEE11', 'Faixa dos alvos: R\$ 43,50'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('comparacao-CSNA3')), findsNothing);
+    });
+
+    testWidgets('comparação: potencial, faixa e último preço (mapas)', (
+      t,
+    ) async {
+      Future<void> monta(Map<String, Object?> esp, {Object? preco}) =>
+          montarComponente(t, _vista(um(esp, preco: preco)), tamanho: _pcAlto);
+      const k = 'comparacao-ZZZ3';
+      await monta({'alvoMedio': 'R\$ 9', 'potencialMedio': '-4,0%'});
+      expect(_coresSelo(t, pilulaDe(em(k, '-4,0%'))), (
+        PaletaRelatorio.negativaTexto,
+        PaletaRelatorio.negativaFundo,
+      ));
+      await monta({'alvoMedio': 'R\$ 9', 'potencialMedio': '−4,0%'});
+      expect(
+        _coresSelo(t, pilulaDe(em(k, '−4,0%'))).$1,
+        PaletaRelatorio.negativaTexto,
+      );
+      await monta({'alvoMedio': 'R\$ 9', 'potencialMedio': 'n/d'});
+      expect(
+        _coresSelo(t, pilulaDe(em(k, 'n/d'))).$1,
+        PaletaRelatorio.neutraTexto,
+      );
+      // sem min ou max, a faixa some; sem referência, o preço do ativo
+      await monta(
+        {'alvoMedio': 'R\$ 9', 'alvoMin': 'R\$ 8'},
+        preco: {'texto': 'R\$ 7,00', 'data': '2026-11-26'},
+      );
+      expect(emContendo(k, 'Faixa dos alvos'), findsNothing);
+      expect(em(k, 'R\$ 7,00 · 26/11/2026'), findsOneWidget);
+      await monta({
+        'alvoMedio': 'R\$ 9',
+        'alvoMin': 'R\$ 8',
+        'alvoMax': 'R\$ 10',
+      });
+      expect(em(k, 'Faixa dos alvos: R\$ 8 a R\$ 10'), findsOneWidget);
+      expect(em(k, '—'), findsOneWidget);
+    });
+
+    testWidgets('sub-cartão da casa do BPAC11', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: _pcAlto);
+      const k = 'casa-BPAC11-0';
+      expect(em(k, 'Compra'), findsOneWidget);
+      expect(em(k, 'Safra'), findsOneWidget);
+      expect(em(k, '12/11/2026'), findsOneWidget);
+      const motivo =
+          'Motivo: Mantém a visão positiva, embora tenha achado as despesas '
+          'do trimestre um pouco negativas.';
+      expect(em(k, motivo), findsOneWidget);
+      expect(emContendo(k, 'Motivo:'), findsOneWidget);
+      expect(t.widget<Text>(em(k, motivo)).style?.fontStyle, FontStyle.italic);
+      expect(
+        emContendo(k, 'O Safra indica COMPRAR. Alvo: R\$ 71,00'),
+        findsOneWidget,
+      );
+      expect(em('casa-BPAC11-1', 'Manter'), findsOneWidget);
+      final url = guia().ativos
+          .firstWhere((a) => a.ticker == 'BPAC11')
+          .especialistas
+          .itens[0]
+          .url!;
+      await t.tap(
+        find.descendant(
+          of: find.byKey(const Key(k)),
+          matching: find.byType(LinkRelatorio),
+        ),
+      );
+      expect(_links, [Uri.parse(url)]);
+    });
+
+    testWidgets('sub-cartão: selo pelo texto, sem selo, motivo diferente e '
+        'link inseguro (mapas)', (t) async {
+      await montarComponente(
+        t,
+        _vista(
+          um({
+            'itens': [
+              {
+                'casa': 'A',
+                'recomendacao': 'Venda forte',
+                'fraseGuia': 'O A indica VENDER.',
+                'url': 'javascript:x',
+              },
+              {'casa': 'B', 'motivo': 'só motivo'},
+              {
+                'casa': 'C',
+                'classificacao': 'sem_classificacao',
+                'fraseGuia': 'O C ficou fora. Motivo: outro texto.',
+                'motivo': 'texto diferente',
+              },
+              {'casa': 'D', 'recomendacao': 'Compra', 'data': '2026-11-01'},
+            ],
+          }),
+        ),
+        tamanho: _pcAlto,
+      );
+      expect(em('casa-ZZZ3-0', 'Venda'), findsOneWidget);
+      expect(em('casa-ZZZ3-0', 'O A indica VENDER.'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('casa-ZZZ3-0')),
+          matching: find.byType(LinkRelatorio),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('casa-ZZZ3-1')),
+          matching: find.byType(Pilula),
+        ),
+        findsNothing,
+      );
+      expect(em('casa-ZZZ3-1', 'Motivo: só motivo'), findsOneWidget);
+      expect(em('casa-ZZZ3-2', 'Sem classificação'), findsOneWidget);
+      expect(
+        em('casa-ZZZ3-2', 'O C ficou fora. Motivo: outro texto.'),
+        findsOneWidget,
+      );
+      expect(em('casa-ZZZ3-2', 'Motivo: texto diferente'), findsOneWidget);
+      // sem frase nem motivo: a linha da 2.8.0, sem sub-cartão
+      expect(find.byKey(const Key('casa-ZZZ3-3')), findsNothing);
+      expect(find.textContaining('D · Compra · 01/11/2026'), findsOneWidget);
+    });
+
+    testWidgets('sem os campos, nada do guia aparece', (t) async {
+      for (final f in [fixtureRelatorio(), fixtureRelatorio27()]) {
+        await montarComponente(
+          t,
+          _vista(Relatorio.deJson(f)),
+          tamanho: _pcAlto,
+        );
+        for (final k in [
+          'explicacao-preco-alvo',
+          'guia-',
+          'comparacao-',
+          'casa-',
+        ]) {
+          expect(
+            find.byWidgetPredicate(
+              (w) =>
+                  w.key is ValueKey<String> &&
+                  (w.key! as ValueKey<String>).value.startsWith(k),
+            ),
+            findsNothing,
+            reason: k,
+          );
+        }
+        expect(find.text(explicacao), findsNothing);
+      }
+    });
+  });
 }

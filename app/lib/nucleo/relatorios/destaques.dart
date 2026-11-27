@@ -86,6 +86,26 @@ Placar? _placarDoItem(ItemEspecialista i) {
   };
 }
 
+/// Voto de uma casa para o selo: a classificação (qualquer valor que não seja
+/// compra, neutra ou venda é `semDados`); sem ela, o texto da recomendação
+/// com a mesma regra do placar; sem nenhum dos dois, null.
+Consenso? votoDoItem(ItemEspecialista i) {
+  final c = i.classificacao;
+  if (c != null) {
+    return switch (c) {
+      'compra' => Consenso.compra,
+      'neutra' => Consenso.neutra,
+      'venda' => Consenso.venda,
+      _ => Consenso.semDados,
+    };
+  }
+  final t = i.recomendacao?.trim().toLowerCase();
+  if (t == null || _formatoPlacar.hasMatch(t)) return null;
+  if (_comeca(t, _compra)) return Consenso.compra;
+  if (_comeca(t, _venda)) return Consenso.venda;
+  return _comeca(t, _neutra) ? Consenso.neutra : null;
+}
+
 /// O placar do JSON; senão, o contado pelos itens.
 Placar placarDe(Especialistas e) {
   final p = e.placar;

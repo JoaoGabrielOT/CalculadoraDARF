@@ -6,11 +6,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../nucleo/relatorios/destaques.dart';
+import '../../../nucleo/relatorios/guia.dart';
 import '../../../nucleo/relatorios/relatorio.dart';
 import '../../componentes/cartao.dart';
 import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
 import 'cartao_ativo.dart';
+import 'especialistas_ativo.dart';
 import 'paleta_relatorio.dart';
 
 class VistaRelatorio extends StatelessWidget {
@@ -50,6 +52,7 @@ class VistaRelatorio extends StatelessWidget {
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
         for (final w in topo) bloco(w),
         bloco(_Cabecalho(r)),
+        if (temGuia(r)) bloco(const ExplicacaoPrecoAlvo()),
         if (r.avisosTopo.isNotEmpty || r.alertas.isNotEmpty) bloco(_Avisos(r)),
         bloco(const _Legenda()),
         if (r.indicadores.isNotEmpty) bloco(_Indicadores(r.indicadores)),

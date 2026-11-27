@@ -169,7 +169,7 @@ VisaoCaixa _caixa() {
   );
 }
 
-ServicosFalsos _servicos() {
+ServicosFalsos _servicos({bool guia = false}) {
   final s = _ServicosGolden()
     ..visoes['2026-10'] = visaoExemplo(_outubro())
     ..visaoCaixa = _caixa()
@@ -195,7 +195,7 @@ ServicosFalsos _servicos() {
         ),
     }
     ..metasAtivasFalsas = 2
-    ..visaoRelatorios = _visaoRelatorios()
+    ..visaoRelatorios = _visaoRelatorios(guia: guia)
     ..estadoConta = const EstadoConta(
       email: 'investidor@gmail.com',
       temCredencial: true,
@@ -279,8 +279,10 @@ ServicosFalsos _servicos() {
 }
 
 /// A fixture como o relatório de hoje e três itens na lista (24 a 26/11).
-VisaoRelatorios _visaoRelatorios() {
-  final atual = Relatorio.deJson(fixtureRelatorio());
+VisaoRelatorios _visaoRelatorios({bool guia = false}) {
+  final atual = Relatorio.deJson(
+    guia ? fixtureRelatorioGuia() : fixtureRelatorio(),
+  );
   return VisaoRelatorios(
     itens: [
       for (final (d, t) in [
@@ -571,6 +573,7 @@ void main() {
     for (final (variante, chave) in [
       ('destaques', 'secao-destaques'),
       ('cartao', 'cartao-RENT3'),
+      ('guia', 'cartao-BPAC11'),
     ]) {
       for (final tema in _temas.entries) {
         if (tema.key == 'moderno') continue;
@@ -581,7 +584,7 @@ void main() {
             try {
               await montarApp(
                 t,
-                servicos: _servicos(),
+                servicos: _servicos(guia: variante == 'guia'),
                 tema: tema.value,
                 tamanho: tamanho.value,
               );
