@@ -1,0 +1,1720 @@
+{
+  "schemaVersion": 1,
+  "tipo": "abertura",
+  "data": "2026-11-27",
+  "dataExtenso": "Sexta-feira, 27 de novembro de 2026",
+  "geradoEm": "2026-11-27T08:54:42-03:00",
+  "titulo": "Relatório de Abertura de Mercado — 27/11/2026",
+  "origemAtivos": {
+    "planilha": "Calculadora DARF",
+    "aba": "Radar",
+    "quantidade": 23
+  },
+  "avisosTopo": [],
+  "indicadores": [
+    {
+      "nome": "Ibovespa",
+      "valor": "176.800 pts",
+      "variacao": "+6,07%",
+      "direcao": "alta",
+      "contexto": "Fechamento de 26/11 (176.799,84). Futuro de hoje não confirmado."
+    },
+    {
+      "nome": "Dólar",
+      "valor": "R$ 5,7464",
+      "variacao": "-1,23%",
+      "direcao": "queda",
+      "contexto": "Fechamento à vista de 26/11; ainda sobe 4,69% no ano."
+    },
+    {
+      "nome": "Juros futuros (DI jan/28)",
+      "valor": "14,13%",
+      "variacao": "-0,17 p.p.",
+      "direcao": "queda",
+      "contexto": "Às 10h de 26/11 (antes 14,29%); fechamento não confirmado. DI: taxa que o mercado projeta para os juros."
+    },
+    {
+      "nome": "Petróleo Brent",
+      "valor": "US$ 92,03",
+      "variacao": "+0,50%",
+      "direcao": "alta",
+      "contexto": "Manhã de 27/11; fontes divergem (outra cita US$ 97,32). Opep+ se reúne domingo."
+    },
+    {
+      "nome": "Minério de ferro",
+      "valor": "US$ 98,49/t",
+      "variacao": "-0,15%",
+      "direcao": "queda",
+      "contexto": "Dalian, fechamento de 25/11 (657 iuanes/t); -2,8% no mês."
+    },
+    {
+      "nome": "IPCA-15 novembro",
+      "valor": "0,22%",
+      "variacao": "4,64% em 12 meses",
+      "direcao": "neutra",
+      "contexto": "Inflação prévia do mês, abaixo do esperado (0,36%); outubro foi 0,32%."
+    }
+  ],
+  "alertas": [
+    "Bolsas dos EUA ficaram fechadas ontem (26/11, Ação de Graças) e hoje têm pregão encurtado, até 15h de Brasília. Isso afeta os BDRs (T1TW34, GOGL34, NVDC34)."
+  ],
+  "resumo": "O Ibovespa subiu 6,07% ontem e fechou em 176.799,84 pontos, depois da notícia de que Luiz Carlos Trabuco, presidente do conselho do Bradesco, será o ministro da Fazenda a partir de 2027, o que o mercado leu como sinal favorável. O dólar caiu 1,23%, para R$ 5,7464, e os juros futuros recuaram. A inflação prévia de novembro (IPCA-15) foi de 0,22%, abaixo do esperado, mas segue em 4,64% em 12 meses, acima do teto da meta (4,5%). Hoje saem o desemprego (PNAD, 9h), o IGP-M de novembro e o resultado das contas do governo de outubro. Nos EUA o pregão é curto, e o petróleo sobe antes da reunião da Opep+ no domingo.",
+  "termometro": {
+    "positiva": 5,
+    "mista": 12,
+    "neutra": 1,
+    "negativa": 5
+  },
+  "ativos": [
+    {
+      "posicao": 0,
+      "ticker": "CSNA3",
+      "empresa": "Companhia Siderúrgica Nacional",
+      "descricao": "CSN · siderurgia, mineração e cimento",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "Grupo de Benjamin Steinbruch, que controla a empresa.",
+      "preco": {
+        "texto": "R$ 3,72",
+        "valor": 3.72,
+        "moeda": "BRL",
+        "data": "2026-11-13",
+        "variacao": null,
+        "direcao": "queda",
+        "observacao": "Último fechamento confirmado é de 13/11. Na semana de 9 a 13/11 a ação caiu 15,65%, menor nível em cerca de 10 anos."
+      },
+      "precoExterior": null,
+      "noticias": "No 3º trimestre (resultado de 13/11) teve prejuízo de R$ 1,25 bilhão, contra lucro de R$ 76 milhões um ano antes; receita caiu 11,1%. A dívida líquida subiu para R$ 44,9 bilhões, 4,23 vezes a geração de caixa anual (Ebitda: lucro antes de juros, impostos e depreciação). Em 08/11 acertou a venda da CSN Cimentos à chinesa Huaxin por R$ 12,7 bilhões, ainda dependente do Cade e de outros reguladores.",
+      "especialistas": {
+        "resumo": "Maioria indica NEUTRA (manter) (1 de 1 casa)",
+        "consenso": "neutra",
+        "consensoTexto": "Maioria indica NEUTRA (manter) (1 de 1 casa)",
+        "placar": {
+          "compra": 0,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "BTG Pactual",
+            "recomendacao": "neutra",
+            "classificacao": "neutra",
+            "precoAlvo": null,
+            "potencial": null,
+            "data": "2026-11-13",
+            "url": "https://investnews.com.br/investimentos/csn-afunda-10-e-atinge-menor-patamar-em-10-anos-apos-prejuizo-bilionario/"
+          }
+        ]
+      },
+      "riscos": "Dívida alta, preço do minério e do frete. Próximo evento: aprovação e fechamento da venda da CSN Cimentos.",
+      "fontes": [
+        {
+          "nome": "Times Brasil (CNBC)",
+          "url": "https://timesbrasil.com.br/investimentos/csn-acoes-queda-prejuizo-terceiro-trimestre-2026/"
+        },
+        {
+          "nome": "InvestNews",
+          "url": "https://investnews.com.br/investimentos/csn-afunda-10-e-atinge-menor-patamar-em-10-anos-apos-prejuizo-bilionario/"
+        },
+        {
+          "nome": "Bloomberg Línea",
+          "url": "https://www.bloomberglinea.com.br/negocios/csn-acerta-venda-da-csn-cimentos-para-huaxin-por-r-127-bilhoes/"
+        }
+      ]
+    },
+    {
+      "posicao": 1,
+      "ticker": "T1TW34",
+      "empresa": "Take-Two Interactive Software, Inc.",
+      "descricao": "Take-Two · jogos eletrônicos (BDR)",
+      "tipoAtivo": "bdr",
+      "leitura": "mista",
+      "explicacao": "BDR é um recibo negociado na B3 que representa ações de uma empresa estrangeira. O preço do BDR acompanha a ação lá fora (TTWO na Nasdaq) e também o dólar: se o dólar sobe, o BDR tende a subir, e vice-versa.",
+      "dono": "Empresa americana sem controlador definido; ações espalhadas entre fundos e investidores (não confirmado).",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": {
+        "ticker": "TTWO",
+        "bolsa": "Nasdaq",
+        "texto": "US$ 216,61",
+        "valor": 216.61,
+        "moeda": "USD",
+        "data": "2026-11-18",
+        "variacao": "+6,22%",
+        "direcao": "alta"
+      },
+      "noticias": "O GTA VI foi lançado em 19/11 com nota média 99 de 100 (Metacritic); a Sensor Tower estimou cerca de 19 milhões de cópias e US$ 1,84 bilhão no dia do lançamento. No trimestre divulgado em 09/11, as reservas líquidas (vendas contratadas) de US$ 1,6 bilhão ficaram um pouco abaixo da faixa prevista, e a empresa manteve a projeção anual de US$ 8,0 a 8,2 bilhões. A ação oscilou muito: -6,3% em 16/11, -4,5% em 17/11 e +6,2% em 18/11.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente",
+        "consenso": "sem_dados",
+        "consensoTexto": "Sem recomendação recente",
+        "placar": {
+          "compra": 0,
+          "neutra": 0,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": []
+      },
+      "riscos": "Parte do sucesso do GTA VI pode já estar no preço; vendas abaixo do esperado pesariam. O BDR também varia com o dólar. Próximo resultado em fevereiro de 2027.",
+      "fontes": [
+        {
+          "nome": "Trefis",
+          "url": "https://www.trefis.com/stock/ttwo/articles/626934/what-moved-take-two-stock/2026-11-19"
+        },
+        {
+          "nome": "InvestNews",
+          "url": "https://investnews.com.br/investimentos/gta-vi-acoes-take-two-recuam/"
+        }
+      ]
+    },
+    {
+      "posicao": 2,
+      "ticker": "TAEE11",
+      "empresa": "Transmissora Aliança de Energia Elétrica S.A.",
+      "descricao": "Taesa · transmissão de energia (unit)",
+      "tipoAtivo": "unit",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Controle compartilhado entre Cemig e ISA Energia Brasil (não confirmado).",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "No 3º trimestre (11/11) o lucro regulatório subiu 12,5%, para R$ 363,8 milhões, com projetos novos e ativos comprados da Energisa. Aprovou R$ 363,8 milhões em dividendos (cerca de R$ 1,06 por unit), com pagamento previsto para janeiro de 2027; data-com não confirmada. Proventos do 2º trimestre foram pagos em 26/11. A dívida subiu para 4,7 vezes o Ebitda.",
+      "especialistas": {
+        "resumo": "Maioria indica NEUTRA (manter) (2 de 2 casas)",
+        "consenso": "neutra",
+        "consensoTexto": "Maioria indica NEUTRA (manter) (2 de 2 casas)",
+        "placar": {
+          "compra": 0,
+          "neutra": 2,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Genial Investimentos",
+            "recomendacao": "Manter",
+            "classificacao": "neutra",
+            "precoAlvo": null,
+            "potencial": null,
+            "data": "2026-11-11",
+            "url": "https://analisa.genialinvestimentos.com.br/analises-e-resultados/TAESA-TAEE11--Resultado-3T26"
+          },
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "Neutra",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 43,50",
+            "potencial": null,
+            "data": "2026-10-09",
+            "url": "https://seudinheiro.com/2026/empresas/nao-e-a-taesa-taee11-acao-paga-dividendos-mas-nao-e-a-favorita-do-itau-bba-veja-as-eletricas-preferidas-do-banco-miql/"
+          }
+        ]
+      },
+      "riscos": "Dívida em alta pode limitar dividendos; juros altos por mais tempo; decisão da Aneel sobre indenização de ativos.",
+      "fontes": [
+        {
+          "nome": "Genial Analisa",
+          "url": "https://analisa.genialinvestimentos.com.br/analises-e-resultados/TAESA-TAEE11--Resultado-3T26"
+        },
+        {
+          "nome": "Cenário Energia",
+          "url": "https://cenarioenergia.com.br/2026/11/12/taesa-registra-lucro-liquido-regulatorio-de-r-3638-milhoes-no-3t26-alta-de-125-na-base-anual/"
+        },
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://seudinheiro.com/2026/empresas/nao-e-a-taesa-taee11-acao-paga-dividendos-mas-nao-e-a-favorita-do-itau-bba-veja-as-eletricas-preferidas-do-banco-miql/"
+        }
+      ]
+    },
+    {
+      "posicao": 3,
+      "ticker": "BPAC11",
+      "empresa": "Banco BTG Pactual S.A.",
+      "descricao": "BTG Pactual · banco de investimento (unit)",
+      "tipoAtivo": "unit",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Sócios do banco, por meio de holdings, com André Esteves como principal acionista (não confirmado).",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "Fechamento não confirmado; R$ 54,18 no meio do pregão de 12/11. Caiu forte após a eleição de 25/10."
+      },
+      "precoExterior": null,
+      "noticias": "Lucro ajustado recorde de R$ 5,3 bilhões no 3º trimestre (+17%), acima do esperado, mas a ação caiu por despesas maiores e receitas mais fracas nas áreas ligadas ao mercado. Aprovou recompra de até R$ 2 bilhões em units em 18 meses (recompra: a empresa compra as próprias ações).",
+      "especialistas": {
+        "resumo": "Maioria indica COMPRA (2 de 3 casas)",
+        "consenso": "compra",
+        "consensoTexto": "Maioria indica COMPRA (2 de 3 casas)",
+        "placar": {
+          "compra": 2,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Citi",
+            "recomendacao": "compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 71",
+            "potencial": null,
+            "data": "2026-11",
+            "url": "https://www.moneytimes.com.br/btg-bpac11-por-que-a-acao-cai-mesmo-com-bons-resultados/"
+          },
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "market perform",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 60",
+            "potencial": null,
+            "data": "2026-10-30",
+            "url": "https://www.seudinheiro.com/2026/bolsa-dolar/uma-semana-muda-tudo-acoes-do-btg-bpac11-derretem-ganhos-do-ano-vale-comprar-apos-o-tombo-jcav/"
+          },
+          {
+            "casa": "JPMorgan",
+            "recomendacao": "compra",
+            "classificacao": "compra",
+            "precoAlvo": null,
+            "potencial": null,
+            "data": "2026-06",
+            "url": "https://www.seudinheiro.com/2026/bolsa-dolar/uma-semana-muda-tudo-acoes-do-btg-bpac11-derretem-ganhos-do-ano-vale-comprar-apos-o-tombo-jcav/"
+          }
+        ]
+      },
+      "riscos": "Sensível a juros e risco fiscal; receitas de mercado podem desacelerar; despesas maiores pressionam a rentabilidade.",
+      "fontes": [
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/empresas/btg-pactual-bpac11-lucra-bilhoes-e-rentabilidade-cai-no-3t26-o-que-esta-por-tras-da-maquina-de-resultados-do-banco-miql/"
+        },
+        {
+          "nome": "Money Times",
+          "url": "https://www.moneytimes.com.br/btg-bpac11-por-que-a-acao-cai-mesmo-com-bons-resultados/"
+        }
+      ]
+    },
+    {
+      "posicao": 4,
+      "ticker": "VBBR3",
+      "empresa": "Vibra Energia S.A.",
+      "descricao": "Vibra · distribuição de combustíveis",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Sem controlador definido; ações espalhadas no mercado desde que a Petrobras vendeu sua parte.",
+      "preco": {
+        "texto": "R$ 32,21",
+        "valor": 32.21,
+        "moeda": "BRL",
+        "data": "2026-10-26",
+        "variacao": "-10,08%",
+        "direcao": "queda",
+        "observacao": "Preço antigo (26/10); fechamento recente não confirmado. Confira na corretora."
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 2,46 bilhões no 3º trimestre (05/11), forte alta sobre uma base fraca em 2025. A dívida caiu e ficou em 1,0 vez o Ebitda. Aprovou R$ 499 milhões em JCP (juros sobre capital próprio, um tipo de provento); datas não confirmadas.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente",
+        "consenso": "sem_dados",
+        "consensoTexto": "Sem recomendação recente",
+        "placar": {
+          "compra": 0,
+          "neutra": 0,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "BB Investimentos",
+            "recomendacao": "revisão de preço-alvo (sem classificação confirmada)",
+            "classificacao": "sem_classificacao",
+            "precoAlvo": null,
+            "potencial": null,
+            "data": "2026-11",
+            "url": "https://investalk.bb.com.br/noticias/mercado/vibra-VBBR3-revisao-3T26"
+          }
+        ]
+      },
+      "riscos": "Interferência do governo em preços e impostos de combustíveis; possível volta da Petrobras ao varejo; oscilação do petróleo.",
+      "fontes": [
+        {
+          "nome": "Cenário Energia",
+          "url": "https://cenarioenergia.com.br/2026/11/05/vibra-ebitda-3t26-alavancagem-postos-petrobras-divida-liquida/"
+        },
+        {
+          "nome": "Canal Rural",
+          "url": "https://www.canalrural.com.br/economia/vibra-tem-lucro-liquido-de-r-246-bilhoes-no-3o-trimestre/"
+        },
+        {
+          "nome": "brapi",
+          "url": "https://brapi.dev/quote/VBBR3"
+        }
+      ]
+    },
+    {
+      "posicao": 5,
+      "ticker": "BBAS3",
+      "empresa": "Banco do Brasil S.A.",
+      "descricao": "Banco do Brasil · banco",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "Governo federal (União), com cerca de metade das ações.",
+      "preco": {
+        "texto": "R$ 14,62",
+        "valor": 14.62,
+        "moeda": "BRL",
+        "data": "2026-11-17",
+        "variacao": "-2,21%",
+        "direcao": "queda",
+        "observacao": "Último fechamento confirmado é de 17/11, mínima em 52 semanas."
+      },
+      "precoExterior": null,
+      "noticias": "Lucro ajustado de cerca de R$ 1,27 bilhão no 3º trimestre, queda de 66% e bem abaixo do esperado, por inadimplência no agronegócio. Cortou pela metade a projeção de lucro de 2026 (para R$ 9 a 11 bilhões) e reduziu a parcela do lucro paga em dividendos para o mínimo de 25%. A ação caiu 9,77% em 12/11.",
+      "especialistas": {
+        "resumo": "Maioria indica NEUTRA (manter) (1 de 1 casa)",
+        "consenso": "neutra",
+        "consensoTexto": "Maioria indica NEUTRA (manter) (1 de 1 casa)",
+        "placar": {
+          "compra": 0,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Genial Investimentos",
+            "recomendacao": "Em revisão (antes Manter)",
+            "classificacao": "sem_classificacao",
+            "precoAlvo": "R$ 20,10 (em revisão)",
+            "potencial": null,
+            "data": "2026-11-12",
+            "url": "https://analisa.genialinvestimentos.com.br/acoes/BBAS3/Banco-do-Brasil-BBAS3--Resultado-3T26-Lucro-Antes-do-Imposto-Negativo-e-Corte-Relevante-no-Guidance/"
+          },
+          {
+            "casa": "JPMorgan",
+            "recomendacao": "Neutra",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 22,00",
+            "potencial": "+50,5% até o alvo, com o preço de 17/11",
+            "data": "2026-09-16",
+            "url": "https://www.suno.com.br/noticias/?p=664494"
+          }
+        ]
+      },
+      "riscos": "Inadimplência no agro e na pessoa física; capital abaixo da referência; 4º trimestre deve seguir fraco.",
+      "fontes": [
+        {
+          "nome": "Genial Analisa",
+          "url": "https://analisa.genialinvestimentos.com.br/acoes/BBAS3/Banco-do-Brasil-BBAS3--Resultado-3T26-Lucro-Antes-do-Imposto-Negativo-e-Corte-Relevante-no-Guidance/"
+        },
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/empresas/banco-do-brasil-bbas3-corta-guidance-de-lucro-pela-metade-e-avisa-a-conta-do-agronegocio-ainda-nao-terminou-de-chegar-miql/"
+        },
+        {
+          "nome": "Forbes Brasil",
+          "url": "https://forbes.com.br/forbes-money/2026/11/acao-banco-brasil-ibovespa/"
+        }
+      ]
+    },
+    {
+      "posicao": 6,
+      "ticker": "BBDC4",
+      "empresa": "Banco Bradesco S.A.",
+      "descricao": "Bradesco · banco",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Cidade de Deus Participações e Fundação Bradesco, que controlam as ações com voto.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "Fontes divergem sobre o preço; confira na corretora."
+      },
+      "precoExterior": null,
+      "noticias": "Lucro recorrente de R$ 7,1 bilhões no 3º trimestre (+14,6%), dentro do esperado, mas com crescimento mais lento. Manteve projeções de 2026 e renovou recompra de ações. Em 28/10 o Itaú BBA rebaixou a ação para neutra. Ontem (26/11), Luiz Carlos Trabuco, presidente do conselho do Bradesco, foi apontado como próximo ministro da Fazenda.",
+      "especialistas": {
+        "resumo": "Opiniões divididas (1 compra, 1 neutra)",
+        "consenso": "dividido",
+        "consensoTexto": "Opiniões divididas (1 compra, 1 neutra)",
+        "placar": {
+          "compra": 1,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "Neutra (rebaixada de Compra)",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 20,00",
+            "potencial": null,
+            "data": "2026-10-28",
+            "url": "https://www.seudinheiro.com/2026/empresas/o-que-fez-o-itau-bba-abandonar-o-otimismo-com-o-bradesco-bbdc4/"
+          },
+          {
+            "casa": "Genial Investimentos",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 26,30",
+            "potencial": null,
+            "data": "2026-10-23",
+            "url": "https://analisa.genialinvestimentos.com.br/acoes/BBDC4/Bradesco-BBDC4--Resultado-3T26-Decimo-Primeiro-Trimestre-Agora-Sem-Muita-Folga"
+          }
+        ]
+      },
+      "riscos": "Inadimplência subindo (4,6%), provisões maiores no 4º trimestre, crédito crescendo abaixo do previsto.",
+      "fontes": [
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/bradesco-bbdc4-lucra-r-7-1-bilhoes-no-3t26-alta-de-14-6-123437/"
+        },
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/empresas/o-que-fez-o-itau-bba-abandonar-o-otimismo-com-o-bradesco-bbdc4/"
+        },
+        {
+          "nome": "InfoMoney",
+          "url": "https://www.infomoney.com.br/mercados/trabuco-fazenda-desemprego-igp-m-agenda-27112026/"
+        }
+      ]
+    },
+    {
+      "posicao": 7,
+      "ticker": "RENT3",
+      "empresa": "Localiza Rent a Car S.A.",
+      "descricao": "Localiza · aluguel de carros",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Sem controlador definido; fundadores (família Mattar e sócios) têm participação relevante.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 1,125 bilhão no 3º trimestre (06/11); sem efeitos extraordinários, alta de 29,1%. Uso da frota de aluguel em 82,4%, o maior em 5 anos, mas a margem na venda de seminovos caiu e a dívida subiu para R$ 33,1 bilhões. JCP de R$ 0,5566 por ação pago em 18/11.",
+      "especialistas": {
+        "resumo": "Maioria indica COMPRA (2 de 2 casas)",
+        "consenso": "compra",
+        "consensoTexto": "Maioria indica COMPRA (2 de 2 casas)",
+        "placar": {
+          "compra": 2,
+          "neutra": 0,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Itaú Investimentos",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 47,00",
+            "potencial": null,
+            "data": "2026-11-10",
+            "url": "https://itau.com.br/investimentos/analises/localiza-rent3-recomendacao-compra-10-11-26"
+          },
+          {
+            "casa": "BTG Pactual",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 63,00",
+            "potencial": null,
+            "data": "2026-08-10",
+            "url": "https://www.seudinheiro.com/2026/empresas/localiza-rent3-cai-dois-digitos-no-ano-e-btg-defende-que-a-acao-esta-inegavelmente-barata-mas-ha-pontos-de-atencao-giov/"
+          }
+        ]
+      },
+      "riscos": "Preço de carros usados (incluindo concorrência chinesa), juros altos e dívida maior. Possível JCP em dezembro.",
+      "fontes": [
+        {
+          "nome": "Diário do Comércio",
+          "url": "https://diariodocomercio.com.br/economia/lucro-localiza-terceiro-trimestre-2026/"
+        },
+        {
+          "nome": "Itaú Investimentos",
+          "url": "https://itau.com.br/investimentos/analises/localiza-rent3-recomendacao-compra-10-11-26"
+        },
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/empresas/localiza-rent3-cai-dois-digitos-no-ano-e-btg-defende-que-a-acao-esta-inegavelmente-barata-mas-ha-pontos-de-atencao-giov/"
+        }
+      ]
+    },
+    {
+      "posicao": 8,
+      "ticker": "CMIG4",
+      "empresa": "Companhia Energética de Minas Gerais - CEMIG",
+      "descricao": "Cemig · energia elétrica",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Estado de Minas Gerais, com a maioria das ações com voto.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 1,72 bilhão no 3º trimestre (13/11, +115%), mas o lucro ajustado foi de R$ 922,8 milhões (+18%): boa parte do salto veio da reversão de uma provisão para processos. A privatização saiu do radar após a eleição em Minas.",
+      "especialistas": {
+        "resumo": "Opiniões divididas (1 neutra, 1 venda)",
+        "consenso": "dividido",
+        "consensoTexto": "Opiniões divididas (1 neutra, 1 venda)",
+        "placar": {
+          "compra": 0,
+          "neutra": 1,
+          "venda": 1
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Safra",
+            "recomendacao": "Neutra",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 11,90",
+            "potencial": null,
+            "data": "2026-08-28",
+            "url": "https://oespecialista.safra.com.br/analise/cemig-cmig4-safra-mantem-visao-neutra/"
+          },
+          {
+            "casa": "JPMorgan",
+            "recomendacao": "Underweight",
+            "classificacao": "venda",
+            "precoAlvo": "R$ 13,00",
+            "potencial": null,
+            "data": "2026-07-28",
+            "url": "https://www.infomoney.com.br/?p=3427750"
+          }
+        ]
+      },
+      "riscos": "Interferência política; investimentos altos podem limitar dividendos. Próximo evento: anúncio de proventos no fim do ano.",
+      "fontes": [
+        {
+          "nome": "Diário do Comércio",
+          "url": "https://diariodocomercio.com.br/negocios/lucro-cemig-terceiro-trimestre-2026/"
+        },
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/privatizacao-da-cemig-cmig4-sai-do-radar-com-eleicao-em-minas-gerais-122742/"
+        },
+        {
+          "nome": "Safra",
+          "url": "https://oespecialista.safra.com.br/analise/cemig-cmig4-safra-mantem-visao-neutra/"
+        }
+      ]
+    },
+    {
+      "posicao": 9,
+      "ticker": "PETR4",
+      "empresa": "Petróleo Brasileiro S.A. - Petrobras",
+      "descricao": "Petrobras · petróleo e gás",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Governo federal (União), com a maioria das ações com voto.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 39,8 bilhões no 3º trimestre (10/11, +21,5%). Aprovou R$ 15,3 bilhões em proventos (cerca de R$ 1,19 por ação); data-com não confirmada. O investimento previsto para 2026 subiu para US$ 24 a 25,5 bilhões, o que o mercado leu como menos dividendos extras; a ação caiu 2% a 3% em 11/11.",
+      "especialistas": {
+        "resumo": "Maioria indica NEUTRA (manter) (2 de 3 casas)",
+        "consenso": "neutra",
+        "consensoTexto": "Maioria indica NEUTRA (manter) (2 de 3 casas)",
+        "placar": {
+          "compra": 1,
+          "neutra": 2,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Citi",
+            "recomendacao": "Neutro",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 48,00",
+            "potencial": null,
+            "data": "2026-11-17",
+            "url": "https://bpmoney.com.br/mercado/acoes/petrobras-petr4-citi-corta-preco-alvo-mantem-neutro-apos-3t/"
+          },
+          {
+            "casa": "Genial Investimentos",
+            "recomendacao": "Manter",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 49,00",
+            "potencial": null,
+            "data": "2026-11-10",
+            "url": "https://analisa.genialinvestimentos.com.br/analises-e-resultados/Petrobras-PETR4--Resultado-3T26-Operacional-bom-Mas-com-pontos-de-atencao"
+          },
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "Compra (preferida entre petroleiras)",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 63,00",
+            "potencial": null,
+            "data": "2026-08-10",
+            "url": "https://www.seudinheiro.com/2026/empresas/prio-prio3-pode-pagar-21-em-dividendos-no-proximo-ano-segundo-o-itau-bba-que-elevou-recomendacao-para-compra-mlim/"
+          }
+        ]
+      },
+      "riscos": "Investimento maior pode reduzir dividendos; interferência política; queda do petróleo. Reunião da Opep+ no domingo (29/11).",
+      "fontes": [
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/petrobras-petr4-lucra-de-r-39-8-bilhoes-no-3t26-salto-de-21-5-123814/"
+        },
+        {
+          "nome": "BP Money",
+          "url": "https://bpmoney.com.br/mercado/acoes/petrobras-petr4-citi-corta-preco-alvo-mantem-neutro-apos-3t/"
+        },
+        {
+          "nome": "Times Brasil (CNBC)",
+          "url": "https://timesbrasil.com.br/empresas-e-negocios/acoes-da-petrobras-caem-2-apos-divulgacao-de-resultados-do-terceiro-trimestre/"
+        }
+      ]
+    },
+    {
+      "posicao": 10,
+      "ticker": "EMBJ3",
+      "empresa": "Embraer S.A.",
+      "descricao": "Embraer · aviação e defesa",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Sem controlador definido; o governo tem uma ação especial (golden share) com direito de veto em temas estratégicos.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "Fechamento recente não confirmado; R$ 112,10 no meio do pregão de 10/11."
+      },
+      "precoExterior": null,
+      "noticias": "No 3º trimestre (10/11) o lucro de US$ 75 milhões veio abaixo do esperado por efeito contábil, mas a operação superou estimativas. Carteira de pedidos recorde de US$ 35,7 bilhões. Elevou a projeção de geração de caixa de 2026 para US$ 700 milhões ou mais. A ação subiu cerca de 6% no dia.",
+      "especialistas": {
+        "resumo": "Maioria indica COMPRA (2 de 2 casas)",
+        "consenso": "compra",
+        "consensoTexto": "Maioria indica COMPRA (2 de 2 casas)",
+        "placar": {
+          "compra": 2,
+          "neutra": 0,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "US$ 110 (ADR)",
+            "potencial": null,
+            "data": "2026-11-16",
+            "url": "https://brapi.dev/news/itau-bba-eleva-alvo-da-embraer-para-us-110-e-reitera-compra-bdc92efb"
+          },
+          {
+            "casa": "BB Investimentos",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 123,00",
+            "potencial": null,
+            "data": "2026-11-10",
+            "url": "https://investalk.bb.com.br/noticias/mercado/EMBJ-3T26"
+          },
+          {
+            "casa": "JPMorgan",
+            "recomendacao": "alvo citado sem classificação",
+            "classificacao": "sem_classificacao",
+            "precoAlvo": "US$ 104 (ADR)",
+            "potencial": null,
+            "data": "2026-11",
+            "url": "https://brapi.dev/news/itau-bba-eleva-alvo-da-embraer-para-us-110-e-reitera-compra-bdc92efb"
+          }
+        ]
+      },
+      "riscos": "Possível desaceleração das margens no 4º trimestre; aviação comercial mais fraca; tarifas e câmbio.",
+      "fontes": [
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/bolsa-dolar/embraer-embj3-tem-lucro-abaixo-do-esperado-mas-acoes-decolam-quase-6-o-que-explica-jcav/"
+        },
+        {
+          "nome": "BB Investimentos",
+          "url": "https://investalk.bb.com.br/noticias/mercado/EMBJ-3T26"
+        },
+        {
+          "nome": "Embraer RI",
+          "url": "https://embraer.com/media-center/pt/?detail=33246"
+        }
+      ]
+    },
+    {
+      "posicao": 11,
+      "ticker": "PRIO3",
+      "empresa": "Prio S.A.",
+      "descricao": "Prio · petróleo",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Sem controlador definido; o fundador Roberto Monteiro é acionista relevante.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de US$ 516,6 milhões no 3º trimestre (04/11), com produção recorde de 191,6 mil barris por dia. A decisão sobre política de dividendos fica para depois de 2026; segue recomprando ações. Conclusão da compra final de Peregrino esperada para dezembro ou janeiro.",
+      "especialistas": {
+        "resumo": "Maioria indica COMPRA (2 de 2 casas)",
+        "consenso": "compra",
+        "consensoTexto": "Maioria indica COMPRA (2 de 2 casas)",
+        "placar": {
+          "compra": 2,
+          "neutra": 0,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Genial Investimentos",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 73,00",
+            "potencial": null,
+            "data": "2026-11-06",
+            "url": "https://analisa.genialinvestimentos.com.br/acoes/PRIO3/Prio-PRIO3--Detalhes-da-Teleconferencia-do-resultado-3T26-200k-bpde-dividendos-e-producao/"
+          },
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "Outperform",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 73,00",
+            "potencial": null,
+            "data": "2026-08-10",
+            "url": "https://www.seudinheiro.com/2026/empresas/prio-prio3-pode-pagar-21-em-dividendos-no-proximo-ano-segundo-o-itau-bba-que-elevou-recomendacao-para-compra-mlim/"
+          }
+        ]
+      },
+      "riscos": "Muito sensível ao preço do petróleo (Brent caiu cerca de 17% em novembro); Opep+ decide produção no domingo.",
+      "fontes": [
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/lucro-da-prio-prio3-explode-707-com-producao-recorde-e-brent-mais-caro-123695/"
+        },
+        {
+          "nome": "Genial Analisa",
+          "url": "https://analisa.genialinvestimentos.com.br/acoes/PRIO3/Prio-PRIO3--Detalhes-da-Teleconferencia-do-resultado-3T26-200k-bpde-dividendos-e-producao/"
+        }
+      ]
+    },
+    {
+      "posicao": 12,
+      "ticker": "LREN3",
+      "empresa": "Lojas Renner S.A.",
+      "descricao": "Lojas Renner · varejo de moda",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "Sem controlador definido; ações espalhadas no mercado (não confirmado).",
+      "preco": {
+        "texto": "R$ 10,02",
+        "valor": 10.02,
+        "moeda": "BRL",
+        "data": "2026-11-26",
+        "variacao": "+8,21%",
+        "direcao": "alta",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Receita caiu 1,2% e lucro caiu 11,8% no 3º trimestre (05/11); a empresa deixou de divulgar metas de crescimento de receita para 2026 e 2030. Ontem a ação subiu 8,2%, em dia de forte alta da bolsa; motivo específico não confirmado.",
+      "especialistas": {
+        "resumo": "Maioria indica COMPRA (2 de 3 casas)",
+        "consenso": "compra",
+        "consensoTexto": "Maioria indica COMPRA (2 de 3 casas)",
+        "placar": {
+          "compra": 2,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Genial Investimentos",
+            "recomendacao": "COMPRA (em revisão)",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 14,00",
+            "potencial": "+39,7% até o alvo, com o preço de 26/11",
+            "data": "2026-11-05",
+            "url": "https://analisa.genialinvestimentos.com.br/acoes/LREN3/Lojas-Renner-LREN3--Resultado-do-3T26-Guidance-Cai-Receita-Decepciona-e-Lucro-Comparavel-Tambem-Fica-Abaixo/"
+          },
+          {
+            "casa": "UBS BB",
+            "recomendacao": "neutro",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 13,50",
+            "potencial": "+34,7% até o alvo, com o preço de 26/11",
+            "data": "2026-08-14",
+            "url": "https://www.seudinheiro.com/2026/empresas/com-lojas-renner-lren3-em-queda-livre-ha-uma-semana-ubs-bb-da-adeus-a-acao-e-corta-preco-alvo-o-que-aconteceu-com-a-varejista-giov/"
+          },
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "outperform",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 18,00",
+            "potencial": "+79,6% até o alvo, com o preço de 26/11",
+            "data": "2026-06-01",
+            "url": "https://www.suno.com.br/noticias/?p=653828"
+          }
+        ]
+      },
+      "riscos": "Vendas fracas, concorrência de sites asiáticos, juros altos. Próximos eventos: vendas de Black Friday e Natal.",
+      "fontes": [
+        {
+          "nome": "Genial Analisa",
+          "url": "https://analisa.genialinvestimentos.com.br/acoes/LREN3/Lojas-Renner-LREN3--Resultado-do-3T26-Guidance-Cai-Receita-Decepciona-e-Lucro-Comparavel-Tambem-Fica-Abaixo/"
+        },
+        {
+          "nome": "Acionista",
+          "url": "https://acionista.com.br/lojas-renner-lren3-descontinua-projecao-de-crescimento-de-receita-para-2026-e-2030/"
+        },
+        {
+          "nome": "HG Brasil",
+          "url": "https://hgbrasil.com/finance/tickers/B3:LREN3"
+        }
+      ]
+    },
+    {
+      "posicao": 13,
+      "ticker": "VALE3",
+      "empresa": "Vale S.A.",
+      "descricao": "Vale · mineração",
+      "tipoAtivo": "acao",
+      "leitura": "negativa",
+      "explicacao": null,
+      "dono": "Sem controlador definido desde 2020; grandes fundos e a Previ estão entre os maiores acionistas (não confirmado).",
+      "preco": {
+        "texto": "R$ 58,73",
+        "valor": 58.73,
+        "moeda": "BRL",
+        "data": "2026-11-26",
+        "variacao": "+3,22%",
+        "direcao": "alta",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de US$ 1,255 bilhão no 3º trimestre (29/10), queda de cerca de 54%, com minério mais barato e frete caro. A empresa prioriza recompra de ações e descartou dividendo extra neste ano. Em 10/11 o Itaú BBA rebaixou para neutra e o Safra elevou para compra.",
+      "especialistas": {
+        "resumo": "Opiniões divididas (1 compra, 1 neutra)",
+        "consenso": "dividido",
+        "consensoTexto": "Opiniões divididas (1 compra, 1 neutra)",
+        "placar": {
+          "compra": 1,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "market perform",
+            "classificacao": "neutra",
+            "precoAlvo": "US$ 14 (ADR)",
+            "potencial": null,
+            "data": "2026-11-10",
+            "url": "https://www.seudinheiro.com/2026/economia/itau-bba-rebaixa-e-safra-eleva-recomendacao-para-vale-vale3-risco-retorno-e-oportunidade-ou-armadilha-mlem/"
+          },
+          {
+            "casa": "Safra",
+            "recomendacao": "compra",
+            "classificacao": "compra",
+            "precoAlvo": "US$ 15,10 (ADR)",
+            "potencial": null,
+            "data": "2026-11-10",
+            "url": "https://www.seudinheiro.com/2026/economia/itau-bba-rebaixa-e-safra-eleva-recomendacao-para-vale-vale3-risco-retorno-e-oportunidade-ou-armadilha-mlem/"
+          }
+        ]
+      },
+      "riscos": "Minério de ferro em níveis baixos e demanda fraca da China; câmbio. Próximo evento: anúncio de proventos (historicamente em dezembro).",
+      "fontes": [
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/empresas/com-minerio-de-ferro-e-petroleo-jogando-contra-vale-vale3-ve-lucro-cair-54-para-us-1255-bilhao/"
+        },
+        {
+          "nome": "Seu Dinheiro (recomendações)",
+          "url": "https://www.seudinheiro.com/2026/economia/itau-bba-rebaixa-e-safra-eleva-recomendacao-para-vale-vale3-risco-retorno-e-oportunidade-ou-armadilha-mlem/"
+        },
+        {
+          "nome": "brapi",
+          "url": "https://brapi.dev/quote/VALE3?range=3m"
+        }
+      ]
+    },
+    {
+      "posicao": 14,
+      "ticker": "GOGL34",
+      "empresa": "Alphabet Inc.",
+      "descricao": "Alphabet (Google) · tecnologia (BDR)",
+      "tipoAtivo": "bdr",
+      "leitura": "mista",
+      "explicacao": "BDR é um recibo negociado na B3 que representa ações de uma empresa estrangeira. O preço do BDR acompanha a ação lá fora (GOOGL na Nasdaq) e também o dólar: se o dólar sobe, o BDR tende a subir, e vice-versa.",
+      "dono": "Os fundadores Larry Page e Sergey Brin têm a maior parte do poder de voto, por meio de ações especiais (não confirmado).",
+      "preco": {
+        "texto": "R$ 132,88",
+        "valor": 132.88,
+        "moeda": "BRL",
+        "data": "2026-11-25",
+        "variacao": "-3,32%",
+        "direcao": "queda",
+        "observacao": "Preço de 25/11; o de 26/11 não foi confirmado."
+      },
+      "precoExterior": {
+        "ticker": "GOOGL",
+        "bolsa": "Nasdaq",
+        "texto": "US$ 273,10",
+        "valor": 273.1,
+        "moeda": "USD",
+        "data": "2026-11-25",
+        "variacao": "-2,13%",
+        "direcao": "queda"
+      },
+      "noticias": "No 3º trimestre (28/10) a receita subiu 25%, para US$ 127,6 bilhões, e o Google Cloud cresceu 103%, mas o lucro por ação ficou abaixo do esperado e o investimento alto deixou a geração de caixa negativa. A ação recua cerca de 15% desde o balanço. Dividendo de US$ 0,22 por ação com pagamento em 14/12 nos EUA (datas do BDR não confirmadas).",
+      "especialistas": {
+        "resumo": "Maioria indica COMPRA (3 de 4 casas)",
+        "consenso": "compra",
+        "consensoTexto": "Maioria indica COMPRA (3 de 4 casas)",
+        "placar": {
+          "compra": 3,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "BMO",
+            "recomendacao": "Outperform",
+            "classificacao": "compra",
+            "precoAlvo": "US$ 425",
+            "potencial": "+55,6% até o alvo, com o preço da GOOGL de 25/11",
+            "data": "2026-10-29",
+            "url": "https://www.newsquawk.com/headlines/sell-side-on-mag-7-names-alphabet-and-microsoft-post-earnings-googl-sees-pts-lowered-while-msft-sees-them-lifted"
+          },
+          {
+            "casa": "Truist",
+            "recomendacao": "Buy",
+            "classificacao": "compra",
+            "precoAlvo": "US$ 410",
+            "potencial": "+50,1% até o alvo, com o preço da GOOGL de 25/11",
+            "data": "2026-10-29",
+            "url": "https://www.newsquawk.com/headlines/sell-side-on-mag-7-names-alphabet-and-microsoft-post-earnings-googl-sees-pts-lowered-while-msft-sees-them-lifted"
+          },
+          {
+            "casa": "Morgan Stanley",
+            "recomendacao": "Overweight",
+            "classificacao": "compra",
+            "precoAlvo": "US$ 375",
+            "potencial": "+37,3% até o alvo, com o preço da GOOGL de 25/11",
+            "data": "2026-10-29",
+            "url": "https://stocktwits.com/news-articles/markets/equity/goog-stock-on-track-to-erase-over-600-b-in-market-value-in-a-month-analysts-flag-search-slowdown-margin-pressure/cZUQptcR9b6"
+          },
+          {
+            "casa": "Bernstein",
+            "recomendacao": "Market Perform",
+            "classificacao": "neutra",
+            "precoAlvo": "US$ 325",
+            "potencial": "+19,0% até o alvo, com o preço da GOOGL de 25/11",
+            "data": "2026-10-29",
+            "url": "https://stocktwits.com/news-articles/markets/equity/goog-stock-on-track-to-erase-over-600-b-in-market-value-in-a-month-analysts-flag-search-slowdown-margin-pressure/cZUQptcR9b6"
+          }
+        ]
+      },
+      "riscos": "Investimento crescente em IA com caixa negativo, concorrência em IA, processos antitruste e variação do dólar.",
+      "fontes": [
+        {
+          "nome": "SEC (resultado)",
+          "url": "https://www.sec.gov/Archives/edgar/data/0001652044/000165204426000080/googexhibit991q32026.htm"
+        },
+        {
+          "nome": "HG Brasil",
+          "url": "https://hgbrasil.com/finance/tickers/B3:GOGL34"
+        },
+        {
+          "nome": "Newsquawk",
+          "url": "https://www.newsquawk.com/headlines/sell-side-on-mag-7-names-alphabet-and-microsoft-post-earnings-googl-sees-pts-lowered-while-msft-sees-them-lifted"
+        }
+      ]
+    },
+    {
+      "posicao": 15,
+      "ticker": "MGLU3",
+      "empresa": "Magazine Luiza S.A.",
+      "descricao": "Magazine Luiza · varejo",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Família Trajano, por meio de holdings (não confirmado).",
+      "preco": {
+        "texto": "R$ 9,65",
+        "valor": 9.65,
+        "moeda": "BRL",
+        "data": "2026-11-26",
+        "variacao": "+3,88%",
+        "direcao": "alta",
+        "observacao": "Fontes trazem dados de tendência conflitantes; confira o histórico na corretora."
+      },
+      "precoExterior": null,
+      "noticias": "No 3º trimestre (09/11) teve prejuízo de R$ 10,7 milhões; lucro ajustado de R$ 13,9 milhões ficou abaixo do esperado. Lojas físicas cresceram 10% e as vendas online aceleraram em outubro. Em 11/11 o BofA elevou para compra e a ação subiu 11,6%.",
+      "especialistas": {
+        "resumo": "Maioria indica COMPRA (2 de 2 casas)",
+        "consenso": "compra",
+        "consensoTexto": "Maioria indica COMPRA (2 de 2 casas)",
+        "placar": {
+          "compra": 2,
+          "neutra": 0,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "BofA",
+            "recomendacao": "compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 11,00",
+            "potencial": "+14,0% até o alvo, com o preço de 26/11",
+            "data": "2026-11-11",
+            "url": "https://brapi.dev/news/magalu-sobe-11-6-apos-balanco-e-upgrade-do-bofa-para-compra-5c880b34"
+          },
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "outperform",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 16,00",
+            "potencial": "+65,8% até o alvo, com o preço de 26/11",
+            "data": "2026-10-13",
+            "url": "https://www.seudinheiro.com/2026/empresas/o-jogo-virou-para-o-magazine-luiza-mglu3-itau-bba-eleva-recomendacao-para-compra-com-alivio-nos-juros-e-crise-na-casas-bahia-bhia3-bdap/"
+          }
+        ]
+      },
+      "riscos": "Juros altos pesam no crédito ao consumo e no resultado financeiro. Próximos eventos: Black Friday e Natal.",
+      "fontes": [
+        {
+          "nome": "brapi",
+          "url": "https://brapi.dev/news/magalu-sobe-11-6-apos-balanco-e-upgrade-do-bofa-para-compra-5c880b34"
+        },
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://seudinheiro.com/2026/economia/embargomagazine-luiza-mglu3-ganha-espaco-com-crise-da-casas-bahia-bhia3-mas-juros-ainda-pressionam-resultados-do-3t26/"
+        },
+        {
+          "nome": "HG Brasil",
+          "url": "https://hgbrasil.com/finance/tickers/B3:MGLU3"
+        }
+      ]
+    },
+    {
+      "posicao": 16,
+      "ticker": "CPFE3",
+      "empresa": "CPFL Energia S.A.",
+      "descricao": "CPFL Energia · energia elétrica",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "State Grid, estatal chinesa, com 83,71% das ações.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 1,289 bilhão no 3º trimestre (cerca de 13/11), queda de 6,4%, em parte por efeito contábil da renovação por 30 anos das concessões das distribuidoras.",
+      "especialistas": {
+        "resumo": "Opiniões divididas (1 compra, 1 neutra)",
+        "consenso": "dividido",
+        "consensoTexto": "Opiniões divididas (1 compra, 1 neutra)",
+        "placar": {
+          "compra": 1,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Bradesco BBI",
+            "recomendacao": "Neutra",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 45,00",
+            "potencial": null,
+            "data": "2026-10-26",
+            "url": "https://istoedinheiro.com.br/bbi-juros-reais-precos-alvo-energia-saneamento"
+          },
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 52,50",
+            "potencial": null,
+            "data": "2026-10-01",
+            "url": "https://www.seudinheiro.com/2026/empresas/enquanto-tres-gatilhos-nao-fazem-preco-na-cpfl-cpfe3-itau-bba-defende-a-compra-pelos-dividendos-veja-o-potencial-giov/"
+          }
+        ]
+      },
+      "riscos": "Juros reais altos reduzem o valor de empresas de dividendos; regulação das distribuidoras.",
+      "fontes": [
+        {
+          "nome": "Cenário Energia",
+          "url": "https://cenarioenergia.com.br/2026/11/13/cpfl-energia-registra-lucro-de-r-129-bilhao-no-3t26-com-impacto-contabil-da-renovacao-de-concessoes/"
+        },
+        {
+          "nome": "IstoÉ Dinheiro",
+          "url": "https://istoedinheiro.com.br/bbi-juros-reais-precos-alvo-energia-saneamento"
+        },
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/empresas/enquanto-tres-gatilhos-nao-fazem-preco-na-cpfl-cpfe3-itau-bba-defende-a-compra-pelos-dividendos-veja-o-potencial-giov/"
+        }
+      ]
+    },
+    {
+      "posicao": 17,
+      "ticker": "MBRF3",
+      "empresa": "MBRF Global Foods Company S.A.",
+      "descricao": "MBRF (Marfrig + BRF) · alimentos e carnes",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Família Molina, de Marcos Molina, por meio de holdings (não confirmado).",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 210 milhões no 3º trimestre (12/11), mais que o dobro de um ano antes, com R$ 679 milhões em ganhos da fusão. As Filipinas suspenderam por 60 dias a compra de carne suína do Brasil em 09/11. A União Europeia mantém suspensa a importação de produtos animais do Brasil.",
+      "especialistas": {
+        "resumo": "Opiniões divididas (2 compra, 2 neutra)",
+        "consenso": "dividido",
+        "consensoTexto": "Opiniões divididas (2 compra, 2 neutra)",
+        "placar": {
+          "compra": 2,
+          "neutra": 2,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "BB Investimentos",
+            "recomendacao": "Neutra",
+            "classificacao": "neutra",
+            "precoAlvo": null,
+            "potencial": null,
+            "data": "2026-11",
+            "url": "https://acionista.com.br/mbrf3-resultados-3t26-recomendacao-neutra/"
+          },
+          {
+            "casa": "Bank of America",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 26,00",
+            "potencial": null,
+            "data": "2026-08-20",
+            "url": "https://bpmoney.com.br/mercado/bank-of-america-eleva-mbrf-mbrf3-para-compra-e-ve-potencial-de-alta-de-51/"
+          },
+          {
+            "casa": "Santander",
+            "recomendacao": "Outperform",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 28,00",
+            "potencial": null,
+            "data": "2026-07-29",
+            "url": "https://moneytimes.com.br/mbrf3-ou-beef3-santander-ajusta-precos-alvo-e-mantem-preferencia-por-uma-acao-pads/"
+          },
+          {
+            "casa": "XP",
+            "recomendacao": "Neutra",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 20,50",
+            "potencial": null,
+            "data": "2026-07-15",
+            "url": "https://moneytimes.com.br/mbrf-mbrf3-xp-corta-preco-alvo-com-risco-retorno-menos-atrativo-veja-recomendacao-pads/"
+          }
+        ]
+      },
+      "riscos": "Barreiras comerciais (Filipinas, União Europeia), dívida alta e margens de carne bovina nos EUA.",
+      "fontes": [
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/lucro-da-mbrf-mbrf3-mais-que-dobra-e-chega-a-r-210-milhoes-no-3t26-123871/"
+        },
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/mercados/por-que-os-frigorificos-sobem-na-bolsa-mesmo-com-a-suspensao-das-importacoes-de-carne-suina-pelas-filipinas-pads/"
+        },
+        {
+          "nome": "Money Times",
+          "url": "https://moneytimes.com.br/mbrf3-ou-beef3-santander-ajusta-precos-alvo-e-mantem-preferencia-por-uma-acao-pads/"
+        }
+      ]
+    },
+    {
+      "posicao": 18,
+      "ticker": "WEGE3",
+      "empresa": "WEG S.A.",
+      "descricao": "WEG · motores e equipamentos elétricos",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Famílias fundadoras (Voigt, da Silva e Werninghaus), por meio da WEG Participações (não confirmado).",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 1,66 bilhão no 3º trimestre (21/10), estável e abaixo do esperado; margem pressionada por dólar, tarifas dos EUA e cobre. Em 05/11 a XP elevou para compra. JCP de R$ 0,1072 por ação a ser pago em 10/03/2027.",
+      "especialistas": {
+        "resumo": "Maioria indica COMPRA (4 de 4 casas)",
+        "consenso": "compra",
+        "consensoTexto": "Maioria indica COMPRA (4 de 4 casas)",
+        "placar": {
+          "compra": 4,
+          "neutra": 0,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Ativa Investimentos",
+            "recomendacao": "Top Picks",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 63,00",
+            "potencial": null,
+            "data": "2026-11-09",
+            "url": "https://acionista.com.br/wp-content/uploads/2026/11/Novembro26_Monitor-da-Bolsa_compressed.pdf"
+          },
+          {
+            "casa": "XP",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 60,00",
+            "potencial": null,
+            "data": "2026-11-05",
+            "url": "https://investidor10.com.br/noticias/a-acao-na-b3-que-pode-subir-mais-de-20-segundo-a-xp-123713/"
+          },
+          {
+            "casa": "BB Investimentos",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 61,00",
+            "potencial": null,
+            "data": "2026-10-21",
+            "url": "https://investalk.bb.com.br/noticias/mercado/WEGE-3T26"
+          },
+          {
+            "casa": "Bradesco BBI",
+            "recomendacao": "Compra",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 60,00",
+            "potencial": null,
+            "data": "2026-07-27",
+            "url": "https://www.moneytimes.com.br/weg-wege3-tem-dupla-elevacao-apos-2t26-itau-bba-diz-que-pior-ja-passou-lils/"
+          }
+        ]
+      },
+      "riscos": "Ação negociada a preço alto em relação ao lucro, o que a deixa sensível a decepções; tarifas dos EUA, câmbio e custo do cobre.",
+      "fontes": [
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/empresas/weg-wege3-amarga-queda-no-ibovespa-com-balanco-pressionado-por-dolar-e-tarifas-exagero-ou-sinal-de-alerta-lmrs/"
+        },
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/noticias/a-acao-na-b3-que-pode-subir-mais-de-20-segundo-a-xp-123713/"
+        },
+        {
+          "nome": "BB Investimentos",
+          "url": "https://investalk.bb.com.br/noticias/mercado/WEGE-3T26"
+        }
+      ]
+    },
+    {
+      "posicao": 19,
+      "ticker": "RURA11",
+      "empresa": "Itau Asset Rural Fiagro - Imobiliario",
+      "descricao": "Itaú Asset Rural Fiagro · fundo do agronegócio",
+      "tipoAtivo": "fundo",
+      "leitura": "neutra",
+      "explicacao": "Este ativo não é uma ação: é um fundo (Fiagro) que investe principalmente em títulos de dívida do agronegócio (CRAs) e distribui rendimentos mensais aos cotistas.",
+      "dono": "Fundo administrado e gerido pela Itaú Asset Management.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Pagou R$ 0,10 por cota em 09/11 (data-com 30/10). Rendimento de novembro ainda não confirmado. Sem fato novo relevante nos últimos dias.",
+      "especialistas": {
+        "resumo": "Sem recomendação recente",
+        "consenso": "sem_dados",
+        "consensoTexto": "Sem recomendação recente",
+        "placar": {
+          "compra": 0,
+          "neutra": 0,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": []
+      },
+      "riscos": "Risco de calote em títulos do agronegócio (o fundo já fez provisões em 2024); cota negociada abaixo do valor patrimonial.",
+      "fontes": [
+        {
+          "nome": "FIIs.com.br",
+          "url": "https://fiis.com.br/?p=461608"
+        },
+        {
+          "nome": "Investidor10",
+          "url": "https://investidor10.com.br/fiagros/rura11/"
+        }
+      ]
+    },
+    {
+      "posicao": 20,
+      "ticker": "HAPV3",
+      "empresa": "Hapvida Participações e Investimentos S.A.",
+      "descricao": "Hapvida · planos de saúde",
+      "tipoAtivo": "acao",
+      "leitura": "mista",
+      "explicacao": null,
+      "dono": "Família fundadora Pinheiro, com 51,39% do capital desde abril de 2026.",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": "Fechamento recente não confirmado; R$ 5,12 no meio do pregão de 12/11."
+      },
+      "precoExterior": null,
+      "noticias": "Lucro de R$ 107 milhões no 3º trimestre (11/11), queda de 68%, mas acima do esperado; a ação chegou a subir 15% no dia seguinte. Perdeu cerca de 235 mil clientes no trimestre. Notícia de 23/11 fala em possível venda de ativos (não confirmada pela empresa).",
+      "especialistas": {
+        "resumo": "Maioria indica NEUTRA (manter) (3 de 3 casas)",
+        "consenso": "neutra",
+        "consensoTexto": "Maioria indica NEUTRA (manter) (3 de 3 casas)",
+        "placar": {
+          "compra": 0,
+          "neutra": 3,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "market perform",
+            "classificacao": "neutra",
+            "precoAlvo": null,
+            "potencial": null,
+            "data": "2026-11",
+            "url": "https://www.seudinheiro.com/2026/empresas/hapvida-hapv3-dispara-15-apos-balanco-o-que-agradou-o-mercado-apesar-da-queda-de-68-no-lucro-lmrs/"
+          },
+          {
+            "casa": "BTG Pactual",
+            "recomendacao": "neutra",
+            "classificacao": "neutra",
+            "precoAlvo": null,
+            "potencial": null,
+            "data": "2026-11",
+            "url": "https://www.seudinheiro.com/2026/empresas/hapvida-hapv3-dispara-15-apos-balanco-o-que-agradou-o-mercado-apesar-da-queda-de-68-no-lucro-lmrs/"
+          },
+          {
+            "casa": "Citi",
+            "recomendacao": "neutra/alto risco",
+            "classificacao": "neutra",
+            "precoAlvo": null,
+            "potencial": null,
+            "data": "2026-11",
+            "url": "https://www.seudinheiro.com/2026/empresas/hapvida-hapv3-dispara-15-apos-balanco-o-que-agradou-o-mercado-apesar-da-queda-de-68-no-lucro-lmrs/"
+          }
+        ]
+      },
+      "riscos": "Perda de clientes, custos médicos em alta e concorrência. Próximos eventos: possível venda de ativos e dados mensais da ANS.",
+      "fontes": [
+        {
+          "nome": "Seu Dinheiro",
+          "url": "https://www.seudinheiro.com/2026/empresas/hapvida-hapv3-dispara-15-apos-balanco-o-que-agradou-o-mercado-apesar-da-queda-de-68-no-lucro-lmrs/"
+        },
+        {
+          "nome": "O Povo",
+          "url": "https://mais.opovo.com.br/jornal/economia/2026/11/12/hapvida-cresce-39-em-receita-mas-lucro-ajustado-cai-683-no-3-trimestre-de-2026.html"
+        },
+        {
+          "nome": "InfoMoney",
+          "url": "https://www.infomoney.com.br/?p=3284758"
+        }
+      ]
+    },
+    {
+      "posicao": 21,
+      "ticker": "TIMS3",
+      "empresa": "TIM S.A.",
+      "descricao": "TIM · telecomunicações",
+      "tipoAtivo": "acao",
+      "leitura": "positiva",
+      "explicacao": null,
+      "dono": "Telecom Italia (TIM S.p.A.), controladora com cerca de 67% do capital (percentual não confirmado nesta edição).",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": null,
+      "noticias": "Receita de R$ 7,07 bilhões no 3º trimestre (11/11, +5,3%) e Ebitda +6,7%; lucro normalizado caiu 7,8%. Manteve projeções e a meta de R$ 5,3 a 5,5 bilhões em proventos no ano. Em 17/11 o Itaú BBA elevou para compra. JCP de R$ 0,2167 por ação a ser pago em 22/01/2027.",
+      "especialistas": {
+        "resumo": "Opiniões divididas (1 compra, 1 neutra)",
+        "consenso": "dividido",
+        "consensoTexto": "Opiniões divididas (1 compra, 1 neutra)",
+        "placar": {
+          "compra": 1,
+          "neutra": 1,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Itaú BBA",
+            "recomendacao": "Outperform",
+            "classificacao": "compra",
+            "precoAlvo": "R$ 25,00",
+            "potencial": null,
+            "data": "2026-11-17",
+            "url": "https://bpmoney.com.br/mercado/acoes/itau-bba-eleva-tim-tims3-para-compra-alvo-r-25/"
+          },
+          {
+            "casa": "Citi",
+            "recomendacao": "neutra",
+            "classificacao": "neutra",
+            "precoAlvo": "R$ 20,00",
+            "potencial": null,
+            "data": "2026-10-15",
+            "url": "https://www.moneytimes.com.br/acao-da-tim-esta-barata-diz-citi-e-hora-de-compra-tims3-lils/"
+          }
+        ]
+      },
+      "riscos": "Lucro em queda no ano, juros altos e possíveis mudanças na controladora italiana. Provável anúncio de proventos em dezembro.",
+      "fontes": [
+        {
+          "nome": "BP Money",
+          "url": "https://bpmoney.com.br/mercado/acoes/itau-bba-eleva-tim-tims3-para-compra-alvo-r-25/"
+        },
+        {
+          "nome": "Quartr",
+          "url": "https://quartr.com/events/tim-s-a-tims3-q3-2026_FL1H6qsV"
+        },
+        {
+          "nome": "Meus Dividendos",
+          "url": "https://www.meusdividendos.com/news/tims3-confirma-jcp-de-r022-por-acao-pagamento-ate-jan2027"
+        }
+      ]
+    },
+    {
+      "posicao": 22,
+      "ticker": "NVDC34",
+      "empresa": "NVIDIA Corporation",
+      "descricao": "NVIDIA · chips e inteligência artificial (BDR)",
+      "tipoAtivo": "bdr",
+      "leitura": "negativa",
+      "explicacao": "BDR é um recibo negociado na B3 que representa ações de uma empresa estrangeira. O preço do BDR acompanha a ação lá fora (NVDA na Nasdaq) e também o dólar: se o dólar sobe, o BDR tende a subir, e vice-versa.",
+      "dono": "Empresa americana sem controlador; maiores acionistas são grandes fundos como Vanguard e BlackRock (não confirmado).",
+      "preco": {
+        "texto": "Não confirmado",
+        "valor": null,
+        "moeda": "BRL",
+        "data": null,
+        "variacao": null,
+        "direcao": "neutra",
+        "observacao": null
+      },
+      "precoExterior": {
+        "ticker": "NVDA",
+        "bolsa": "Nasdaq",
+        "texto": "US$ 150,96",
+        "valor": 150.96,
+        "moeda": "USD",
+        "data": "2026-11-18",
+        "variacao": "-2,89%",
+        "direcao": "queda"
+      },
+      "noticias": "Jensen Huang deixou o cargo de CEO em 12/11; a diretora financeira Colette Kress assumiu de forma interina. O resultado de 17/11 veio forte (receita de US$ 115,8 bilhões, +103%), mas a ação seguiu em queda pela incerteza no comando e por investigações nos EUA sobre exportação de chips. Ao menos 10 casas rebaixaram a recomendação entre 11 e 13/11.",
+      "especialistas": {
+        "resumo": "Maioria indica NEUTRA (manter) (4 de 4 casas)",
+        "consenso": "neutra",
+        "consensoTexto": "Maioria indica NEUTRA (manter) (4 de 4 casas)",
+        "placar": {
+          "compra": 0,
+          "neutra": 4,
+          "venda": 0
+        },
+        "fontePlacar": "casas",
+        "itens": [
+          {
+            "casa": "Truist Securities",
+            "recomendacao": "Hold",
+            "classificacao": "neutra",
+            "precoAlvo": "US$ 174",
+            "potencial": "+15,3% até o alvo, com o preço da NVDA de 18/11",
+            "data": "2026-11",
+            "url": "https://www.webull.com/news/15933830706414592"
+          },
+          {
+            "casa": "Evercore ISI",
+            "recomendacao": "In Line",
+            "classificacao": "neutra",
+            "precoAlvo": "US$ 186",
+            "potencial": "+23,2% até o alvo, com o preço da NVDA de 18/11",
+            "data": "2026-11-12",
+            "url": "https://www.tikr.com/blog/6-firms-downgraded-nvidia-in-one-day-is-the-selloff-overdone"
+          },
+          {
+            "casa": "Bernstein",
+            "recomendacao": "Market Perform",
+            "classificacao": "neutra",
+            "precoAlvo": "US$ 200",
+            "potencial": "+32,5% até o alvo, com o preço da NVDA de 18/11",
+            "data": "2026-11-12",
+            "url": "https://www.tikr.com/blog/6-firms-downgraded-nvidia-in-one-day-is-the-selloff-overdone"
+          },
+          {
+            "casa": "Baird",
+            "recomendacao": "Neutral",
+            "classificacao": "neutra",
+            "precoAlvo": "US$ 200",
+            "potencial": "+32,5% até o alvo, com o preço da NVDA de 18/11",
+            "data": "2026-11-11",
+            "url": "https://www.webull.com/news/15933830706414592"
+          }
+        ]
+      },
+      "riscos": "Sucessão do CEO sem prazo, investigações sobre exportações e margem menor. Huang deve depor no Congresso dos EUA em 01/12. O BDR também varia com o dólar.",
+      "fontes": [
+        {
+          "nome": "KRDO",
+          "url": "https://krdo.com/news/2026/11/12/nvidia-ceo-jensen-huang-resigns-cfo-colette-kress-to-serve-as-interim-leader/"
+        },
+        {
+          "nome": "TIKR",
+          "url": "https://www.tikr.com/blog/6-firms-downgraded-nvidia-in-one-day-is-the-selloff-overdone"
+        },
+        {
+          "nome": "Webull",
+          "url": "https://www.webull.com/news/15933830706414592"
+        }
+      ]
+    }
+  ],
+  "educacaoRisco": {
+    "titulo": "Como limitar o risco a 1% do capital",
+    "formula": "Quantidade = (1% do capital) ÷ (preço de entrada − preço de saída de proteção)",
+    "exemplo": "Exemplo hipotético: capital de R$ 10.000, risco máximo de R$ 100 (1%). Entrada a R$ 20,00 e saída de proteção a R$ 19,00: diferença de R$ 1,00. Quantidade = R$ 100 ÷ R$ 1,00 = 100 ações.",
+    "alerta": "Atenção: saltos de preço (por exemplo, na abertura do pregão ou após uma notícia) podem fazer a venda sair abaixo do preço de proteção, levando a uma perda maior que 1%."
+  },
+  "aviso": "Este relatório é educacional e não é recomendação personalizada de investimento. As recomendações mostradas são das casas de análise citadas. Decisões de compra ou venda podem gerar perdas. Day trade e swing trade envolvem risco de perda.",
+  "fontesCenario": [
+    {
+      "nome": "InfoMoney – agenda e Trabuco",
+      "url": "https://www.infomoney.com.br/mercados/trabuco-fazenda-desemprego-igp-m-agenda-27112026/"
+    },
+    {
+      "nome": "O Repórter – fechamento 26/11",
+      "url": "https://oreporter.com/economia/ibovespa-dispara-dolar-cai-fechamento-26-novembro-2026"
+    },
+    {
+      "nome": "DGABC/Broadcast – juros",
+      "url": "https://www.dgabc.com.br/Noticia/4370975/taxas-de-juros-despencam-com-otimismo-sobre-trabuco-na-fazenda"
+    },
+    {
+      "nome": "Euribor.com.es – petróleo",
+      "url": "https://www.euribor.com.es/2026/11/27/precio-petroleo-hoy-27-noviembre-2026/"
+    },
+    {
+      "nome": "Reuters via Terra – minério",
+      "url": "https://www.terra.com.br/economia/preco-do-minerio-de-ferro-oscila-em-meio-a-compras-na-baixa,e54ef1953064370c74d3ef42c918ef5abqt6g8u9.html"
+    },
+    {
+      "nome": "NYSE/ICE – calendário 2026",
+      "url": "https://ir.theice.com/press/news-details/2025/NYSE-Group-Announces-2026-2027-and-2028-Holiday-and-Early-Closings-Calendar/"
+    },
+    {
+      "nome": "B3 – calendário de negociação 2026",
+      "url": "https://www.b3.com.br/pt_br/noticias/calendario-de-negociacao-da-b3-confira-o-funcionamento-da-bolsa-em-2026.htm"
+    }
+  ]
+}
