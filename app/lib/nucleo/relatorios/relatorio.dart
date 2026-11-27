@@ -219,6 +219,9 @@ String? _normalizado(Object? v) {
   return t == null || t.isEmpty ? null : t;
 }
 
+/// Acima disso o número é lixo, não um placar.
+const _maxPlacar = 1000000;
+
 /// Votos das casas: compra, neutra e venda.
 class Placar {
   const Placar({
@@ -240,7 +243,15 @@ class Placar {
     final c = _inteiro(m['compra']);
     final n = _inteiro(m['neutra']);
     final v = _inteiro(m['venda']);
-    if (c == null || n == null || v == null || c < 0 || n < 0 || v < 0) {
+    if (c == null ||
+        n == null ||
+        v == null ||
+        c < 0 ||
+        n < 0 ||
+        v < 0 ||
+        c > _maxPlacar ||
+        n > _maxPlacar ||
+        v > _maxPlacar) {
       return null;
     }
     return Placar(compra: c, neutra: n, venda: v);

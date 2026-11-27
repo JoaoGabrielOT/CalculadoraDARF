@@ -41,8 +41,13 @@ void main() {
     final a = ArmazenamentoChaveValor(ChaveValorLimitado(30));
     expect(
       () => a.gravar('2026-11.json', 'x' * 100),
-      throwsA(isA<ErroArmazenamentoCheio>()
-          .having((e) => '$e', 'texto', textoArmazenamentoCheio)),
+      throwsA(
+        isA<ErroArmazenamentoCheio>().having(
+          (e) => '$e',
+          'texto',
+          textoArmazenamentoCheio,
+        ),
+      ),
     );
   });
 

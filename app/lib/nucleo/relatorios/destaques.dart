@@ -8,7 +8,9 @@ enum Consenso { compra, neutra, venda, dividido, semDados }
 
 final _letra = RegExp(r'\p{L}', unicode: true);
 
-// Termos de recomendação; o booleano dispensa a fronteira de palavra.
+// Termos de recomendação; o booleano dispensa a fronteira de palavra. `neutr`
+// é prefixo sem fronteira de propósito (cobre neutra e neutro); "top picks" é
+// termo próprio porque o `s` final seria letra depois de "top pick".
 const _compra = [
   ('compra', false),
   ('comprar', false),
@@ -45,7 +47,8 @@ bool _comeca(String t, List<(String, bool)> termos) {
 }
 
 final _formatoPlacar = RegExp(
-  r'(\d+)\s*compra\D+?(\d+)\s*(?:manuten|neutr)\S*\D+?(\d+)\s*venda',
+  r'(?<!\d)(\d{1,6})\s*compra\D+?(\d{1,6})\s*(?:manuten|neutr)\S*\D+?'
+  r'(\d{1,6})\s*venda',
 );
 
 const _votoCompra = Placar(compra: 1, neutra: 0, venda: 0);
@@ -59,11 +62,12 @@ Placar? _placarDoTexto(String? recomendacao) {
   final t = recomendacao.trim().toLowerCase();
   final f = _formatoPlacar.firstMatch(t);
   if (f != null) {
-    return Placar(
-      compra: int.parse(f[1]!),
-      neutra: int.parse(f[2]!),
-      venda: int.parse(f[3]!),
-    );
+    final c = int.tryParse(f[1]!),
+        n = int.tryParse(f[2]!),
+        v = int.tryParse(f[3]!);
+    return c == null || n == null || v == null
+        ? null
+        : Placar(compra: c, neutra: n, venda: v);
   }
   if (_comeca(t, _compra)) return _votoCompra;
   if (_comeca(t, _venda)) return _votoVenda;
@@ -125,17 +129,22 @@ bool emDestaque(AtivoRelatorio a) =>
 
 /// Leitura na ordem do enum; entre os destaques, maior fração de compra e
 /// depois mais casas; o resto mantém a ordem recebida.
-List<AtivoRelatorio> ordenarParaExibicao(List<AtivoRelatorio> ativos) =>
-    ordenadoCom(ativos, (a, b) {
-      final l = a.leitura.index.compareTo(b.leitura.index);
-      if (l != 0) return l;
-      final da = emDestaque(a), db = emDestaque(b);
-      if (da != db) return da ? -1 : 1;
-      if (!da) return 0;
-      final pa = placarDe(a.especialistas), pb = placarDe(b.especialistas);
-      // Fração compra/total (total 0 vale 0), comparada sem divisão.
-      final (na, ta) = pa.total == 0 ? (0, 1) : (pa.compra, pa.total);
-      final (nb, tb) = pb.total == 0 ? (0, 1) : (pb.compra, pb.total);
-      final f = (nb * ta).compareTo(na * tb);
-      return f != 0 ? f : pb.total.compareTo(pa.total);
-    });
+List<AtivoRelatorio> ordenarParaExibicao(List<AtivoRelatorio> ativos) {
+  // Calculado uma vez por ativo, fora do comparador.
+  final info = {
+    for (final a in ativos) a: (emDestaque(a), placarDe(a.especialistas)),
+  };
+  return ordenadoCom(ativos, (a, b) {
+    final l = a.leitura.index.compareTo(b.leitura.index);
+    if (l != 0) return l;
+    final (da, pa) = info[a]!;
+    final (db, pb) = info[b]!;
+    if (da != db) return da ? -1 : 1;
+    if (!da) return 0;
+    // Fração compra/total (total 0 vale 0), comparada sem divisão.
+    final (na, ta) = pa.total == 0 ? (0, 1) : (pa.compra, pa.total);
+    final (nb, tb) = pb.total == 0 ? (0, 1) : (pb.compra, pb.total);
+    final f = (nb * ta).compareTo(na * tb);
+    return f != 0 ? f : pb.total.compareTo(pa.total);
+  });
+}

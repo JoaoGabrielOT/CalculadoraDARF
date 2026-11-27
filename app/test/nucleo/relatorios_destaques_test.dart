@@ -158,4 +158,51 @@ void main() {
       ]);
     });
   });
+
+  group('casos extras', () {
+    test('textos', () {
+      final casos = {
+        'Neutra (rebaixada de Compra)': Consenso.neutra,
+        'Compra (preferida entre petroleiras)': Consenso.compra,
+        'revisão de preço-alvo': Consenso.semDados,
+        'comprador': Consenso.semDados,
+        '99999999999999999999 compra / 1 manutenção / 1 venda':
+            Consenso.semDados,
+      };
+      casos.forEach((t, c) {
+        expect(consensoDe(_textos([t])), c, reason: t);
+      });
+    });
+
+    test('classificação desconhecida ou sem_classificacao não vota', () {
+      for (final c in ['forte', 'sem_classificacao']) {
+        final e = Especialistas(
+          itens: [ItemEspecialista(classificacao: c, recomendacao: 'Compra')],
+        );
+        expect(placarDe(e).total, 0, reason: c);
+        expect(consensoDe(e), Consenso.semDados, reason: c);
+      }
+    });
+
+    test('consenso desconhecido sem placar e sem itens', () {
+      expect(
+        consensoDe(const Especialistas(consenso: 'xyz')),
+        Consenso.semDados,
+      );
+    });
+
+    test('modelo: consenso e placar de tipo errado viram null', () {
+      final e = Especialistas.deJson({'consenso': 5, 'placar': 'x'});
+      expect((e.consenso, e.placar), (null, null));
+    });
+
+    test('placar enorme vira null', () {
+      expect(
+        Especialistas.deJson({
+          'placar': {'compra': 1e30, 'neutra': 0, 'venda': 0},
+        }).placar,
+        isNull,
+      );
+    });
+  });
 }
