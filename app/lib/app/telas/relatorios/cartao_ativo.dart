@@ -1,0 +1,174 @@
+// Cartão de um ativo do relatório (seção h): faixa lateral na cor da leitura,
+// ticker, descrição, selo, explicação na caixa azul e os campos do dia. Campo
+// ausente: a linha some.
+
+import 'package:flutter/material.dart';
+
+import '../../../nucleo/relatorios/relatorio.dart';
+import '../../componentes/cartao.dart';
+import '../../tema/cores_app.dart';
+import 'paleta_relatorio.dart';
+
+class CartaoAtivo extends StatelessWidget {
+  const CartaoAtivo(this.ativo, {super.key, required this.aoAbrirLink});
+
+  final AtivoRelatorio ativo;
+  final void Function(Uri) aoAbrirLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final a = ativo;
+    final (corLeitura, _) = PaletaRelatorio.coresLeitura(a.leitura);
+    final esp = a.especialistas;
+    final preco = a.preco, exterior = a.precoExterior;
+    return Cartao(
+      key: Key('cartao-${a.ticker}'),
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(c.raioCartao),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: corLeitura, width: 5)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 10,
+              children: [
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      a.ticker,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SeloLeitura(a.leitura),
+                  ],
+                ),
+                if (a.descricao case final d?)
+                  Text(d, style: TextStyle(color: c.textoSuave, fontSize: 13)),
+                if (a.explicacao case final e?)
+                  caixaRelatorio(
+                    key: Key('explicacao-${a.ticker}'),
+                    fundo: PaletaRelatorio.azulFundo,
+                    child: Text(
+                      e,
+                      style: const TextStyle(
+                        color: PaletaRelatorio.azulTexto,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                if (a.dono case final d?) _Campo('Quem é dono', [_texto(d)]),
+                if (preco != null || exterior != null)
+                  _Campo('Preço', [
+                    if (preco != null)
+                      _comVariacao(
+                        textoPreco(preco),
+                        preco.variacao,
+                        preco.direcao,
+                      ),
+                    if (preco?.observacao case final o?)
+                      Text(
+                        o,
+                        style: TextStyle(color: c.textoSuave, fontSize: 12),
+                      ),
+                    if (exterior != null)
+                      _comVariacao(
+                        textoPrecoExterior(exterior),
+                        exterior.variacao,
+                        exterior.direcao,
+                      ),
+                  ]),
+                if (a.noticias case final n?) _Campo('Notícias', [_texto(n)]),
+                if (esp.resumo != null || esp.itens.isNotEmpty)
+                  _Campo('Especialistas', [
+                    if (esp.resumo case final r?) _texto(r),
+                    for (final i in esp.itens)
+                      if (_textoItem(i) case final t when t.isNotEmpty)
+                        LinkRelatorio(
+                          texto: t,
+                          url: i.url,
+                          aoAbrir: aoAbrirLink,
+                        ),
+                  ]),
+                if (a.riscos case final r?) _Campo('Riscos', [_texto(r)]),
+                if (a.fontes.isNotEmpty)
+                  _Campo('Fontes', [
+                    Wrap(
+                      spacing: 14,
+                      runSpacing: 2,
+                      children: [
+                        for (final f in a.fontes)
+                          LinkRelatorio(
+                            texto: f.nome,
+                            url: f.url,
+                            aoAbrir: aoAbrirLink,
+                          ),
+                      ],
+                    ),
+                  ]),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _texto(String s) =>
+    Text(s, style: const TextStyle(fontSize: 14, height: 1.35));
+
+/// "BTG Pactual · venda · alvo R$ 40,00 · 11/11/2026"; partes ausentes somem.
+String _textoItem(ItemEspecialista i) => juntar([
+  i.casa,
+  i.recomendacao,
+  if (i.precoAlvo case final p?) 'alvo $p',
+  if (i.data case final d?) dataCurta(d),
+]);
+
+Widget _comVariacao(String texto, String? variacao, Direcao direcao) => Wrap(
+  spacing: 8,
+  runSpacing: 4,
+  crossAxisAlignment: WrapCrossAlignment.center,
+  children: [
+    _texto(texto),
+    if (variacao != null) PilulaDirecao(variacao, direcao),
+  ],
+);
+
+/// Rótulo pequeno e o conteúdo do campo embaixo.
+class _Campo extends StatelessWidget {
+  const _Campo(this.rotulo, this.filhos);
+
+  final String rotulo;
+  final List<Widget> filhos;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 3,
+      children: [
+        Text(
+          rotulo,
+          style: TextStyle(
+            color: c.textoSuave,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        ...filhos,
+      ],
+    );
+  }
+}

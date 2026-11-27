@@ -1,0 +1,522 @@
+import 'package:calculadoradarf/app/tema/tema_visual.dart';
+import 'package:calculadoradarf/app/telas/relatorios/paleta_relatorio.dart';
+import 'package:calculadoradarf/app/telas/relatorios/vista_relatorio.dart';
+import 'package:calculadoradarf/nucleo/relatorios/relatorio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../../nucleo/apoio/fixture_relatorio.dart';
+import '../../apoio/montar_componente.dart';
+
+const _pc = Size(1366, 900);
+
+/// Janela alta: os cartões preguiçosos ficam todos construídos.
+const _pcAlto = Size(1366, 20000);
+const _celular = Size(360, 800);
+const _vazio = <String, Object?>{};
+
+final _links = <Uri>[];
+
+Widget _vista(Relatorio r) =>
+    VistaRelatorio(relatorio: r, aoAbrirLink: _links.add);
+
+Relatorio _fixture() => Relatorio.deJson(fixtureRelatorio());
+
+Color? _fundo(WidgetTester t, Finder f) =>
+    (t.widget<DecoratedBox>(f).decoration as BoxDecoration).color;
+
+/// Cores (texto, fundo) do selo [f] (uma `Pilula`).
+(Color?, Color?) _coresSelo(WidgetTester t, Finder f) {
+  final texto = t.widget<Text>(
+    find.descendant(of: f, matching: find.byType(Text)),
+  );
+  final caixa = find
+      .descendant(of: f, matching: find.byType(DecoratedBox))
+      .first;
+  return (texto.style?.color, _fundo(t, caixa));
+}
+
+Finder _vertical() => find.byWidgetPredicate(
+  (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+);
+
+void main() {
+  setUp(_links.clear);
+
+  group('funções', () {
+    test('rótulo de cada leitura', () {
+      expect(Leitura.values.map(rotuloLeitura), [
+        'Positiva',
+        'Mista',
+        'Neutra',
+        'Negativa',
+      ]);
+    });
+
+    test('texto do termômetro, com singular', () {
+      expect(
+        textoTermometro(
+          const Termometro(positiva: 7, mista: 7, neutra: 3, negativa: 5),
+        ),
+        '7 positivas · 7 mistas · 3 neutras · 5 negativas',
+      );
+      expect(
+        textoTermometro(
+          const Termometro(positiva: 1, mista: 1, neutra: 1, negativa: 1),
+        ),
+        '1 positiva · 1 mista · 1 neutra · 1 negativa',
+      );
+    });
+
+    test('link seguro: só http e https com host', () {
+      expect(linkSeguro('https://a.com/x'), Uri.parse('https://a.com/x'));
+      expect(linkSeguro('HTTP://a.com'), isNotNull);
+      for (final u in [
+        null,
+        '',
+        '   ',
+        'javascript:alert(1)',
+        'file:///c:/x',
+        'mailto:a@b.com',
+        'https://',
+        'a.com/x',
+      ]) {
+        expect(linkSeguro(u), isNull, reason: '$u');
+      }
+    });
+
+    test('cores: leitura e direção pela paleta', () {
+      expect(PaletaRelatorio.coresLeitura(Leitura.positiva), (
+        const Color(0xFF1B7F3B),
+        const Color(0xFFE6F4EA),
+      ));
+      expect(PaletaRelatorio.coresLeitura(Leitura.negativa), (
+        const Color(0xFFB3261E),
+        const Color(0xFFFCE8E6),
+      ));
+      expect(PaletaRelatorio.coresLeitura(Leitura.mista), (
+        const Color(0xFFB06000),
+        const Color(0xFFFEF7E0),
+      ));
+      expect(PaletaRelatorio.coresLeitura(Leitura.neutra), (
+        const Color(0xFF5F6368),
+        const Color(0xFFF1F3F4),
+      ));
+      expect(
+        PaletaRelatorio.coresDirecao(Direcao.alta),
+        PaletaRelatorio.coresLeitura(Leitura.positiva),
+      );
+      expect(
+        PaletaRelatorio.coresDirecao(Direcao.queda),
+        PaletaRelatorio.coresLeitura(Leitura.negativa),
+      );
+      expect(
+        PaletaRelatorio.coresDirecao(Direcao.neutra),
+        PaletaRelatorio.coresLeitura(Leitura.neutra),
+      );
+    });
+  });
+
+  testWidgets('seções na ordem a–k', (t) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
+    double y(String l) => t.getTopLeft(find.byKey(Key('secao-$l'))).dy;
+    final letras = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k'];
+    for (var i = 1; i < letras.length; i++) {
+      expect(y(letras[i]), greaterThan(y(letras[i - 1])), reason: letras[i]);
+    }
+  });
+
+  testWidgets('cabeçalho, avisos, legenda e textos fixos', (t) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
+    expect(find.text('Quinta-feira, 26 de novembro de 2026'), findsOneWidget);
+    expect(find.text('22 ativos do Radar'), findsOneWidget);
+    expect(find.textContaining('Edição gerada às 15h40'), findsOneWidget);
+    expect(find.textContaining('Bolsas dos EUA fechadas hoje'), findsOneWidget);
+    for (final s in [
+      'Positiva: notícias e números do dia favoráveis à empresa.',
+      'Mista: sinais favoráveis e desfavoráveis ao mesmo tempo.',
+      'Neutra: nada relevante para o preço no dia.',
+      'Negativa: notícias e números do dia desfavoráveis à empresa.',
+      'A leitura resume as notícias e os dados do dia. Não é previsão de '
+          'preço nem recomendação de compra ou venda.',
+      'Termômetro',
+      'Ativo',
+      'Último preço',
+      'Leitura',
+      'Fontes do cenário',
+    ]) {
+      expect(find.text(s), findsWidgets, reason: s);
+    }
+    expect(find.textContaining('Como limitar o risco'), findsOneWidget);
+    expect(find.textContaining('Este relatório é educacional'), findsOneWidget);
+    expect(find.byKey(const Key('versao-nova')), findsNothing);
+  });
+
+  testWidgets('cabeçalho: 1 ativo, lista reserva e sem quantidade', (t) async {
+    Future<void> com(Object? origem) async {
+      await montarComponente(
+        t,
+        _vista(
+          Relatorio.deJson({...fixtureRelatorio(), 'origemAtivos': origem}),
+        ),
+        tamanho: _pc,
+      );
+    }
+
+    await com({'aba': 'Radar', 'quantidade': 1});
+    expect(find.text('1 ativo do Radar'), findsOneWidget);
+    await com({'aba': 'reserva', 'quantidade': 22});
+    expect(find.text('22 ativos da lista reserva'), findsOneWidget);
+    await com({'aba': 'Radar'});
+    expect(find.textContaining('do Radar'), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets(
+    'termômetro: positivas, mistas, neutras, negativas e a contagem do JSON',
+    (t) async {
+      final r = _fixture();
+      await montarComponente(t, _vista(r), tamanho: _pcAlto);
+      final selos = find.byWidgetPredicate(
+        (w) =>
+            w.key is ValueKey<String> &&
+            (w.key! as ValueKey<String>).value.startsWith('selo-termometro-'),
+      );
+      expect(selos, findsNWidgets(22));
+      final posicoes =
+          [
+            for (final e in selos.evaluate())
+              (
+                (e.widget.key! as ValueKey<String>).value.substring(16),
+                t.getTopLeft(find.byKey(e.widget.key!)),
+              ),
+          ]..sort((a, b) {
+            final dy = a.$2.dy.compareTo(b.$2.dy);
+            return dy != 0 ? dy : a.$2.dx.compareTo(b.$2.dx);
+          });
+      final ordem = [for (final p in posicoes) p.$1];
+      final esperado = [
+        for (final l in Leitura.values)
+          for (final a in r.ativos)
+            if (a.leitura == l) a.ticker,
+      ];
+      expect(ordem, esperado);
+      expect(ordem.first, 'T1TW34');
+      expect(ordem.last, 'HAPV3');
+      expect(
+        find.text('7 positivas · 7 mistas · 3 neutras · 5 negativas'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('termômetro divergente mostra o texto do JSON', (t) async {
+    final json = fixtureRelatorio()
+      ..['termometro'] = {
+        'positiva': 1,
+        'mista': 0,
+        'neutra': 0,
+        'negativa': 0,
+      };
+    await montarComponente(t, _vista(Relatorio.deJson(json)), tamanho: _pcAlto);
+    expect(
+      find.text('1 positiva · 0 mistas · 0 neutras · 0 negativas'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('tabela: preço com data e especialistas', (t) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
+    final tabela = find.byKey(const Key('secao-g'));
+    expect(
+      find.descendant(of: tabela, matching: find.text('R\$ 3,45 · 25/11/2026')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: tabela, matching: find.text('Não confirmado')),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(of: tabela, matching: find.text('Especialistas')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('cartões na ordem de posição, com explicação só nos 3', (
+    t,
+  ) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
+    expect(
+      t.getTopLeft(find.byKey(const Key('cartao-CSNA3'))).dy,
+      lessThan(t.getTopLeft(find.byKey(const Key('cartao-T1TW34'))).dy),
+    );
+    for (final tk in ['T1TW34', 'GOGL34', 'RURA11']) {
+      expect(find.byKey(Key('explicacao-$tk')), findsOneWidget, reason: tk);
+    }
+    expect(find.byKey(const Key('explicacao-CSNA3')), findsNothing);
+    final explicacoes = find.byWidgetPredicate(
+      (w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('explicacao-'),
+    );
+    expect(explicacoes, findsNWidgets(3));
+    expect(
+      _fundo(t, find.byKey(const Key('explicacao-T1TW34'))),
+      const Color(0xFFE8F0FE),
+    );
+  });
+
+  testWidgets('cartão: rótulos, especialista, preço no exterior', (t) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
+    final taee = find.byKey(const Key('cartao-TAEE11'));
+    for (final s in [
+      'Quem é dono',
+      'Preço',
+      'Notícias',
+      'Especialistas',
+      'Riscos',
+      'Fontes',
+    ]) {
+      expect(
+        find.descendant(of: taee, matching: find.text(s)),
+        findsOneWidget,
+        reason: s,
+      );
+    }
+    expect(
+      find.descendant(
+        of: taee,
+        matching: find.text(
+          'BTG Pactual · venda · alvo R\$ 40,00 · 11/11/2026',
+        ),
+      ),
+      findsOneWidget,
+    );
+    // Data AAAA-MM vira MM/AAAA; partes ausentes somem.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('cartao-VBBR3')),
+        matching: find.text('Ativa Investimentos · neutra · 11/2026'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('cartao-T1TW34')),
+        matching: find.text('TTWO (Nasdaq): US\$ 216,54 · 18/11/2026'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('direção: ▲ na alta, ▼ na queda, neutra sem seta', (t) async {
+    final json = fixtureRelatorio();
+    (json['indicadores'] as List).add({
+      'nome': 'Estável',
+      'valor': '1',
+      'variacao': '0,00%',
+      'direcao': 'neutra',
+    });
+    await montarComponente(t, _vista(Relatorio.deJson(json)), tamanho: _pcAlto);
+    final d = find.byKey(const Key('secao-d'));
+    expect(
+      find.descendant(of: d, matching: find.text('▲ +4,51%')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: d, matching: find.text('▼ -1,78%')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: d, matching: find.text('0,00%')),
+      findsOneWidget,
+    );
+    final alta = find.ancestor(
+      of: find.text('▲ +4,51%'),
+      matching: find.byType(DecoratedBox),
+    );
+    expect(_fundo(t, alta.first), const Color(0xFFE6F4EA));
+  });
+
+  testWidgets('selo Positiva com as cores da paleta', (t) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
+    final selo = find.ancestor(
+      of: find.text('Positiva').first,
+      matching: find.byType(DecoratedBox),
+    );
+    expect(_fundo(t, selo.first), const Color(0xFFE6F4EA));
+    expect(
+      t.widget<Text>(find.text('Positiva').first).style?.color,
+      const Color(0xFF1B7F3B),
+    );
+  });
+
+  for (final tema in [TemaVisual.terminal, TemaVisual.moderno]) {
+    testWidgets('tema ${tema.chave}: selos mantêm a paleta', (t) async {
+      await montarComponente(
+        t,
+        _vista(_fixture()),
+        tamanho: _pcAlto,
+        tema: tema,
+      );
+      expect(_coresSelo(t, find.byKey(const Key('selo-termometro-T1TW34'))), (
+        const Color(0xFF1B7F3B),
+        const Color(0xFFE6F4EA),
+      ));
+      expect(_coresSelo(t, find.byKey(const Key('selo-termometro-HAPV3'))), (
+        const Color(0xFFB3261E),
+        const Color(0xFFFCE8E6),
+      ));
+    });
+  }
+
+  testWidgets('tocar uma fonte do cenário abre a URL', (t) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pc);
+    final fonte = find.descendant(
+      of: find.byKey(const Key('secao-k')),
+      matching: find.text('InfoMoney'),
+    );
+    await t.scrollUntilVisible(fonte, 600, scrollable: _vertical());
+    await t.ensureVisible(fonte);
+    await t.pumpAndSettle();
+    await t.tap(fonte);
+    expect(_links, [
+      Uri.parse(
+        'https://www.infomoney.com.br/mercados/'
+        'ibovespa-hoje-bolsa-de-valores-ao-vivo-26112026/',
+      ),
+    ]);
+  });
+
+  testWidgets('tocar uma fonte do cartão abre a URL dela', (t) async {
+    final r = _fixture();
+    await montarComponente(t, _vista(r), tamanho: _pc);
+    final fonte = find.descendant(
+      of: find.byKey(const Key('cartao-CSNA3')),
+      matching: find.text('InfoMoney'),
+    );
+    await t.scrollUntilVisible(fonte, 300, scrollable: _vertical());
+    await t.ensureVisible(fonte);
+    await t.pumpAndSettle();
+    await t.tap(fonte);
+    expect(_links, [Uri.parse(r.ativos.first.fontes.first.url)]);
+  });
+
+  testWidgets('fonte sem http(s) aparece como texto e não abre', (t) async {
+    final r = Relatorio(
+      schemaVersion: 1,
+      data: '2026-11-26',
+      termometro: const Termometro(),
+      termometroDoJson: false,
+      ativos: const [
+        AtivoRelatorio(
+          ticker: 'XPTO3',
+          fontes: [Fonte(nome: 'Vazia', url: '')],
+        ),
+      ],
+      fontesCenario: const [Fonte(nome: 'Script', url: 'javascript:alert(1)')],
+    );
+    await montarComponente(t, _vista(r), tamanho: _pcAlto);
+    for (final nome in ['Vazia', 'Script']) {
+      expect(find.text(nome), findsOneWidget);
+      await t.tap(find.text(nome));
+    }
+    expect(_links, isEmpty);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('relatório mínimo monta e mostra que não há ativos', (t) async {
+    await montarComponente(
+      t,
+      _vista(Relatorio.deJson({}, dataDoArquivo: '2026-11-26')),
+      tamanho: _pc,
+    );
+    expect(t.takeException(), isNull);
+    expect(find.text('Nenhum ativo neste relatório.'), findsOneWidget);
+    expect(find.text('Ativo'), findsNothing);
+  });
+
+  testWidgets('ativo sem nenhum campo além do ticker não trava', (t) async {
+    await montarComponente(
+      t,
+      _vista(
+        Relatorio.deJson({
+          'ativos': [
+            {'ticker': 'ABCD3'},
+            {'ticker': 'ABCD3', 'preco': _vazio, 'precoExterior': _vazio},
+            _vazio,
+            _vazio,
+          ],
+          'educacaoRisco': _vazio,
+        }),
+      ),
+      tamanho: _celular,
+    );
+    expect(t.takeException(), isNull);
+    expect(find.text('—'), findsWidgets);
+  });
+
+  testWidgets('schemaVersion 2 mostra o aviso de versão nova', (t) async {
+    await montarComponente(
+      t,
+      _vista(Relatorio.deJson({...fixtureRelatorio(), 'schemaVersion': 2})),
+      tamanho: _pc,
+    );
+    expect(find.byKey(const Key('versao-nova')), findsOneWidget);
+    expect(
+      find.text(
+        'Este relatório usa um formato mais novo que esta versão do app; '
+        'algumas partes podem não aparecer.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  for (final n in [0, 1, 60]) {
+    testWidgets('$n ativos no celular sem overflow', (t) async {
+      await montarComponente(
+        t,
+        _vista(Relatorio.deJson(fixtureComAtivos(n))),
+        tamanho: _celular,
+      );
+      expect(t.takeException(), isNull);
+      if (n == 0) {
+        await t.scrollUntilVisible(
+          find.text('Nenhum ativo neste relatório.'),
+          400,
+          scrollable: _vertical(),
+        );
+      }
+      // Rola até o fim: cada cartão construído passa pelo layout.
+      await t.scrollUntilVisible(
+        find.byKey(const Key('secao-k')),
+        400,
+        scrollable: _vertical(),
+        maxScrolls: 2000,
+      );
+      expect(t.takeException(), isNull);
+      if (n == 60) {
+        await t.drag(_vertical(), const Offset(0, 3000));
+        await t.pumpAndSettle();
+        await t.scrollUntilVisible(
+          find.byKey(const Key('cartao-ATV59')),
+          400,
+          scrollable: _vertical(),
+          maxScrolls: 2000,
+        );
+        expect(find.byKey(const Key('cartao-ATV59')), findsOneWidget);
+      }
+    });
+  }
+
+  testWidgets('fixture no celular sem overflow', (t) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _celular);
+    await t.scrollUntilVisible(
+      find.byKey(const Key('secao-k')),
+      400,
+      scrollable: _vertical(),
+      maxScrolls: 2000,
+    );
+    expect(t.takeException(), isNull);
+  });
+}
