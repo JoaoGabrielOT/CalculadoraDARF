@@ -60,14 +60,15 @@ Future<void> abrirAmigos(BuildContext c) async {
 }
 
 /// Mostra os dados do amigo. O celular os mostra na Apuração, vindo de
-/// Notícias ou Conta (android/main.py:2181); o PC só troca a visão
-/// (py:2929-2931).
+/// Notícias, Relatórios ou Conta (android/main.py:2181); o PC só troca a
+/// visão (py:2929-2931).
 Future<void> verAmigo(
   EstadoApp estado,
   String email, {
   required bool compacto,
 }) async {
-  if (compacto && (estado.aba == Aba.noticias || estado.aba == Aba.conta)) {
+  const semDadosDoAmigo = {Aba.noticias, Aba.relatorios, Aba.conta};
+  if (compacto && semDadosDoAmigo.contains(estado.aba)) {
     estado.irPara(Aba.apuracao);
   }
   await estado.trocarVisao(email);

@@ -149,10 +149,9 @@ void main() {
       return estado;
     }
 
-    testWidgets('no celular, de Notícias ou Conta, vai para a Apuração', (
-      t,
-    ) async {
-      for (final aba in [Aba.noticias, Aba.conta]) {
+    testWidgets('no celular, de Notícias, Relatórios ou Conta, vai para a '
+        'Apuração', (t) async {
+      for (final aba in [Aba.noticias, Aba.relatorios, Aba.conta]) {
         final estado = await verCom(t, _celular, aba);
         expect(estado.aba, Aba.apuracao);
       }
@@ -164,7 +163,7 @@ void main() {
     });
 
     testWidgets('no PC não troca de aba', (t) async {
-      for (final aba in [Aba.noticias, Aba.conta]) {
+      for (final aba in [Aba.noticias, Aba.relatorios, Aba.conta]) {
         final estado = await verCom(t, _pc, aba);
         expect(estado.aba, aba);
       }

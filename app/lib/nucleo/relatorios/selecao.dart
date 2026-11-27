@@ -80,9 +80,13 @@ const _meses = [
   'dezembro',
 ];
 
-/// `'2026-11-26'` -> `'Quinta-feira, 26 de novembro de 2026'`.
+final _iso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
+/// `'2026-11-26'` -> `'Quinta-feira, 26 de novembro de 2026'`; data inválida
+/// volta como veio (a tela nunca trava por ela).
 String dataPorExtenso(String iso) {
-  final d = _dataReal(iso)!;
+  final d = _iso.hasMatch(iso) ? _dataReal(iso) : null;
+  if (d == null) return iso;
   final texto =
       '${_dias[d.weekday - 1]}, ${d.day} de ${_meses[d.month - 1]} de ${d.year}';
   return texto[0].toUpperCase() + texto.substring(1);

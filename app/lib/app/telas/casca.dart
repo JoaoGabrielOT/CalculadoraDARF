@@ -21,6 +21,7 @@ import 'falha_inicial.dart';
 import 'metas/tela_metas.dart';
 import 'noticias/tela_noticias.dart';
 import 'radar/tela_radar.dart';
+import 'relatorios/tela_relatorios.dart';
 
 extension on Aba {
   String get rotulo => switch (this) {
@@ -28,6 +29,7 @@ extension on Aba {
     Aba.caixa => 'Caixa',
     Aba.radar => 'Radar',
     Aba.noticias => 'Notícias',
+    Aba.relatorios => 'Relatórios',
     Aba.conta => 'Conta',
   };
 
@@ -39,6 +41,7 @@ extension on Aba {
     Aba.caixa => Icons.account_balance_wallet,
     Aba.radar => Icons.insights,
     Aba.noticias => Icons.newspaper,
+    Aba.relatorios => Icons.summarize,
     Aba.conta => Icons.account_circle,
   };
 }
@@ -442,5 +445,6 @@ Widget _telaPadrao(Aba a) => switch (a) {
   Aba.caixa => const TelaCaixa(),
   Aba.radar => const TelaRadar(),
   Aba.noticias => const TelaNoticias(),
+  Aba.relatorios => const TelaRelatorios(),
   Aba.conta => const TelaConta(),
 };

@@ -10,8 +10,10 @@ import 'package:calculadoradarf/app/telas/conta/tela_conta.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/app/telas/noticias/tela_noticias.dart';
 import 'package:calculadoradarf/app/telas/radar/tela_radar.dart';
+import 'package:calculadoradarf/app/telas/relatorios/tela_relatorios.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -120,6 +122,66 @@ void main() {
     for (final r in ['Apuração', 'Caixa', 'Radar', 'Notícias', 'Conta']) {
       expect(_naBarra(r), findsOneWidget);
     }
+  });
+
+  group('seis abas, Relatórios entre Notícias e Conta', () {
+    const ordem = ['Apuração', 'Caixa', 'Radar', 'Notícias', 'Relatórios'];
+
+    List<String> rotulos(WidgetTester t, Type barra) => [
+      for (final e
+          in find
+              .descendant(of: find.byType(barra), matching: find.byType(Text))
+              .evaluate())
+        ?(e.widget as Text).data,
+    ];
+
+    testWidgets('no celular (360 px), na barra inferior, sem corte', (t) async {
+      await montarApp(t, tamanho: _pequeno);
+      await t.pumpAndSettle();
+      expect(rotulos(t, NavigationBar), [...ordem, 'Conta']);
+      expect(t.takeException(), isNull);
+      final texto = find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Relatórios'),
+          )
+          .evaluate()
+          .single;
+      final paragrafo = texto.findRenderObject()! as RenderParagraph;
+      expect(paragrafo.didExceedMaxLines, isFalse);
+      // nem cortado na largura do destino (360 / 6 = 60 px)
+      expect(paragrafo.size.width, lessThanOrEqualTo(60));
+      expect(
+        paragrafo.getMaxIntrinsicWidth(double.infinity),
+        lessThanOrEqualTo(paragrafo.size.width + .01),
+      );
+    });
+
+    testWidgets('no PC (1366 px), na barra lateral', (t) async {
+      await montarApp(t, tamanho: const Size(1366, 768));
+      await t.pumpAndSettle();
+      expect(rotulos(t, NavigationRail), [
+        'Apuração / DARF',
+        ...ordem.skip(1),
+        'Conta',
+      ]);
+      expect(Aba.values.map((a) => a.name), [
+        'apuracao',
+        'caixa',
+        'radar',
+        'noticias',
+        'relatorios',
+        'conta',
+      ]);
+    });
+
+    testWidgets('tocar em Relatórios mostra a tela de Relatórios', (t) async {
+      await montarApp(t, tamanho: _pequeno);
+      await t.tap(_naBarra('Relatórios'));
+      await t.pumpAndSettle();
+      expect(_estado(t).aba, Aba.relatorios);
+      expect(find.byType(TelaRelatorios), findsOneWidget);
+    });
   });
 
   testWidgets('a aba Apuração mostra a tela de Apuração, não o espaço', (

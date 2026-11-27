@@ -1,4 +1,4 @@
-// Goldens das cinco abas nos três temas, no PC (1366×768) e no celular
+// Goldens das seis abas nos três temas, no PC (1366×768) e no celular
 // (360×800). Serviços falsos com os dados de `dados_exemplo.dart`, relógio
 // fixo e logos/imagens de notícia gerados aqui como PNGs pequenos.
 @Tags(['golden'])
@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 
+import '../../nucleo/apoio/fixture_relatorio.dart';
 import '../apoio/dados_exemplo.dart';
 import '../apoio/fontes.dart';
 import '../apoio/montar.dart';
@@ -194,6 +195,7 @@ ServicosFalsos _servicos() {
         ),
     }
     ..metasAtivasFalsas = 2
+    ..visaoRelatorios = _visaoRelatorios()
     ..estadoConta = const EstadoConta(
       email: 'investidor@gmail.com',
       temCredencial: true,
@@ -274,6 +276,34 @@ ServicosFalsos _servicos() {
       url.contains('n1') ? _pngFoto(40, 90, 160) : _pngFoto(170, 90, 40);
   s.faviconFn = (_) async => _pngLogo(200, 60, 60);
   return s;
+}
+
+/// A fixture como o relatório de hoje e três itens na lista (24 a 26/11).
+VisaoRelatorios _visaoRelatorios() {
+  final atual = Relatorio.deJson(fixtureRelatorio());
+  return VisaoRelatorios(
+    itens: [
+      for (final (d, t) in [
+        ('2026-11-26', atual.termometro),
+        (
+          '2026-11-25',
+          const Termometro(positiva: 9, mista: 6, neutra: 4, negativa: 3),
+        ),
+        (
+          '2026-11-24',
+          const Termometro(positiva: 5, mista: 8, neutra: 2, negativa: 7),
+        ),
+      ])
+        ResumoRelatorio(
+          nome: 'relatorio-abertura-$d.json',
+          data: d,
+          termometro: t,
+        ),
+    ],
+    hoje: '2026-11-26',
+    atual: atual,
+    ehHoje: true,
+  );
 }
 
 /// Os falsos comuns mais as logos.

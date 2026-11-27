@@ -14,7 +14,7 @@ import '../servicos/api.dart';
 import '../servicos/eventos.dart';
 import '../tema/tema_visual.dart';
 
-enum Aba { apuracao, caixa, radar, noticias, conta }
+enum Aba { apuracao, caixa, radar, noticias, relatorios, conta }
 
 class EstadoApp extends ChangeNotifier {
   /// [verificarAtualizacaoAutomatica]: só o executável final procura versão

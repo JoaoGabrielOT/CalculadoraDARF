@@ -51,4 +51,10 @@ void main() {
     );
     expect(dataPorExtenso('2026-03-01'), 'Domingo, 1 de março de 2026');
   });
+
+  test('data por extenso: data inválida volta como veio, sem lançar', () {
+    for (final s in ['', 'abc', '2026-02-30', '2026-11', '26/11/2026']) {
+      expect(dataPorExtenso(s), s);
+    }
+  });
 }
