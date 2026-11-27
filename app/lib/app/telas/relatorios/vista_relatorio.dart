@@ -47,9 +47,15 @@ class VistaRelatorio extends StatelessWidget {
         if (r.indicadores.isNotEmpty) bloco(_Indicadores(r.indicadores)),
         if (r.resumo case final s?)
           bloco(
-            Cartao(
+            _Secao(
               key: const Key('secao-e'),
-              child: Text(s, style: const TextStyle(fontSize: 14, height: 1.4)),
+              titulo: 'Resumo',
+              child: Cartao(
+                child: Text(
+                  s,
+                  style: const TextStyle(fontSize: 14, height: 1.4),
+                ),
+              ),
             ),
           ),
         bloco(_Termometro(r)),
@@ -63,9 +69,9 @@ class VistaRelatorio extends StatelessWidget {
           )
         else ...[
           bloco(_TabelaResumo(r.ativos)),
-          // Cabeçalho de h: com altura, para contar como visível na rolagem.
-          const SliverToBoxAdapter(
-            child: SizedBox(key: Key('secao-h'), height: 4),
+          // Cabeçalho de h; os cartões vêm preguiçosos logo abaixo.
+          bloco(
+            KeyedSubtree(key: const Key('secao-h'), child: _titulo('Ativos')),
           ),
           SliverPadding(
             padding: EdgeInsets.symmetric(horizontal: margem),
@@ -120,6 +126,21 @@ String? _textoOrigem(OrigemAtivos? o) {
 
 Widget _titulo(String s) =>
     Text(s, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold));
+
+/// Título curto da seção e o conteúdo embaixo; a [key] marca o início dela.
+class _Secao extends StatelessWidget {
+  const _Secao({super.key, required this.titulo, required this.child});
+
+  final String titulo;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    spacing: 8,
+    children: [_titulo(titulo), child],
+  );
+}
 
 // --- a) cabeçalho
 
@@ -269,42 +290,54 @@ class _Indicadores extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    final largura = expandido(context) ? 240.0 : double.infinity;
-    return Wrap(
+    return _Secao(
       key: const Key('secao-d'),
-      spacing: 12,
-      runSpacing: 12,
-      children: [
-        for (final ind in indicadores)
-          SizedBox(
-            width: largura,
-            child: Cartao(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: 4,
-                children: [
-                  Text(
-                    ind.nome,
-                    style: TextStyle(color: c.textoSuave, fontSize: 12),
-                  ),
-                  Text(
-                    ind.valor,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
+      titulo: 'Indicadores',
+      child: LayoutBuilder(
+        builder: (context, caixa) {
+          // Cartões de 240 só quando cabem pelo menos 2 lado a lado no espaço da
+          // vista (não da janela); senão, a largura toda.
+          final largura = caixa.maxWidth >= 2 * 240 + 12
+              ? 240.0
+              : caixa.maxWidth;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final ind in indicadores)
+                SizedBox(
+                  width: largura,
+                  child: Cartao(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 4,
+                      children: [
+                        Text(
+                          ind.nome,
+                          style: TextStyle(color: c.textoSuave, fontSize: 12),
+                        ),
+                        Text(
+                          ind.valor,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (ind.variacao case final v?)
+                          PilulaDirecao(v, ind.direcao),
+                        if (ind.contexto case final s?)
+                          Text(
+                            s,
+                            style: TextStyle(color: c.textoSuave, fontSize: 12),
+                          ),
+                      ],
                     ),
                   ),
-                  if (ind.variacao case final v?) PilulaDirecao(v, ind.direcao),
-                  if (ind.contexto case final s?)
-                    Text(
-                      s,
-                      style: TextStyle(color: c.textoSuave, fontSize: 12),
-                    ),
-                ],
-              ),
-            ),
-          ),
-      ],
+                ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -318,26 +351,28 @@ class _Termometro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Cartao(
+    return _Secao(
       key: const Key('secao-f'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 10,
-        children: [
-          _titulo('Termômetro'),
-          if (r.ativos.isNotEmpty)
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final l in Leitura.values)
-                  for (final a in r.ativos)
-                    if (a.leitura == l) _SeloTermometro(a),
-              ],
-            ),
-          // Divergente das leituras: valem os números do JSON.
-          Text(textoTermometro(r.termometro)),
-        ],
+      titulo: 'Termômetro',
+      child: Cartao(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 10,
+          children: [
+            if (r.ativos.isNotEmpty)
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final l in Leitura.values)
+                    for (final a in r.ativos)
+                      if (a.leitura == l) _SeloTermometro(a),
+                ],
+              ),
+            // Divergente das leituras: valem os números do JSON.
+            Text(textoTermometro(r.termometro)),
+          ],
+        ),
       ),
     );
   }
@@ -363,12 +398,14 @@ class _SeloTermometro extends StatelessWidget {
 class _TabelaResumo extends StatelessWidget {
   const _TabelaResumo(this.ativos);
 
+  /// Soma das colunas fixas; abaixo dela a tabela rola na horizontal.
+  static const _larguraFixa = 632.0;
+
   final List<AtivoRelatorio> ativos;
 
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    final ex = expandido(context);
     Widget celula(Widget w) =>
         Padding(padding: const EdgeInsets.fromLTRB(0, 8, 12, 8), child: w);
     final cabecalho = TextStyle(
@@ -377,8 +414,8 @@ class _TabelaResumo extends StatelessWidget {
       fontWeight: FontWeight.w700,
     );
     const texto = TextStyle(fontSize: 13);
-    final tabela = Table(
-      columnWidths: ex
+    Table tabela({required bool flex}) => Table(
+      columnWidths: flex
           ? const {
               0: FlexColumnWidth(1),
               1: FlexColumnWidth(1.6),
@@ -389,7 +426,7 @@ class _TabelaResumo extends StatelessWidget {
               0: FixedColumnWidth(92),
               1: FixedColumnWidth(160),
               2: FixedColumnWidth(100),
-              3: FixedColumnWidth(280),
+              3: FixedColumnWidth(_larguraFixa - 92 - 160 - 100),
             },
       defaultVerticalAlignment: TableCellVerticalAlignment.middle,
       children: [
@@ -431,15 +468,22 @@ class _TabelaResumo extends StatelessWidget {
           ),
       ],
     );
-    return Cartao(
+    return _Secao(
       key: const Key('secao-g'),
-      padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-      child: ex
-          ? tabela
-          : SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: tabela,
-            ),
+      titulo: 'Resumo por ativo',
+      child: Cartao(
+        padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+        // O modo vem do espaço da vista, não da janela: no PC, com a barra
+        // lateral e a coluna dos anteriores, ela pode ficar estreita.
+        child: LayoutBuilder(
+          builder: (context, caixa) => caixa.maxWidth >= _larguraFixa
+              ? tabela(flex: true)
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: tabela(flex: false),
+                ),
+        ),
+      ),
     );
   }
 }
@@ -493,29 +537,17 @@ class _FontesCenario extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
-    return Column(
+    return _Secao(
       key: const Key('secao-k'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 6,
-      children: [
-        Text(
-          'Fontes do cenário',
-          style: TextStyle(
-            color: c.textoSuave,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        Wrap(
-          spacing: 14,
-          runSpacing: 2,
-          children: [
-            for (final f in fontes)
-              LinkRelatorio(texto: f.nome, url: f.url, aoAbrir: aoAbrirLink),
-          ],
-        ),
-      ],
+      titulo: 'Fontes do cenário',
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 2,
+        children: [
+          for (final f in fontes)
+            LinkRelatorio(texto: f.nome, url: f.url, aoAbrir: aoAbrirLink),
+        ],
+      ),
     );
   }
 }

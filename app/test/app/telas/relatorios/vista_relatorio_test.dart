@@ -1,3 +1,4 @@
+import 'package:calculadoradarf/app/componentes/cartao.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:calculadoradarf/app/telas/relatorios/paleta_relatorio.dart';
 import 'package:calculadoradarf/app/telas/relatorios/vista_relatorio.dart';
@@ -201,6 +202,20 @@ void main() {
             if (a.leitura == l) a.ticker,
       ];
       expect(ordem, esperado);
+      // Grupos fixos da fixture: 7 positivas, 7 mistas, 3 neutras, 5 negativas.
+      final leitura = {for (final a in r.ativos) a.ticker: a.leitura};
+      for (final (ini, fim, l) in [
+        (0, 7, Leitura.positiva),
+        (7, 14, Leitura.mista),
+        (14, 17, Leitura.neutra),
+        (17, 22, Leitura.negativa),
+      ]) {
+        expect(
+          ordem.sublist(ini, fim).map((tk) => leitura[tk]),
+          everyElement(l),
+          reason: l.name,
+        );
+      }
       expect(ordem.first, 'T1TW34');
       expect(ordem.last, 'HAPV3');
       expect(
@@ -518,5 +533,161 @@ void main() {
       maxScrolls: 2000,
     );
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets(
+    'vista estreita no PC: tabela rola e indicadores ocupam a largura',
+    (t) async {
+      await montarComponente(
+        t,
+        SizedBox(width: 310, child: _vista(_fixture())),
+        tamanho: _pc,
+      );
+      final ibov = find.ancestor(
+        of: find.text('Ibovespa'),
+        matching: find.byType(Cartao),
+      );
+      expect(t.getSize(ibov).width, 310 - 2 * 24);
+      final g = find.byKey(const Key('secao-g'));
+      await t.scrollUntilVisible(g, 400, scrollable: _vertical());
+      expect(
+        find.descendant(
+          of: g,
+          matching: find.byWidgetPredicate(
+            (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  testWidgets('vista larga no PC: tabela sem rolagem e indicadores de 240', (
+    t,
+  ) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
+    final ibov = find.ancestor(
+      of: find.text('Ibovespa'),
+      matching: find.byType(Cartao),
+    );
+    expect(t.getSize(ibov).width, 240);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('secao-g')),
+        matching: find.byType(Scrollable),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('títulos das seções, dentro de cada uma', (t) async {
+    await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
+    for (final (l, titulo) in [
+      ('d', 'Indicadores'),
+      ('e', 'Resumo'),
+      ('f', 'Termômetro'),
+      ('g', 'Resumo por ativo'),
+      ('h', 'Ativos'),
+      ('i', 'Como limitar o risco a 1% do capital'),
+      ('k', 'Fontes do cenário'),
+    ]) {
+      expect(
+        find.descendant(
+          of: find.byKey(Key('secao-$l')),
+          matching: find.text(titulo),
+        ),
+        findsOneWidget,
+        reason: titulo,
+      );
+    }
+  });
+
+  testWidgets('seção vazia não mostra título', (t) async {
+    await montarComponente(
+      t,
+      _vista(Relatorio.deJson({}, dataDoArquivo: '2026-11-26')),
+      tamanho: _pcAlto,
+    );
+    for (final s in [
+      'Indicadores',
+      'Resumo',
+      'Resumo por ativo',
+      'Ativos',
+      'Fontes do cenário',
+    ]) {
+      expect(find.text(s), findsNothing, reason: s);
+    }
+  });
+
+  testWidgets('especialista só com url mostra a url como link', (t) async {
+    const url = 'https://exemplo.com/analise';
+    final r = Relatorio(
+      schemaVersion: 1,
+      data: '2026-11-26',
+      termometro: const Termometro(),
+      termometroDoJson: false,
+      ativos: const [
+        AtivoRelatorio(
+          ticker: 'XPTO3',
+          especialistas: Especialistas(
+            itens: [
+              ItemEspecialista(url: url),
+              ItemEspecialista(),
+            ],
+          ),
+        ),
+      ],
+    );
+    await montarComponente(t, _vista(r), tamanho: _pcAlto);
+    await t.tap(find.text(url));
+    expect(_links, [Uri.parse(url)]);
+  });
+
+  testWidgets('cores fixas: aviso, faixas, alerta e direções', (t) async {
+    final json = fixtureRelatorio();
+    (json['indicadores'] as List).add({
+      'nome': 'Estável',
+      'valor': '1',
+      'variacao': '0,00%',
+      'direcao': 'neutra',
+    });
+    await montarComponente(
+      t,
+      _vista(Relatorio.deJson(json)),
+      tamanho: _pcAlto,
+      tema: TemaVisual.terminal,
+    );
+    expect(
+      _fundo(t, find.byKey(const Key('secao-j'))),
+      const Color(0xFFFFF4E5),
+    );
+    final faixas = find.descendant(
+      of: find.byKey(const Key('secao-b')),
+      matching: find.byType(DecoratedBox),
+    );
+    expect(faixas, findsNWidgets(2));
+    for (final e in faixas.evaluate()) {
+      expect(
+        ((e.widget as DecoratedBox).decoration as BoxDecoration).color,
+        const Color(0xFFFEF7E0),
+      );
+    }
+    expect(
+      t.widget<Text>(find.textContaining('Se o preço abrir')).style?.color,
+      const Color(0xFFB3261E),
+    );
+    Finder pilula(String s) => find.ancestor(
+      of: find.text(s),
+      matching: find.byWidgetPredicate((w) => w is Pilula),
+    );
+    expect(_coresSelo(t, pilula('▼ -1,78%')), (
+      const Color(0xFFB3261E),
+      const Color(0xFFFCE8E6),
+    ));
+    expect(_coresSelo(t, pilula('0,00%')), (
+      const Color(0xFF5F6368),
+      const Color(0xFFF1F3F4),
+    ));
   });
 }

@@ -128,12 +128,16 @@ Widget _texto(String s) =>
     Text(s, style: const TextStyle(fontSize: 14, height: 1.35));
 
 /// "BTG Pactual · venda · alvo R$ 40,00 · 11/11/2026"; partes ausentes somem.
-String _textoItem(ItemEspecialista i) => juntar([
-  i.casa,
-  i.recomendacao,
-  if (i.precoAlvo case final p?) 'alvo $p',
-  if (i.data case final d?) dataCurta(d),
-]);
+/// Só com a URL, o texto é a própria URL.
+String _textoItem(ItemEspecialista i) {
+  final t = juntar([
+    i.casa,
+    i.recomendacao,
+    if (i.precoAlvo case final p?) 'alvo $p',
+    if (i.data case final d?) dataCurta(d),
+  ]);
+  return t.isEmpty ? i.url ?? '' : t;
+}
 
 Widget _comVariacao(String texto, String? variacao, Direcao direcao) => Wrap(
   spacing: 8,
