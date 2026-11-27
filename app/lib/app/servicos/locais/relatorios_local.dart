@@ -138,8 +138,10 @@ class RelatoriosLocal {
       : _visao(_lerIndice(), SituacaoRelatorios.ok);
 
   /// Sair da conta: apaga o índice e os conteúdos já, e de novo depois do que
-  /// estiver em curso na fila (um `atualizar` em voo regravaria o índice).
+  /// estiver em curso na fila (um `atualizar` em voo regravaria o índice). O
+  /// `atualizar` seguinte não recebe o pedido da conta anterior.
   Future<void> limpar() {
+    _emCurso = null;
     _limparAgora();
     return _naFila(() async => _limparAgora());
   }
@@ -163,8 +165,15 @@ class RelatoriosLocal {
 
   /// Lista a pasta e baixa o que mudou; chamadas simultâneas compartilham o
   /// mesmo pedido.
-  Future<VisaoRelatorios> atualizar() =>
-      _emCurso ??= _naFila(_atualizar).whenComplete(() => _emCurso = null);
+  Future<VisaoRelatorios> atualizar() {
+    if (_emCurso case final emCurso?) return emCurso;
+    late final Future<VisaoRelatorios> pedido;
+    // depois do `limpar`, o fim do pedido antigo não solta o novo
+    pedido = _naFila(_atualizar).whenComplete(() {
+      if (identical(_emCurso, pedido)) _emCurso = null;
+    });
+    return _emCurso = pedido;
+  }
 
   /// Conteúdo do cache; sem cache baixa e guarda. Arquivo inválido é marcado
   /// e vira `ErroValidacao(textoRelatorioInvalido)`.
@@ -345,7 +354,8 @@ class RelatoriosLocal {
         ),
   ]);
 
-  /// [lidos]: conteúdos já decodificados nesta chamada.
+  /// [lidos]: conteúdos já decodificados nesta chamada. Sem conexão e sem o
+  /// conteúdo do escolhido, vale o mais recente em cache.
   VisaoRelatorios _visao(
     _Indice indice,
     SituacaoRelatorios situacao, {
@@ -353,13 +363,24 @@ class RelatoriosLocal {
   }) {
     final itens = _itens(indice);
     final hoje = _hoje;
-    final (:escolhido, :ehHoje) = escolherRelatorio(itens, hoje);
+    var (:escolhido, :ehHoje) = escolherRelatorio(itens, hoje);
+    Relatorio? lerConteudo(String nome) => lidos[nome] ?? _conteudo(nome);
+    var atual = escolhido == null ? null : lerConteudo(escolhido.nome);
+    if (atual == null && situacao == SituacaoRelatorios.semConexao) {
+      for (final r in itens) {
+        if (!lidos.containsKey(r.nome) && !_temConteudo(r.nome)) continue;
+        atual = lerConteudo(r.nome);
+        if (atual == null) continue;
+        escolhido = r;
+        ehHoje = false;
+        break;
+      }
+    }
     return VisaoRelatorios(
       itens: itens,
       hoje: hoje,
-      atual: escolhido == null
-          ? null
-          : lidos[escolhido.nome] ?? _conteudo(escolhido.nome),
+      atual: atual,
+      nomeAtual: atual == null ? null : escolhido?.nome,
       ehHoje: ehHoje,
       situacao: situacao,
     );

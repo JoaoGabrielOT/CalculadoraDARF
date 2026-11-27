@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -53,6 +54,20 @@ class FonteFalsa implements FonteRelatorios {
       return (jsonDecode(jsonEncode(c)) as Map).cast<String, Object?>();
     }
     throw c ?? ErroGoogle('File not found', 404);
+  }
+}
+
+/// A listagem `i` espera `portoes[i]`.
+class _FonteComPortoes extends FonteFalsa {
+  _FonteComPortoes(this.portoes);
+
+  final List<Completer<void>> portoes;
+  var _pedidas = 0;
+
+  @override
+  Future<List<ArquivoRelatorio>> listar() async {
+    await portoes[_pedidas++].future;
+    return super.listar();
   }
 }
 
@@ -384,6 +399,34 @@ void main() {
     }
   });
 
+  test('hoje sem conteúdo por falta de rede: o mais recente em cache', () async {
+    final f = FonteFalsa(
+      arquivos: [_arq('2026-11-24'), _arq('2026-11-25')],
+      conteudos: {
+        'id-2026-11-24': _doDia('2026-11-24'),
+        'id-2026-11-25': _doDia('2026-11-25'),
+        'id-2026-11-26': Offline('sem rede'),
+      },
+    );
+    final disco = ArmazenamentoMemoria();
+    await _local(f, disco).atualizar();
+    f.arquivos.add(_arq('2026-11-26'));
+    final v = await _local(f, disco).atualizar();
+    expect(v.situacao, SituacaoRelatorios.semConexao);
+    expect(v.itens.first.data, '2026-11-26');
+    expect(v.ehHoje, isFalse);
+    expect(v.atual?.data, '2026-11-25');
+    expect(v.nomeAtual, _nome('2026-11-25'));
+    // a listagem também falha: o mesmo, pelo índice
+    f.erroListar = Offline('x');
+    final c = await _local(f, disco).atualizar();
+    expect((c.atual?.data, c.nomeAtual, c.ehHoje), (
+      '2026-11-25',
+      _nome('2026-11-25'),
+      false,
+    ));
+  });
+
   test('nome repetido: vale o modifiedTime mais novo', () async {
     final f = FonteFalsa(
       arquivos: [
@@ -700,6 +743,32 @@ void main() {
     expect(identical(r[0], r[1]), isTrue);
     await local.atualizar();
     expect(f.listagens, 2);
+  });
+
+  test('limpar: o atualizar seguinte não recebe o da conta anterior', () async {
+    final portoes = [Completer<void>(), Completer<void>()];
+    final f = _FonteComPortoes(portoes)
+      ..arquivos = [_arq('2026-11-26')]
+      ..conteudos = {'id-2026-11-26': _doDia('2026-11-26')};
+    final conta = ContaFalsa(email: 'ana@gmail.com');
+    final disco = ArmazenamentoMemoria();
+    final local = _local(f, disco, conta: conta);
+    final antigo = local.atualizar();
+    await pumpEventQueue();
+    final limpo = local.limpar();
+    conta.email = 'bia@gmail.com';
+    final depois = local.atualizar();
+    expect(identical(depois, antigo), isFalse);
+    portoes[0].complete();
+    await antigo;
+    // o fim do pedido antigo não solta o novo
+    expect(identical(local.atualizar(), depois), isTrue);
+    portoes[1].complete();
+    await limpo;
+    expect((await depois).situacao, SituacaoRelatorios.ok);
+    // o novo listou depois da limpeza
+    expect(f.listagens, 2);
+    expect(disco.existe(arquivoIndiceRelatorios), isTrue);
   });
 
   test('abrir durante uma atualização espera a vez e não se perde', () async {

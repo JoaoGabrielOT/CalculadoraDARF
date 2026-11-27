@@ -482,6 +482,7 @@ class VisaoRelatorios {
     required this.itens,
     required this.hoje,
     this.atual,
+    this.nomeAtual,
     this.ehHoje = false,
     this.situacao = SituacaoRelatorios.ok,
   });
@@ -494,6 +495,10 @@ class VisaoRelatorios {
 
   /// Conteúdo do escolhido (`escolherRelatorio`), se estiver em cache.
   final Relatorio? atual;
+
+  /// Nome do arquivo de [atual]. Sem conexão e sem o conteúdo do escolhido,
+  /// [atual] é o mais recente em cache (e [ehHoje] fica falso).
+  final String? nomeAtual;
   final bool ehHoje;
   final SituacaoRelatorios situacao;
 }

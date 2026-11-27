@@ -126,7 +126,10 @@ class _Principal extends StatelessWidget {
       );
     }
     if (aberto == null) {
-      return controle.erro == null ? const Carregando() : _Mensagem(topo: topo);
+      // sem conexão, nada em cache para abrir: só as faixas
+      return controle.erro == null && !semConexao
+          ? const Carregando()
+          : _Mensagem(topo: topo);
     }
     return VistaRelatorio(
       relatorio: aberto,

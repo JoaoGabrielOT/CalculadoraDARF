@@ -88,6 +88,15 @@ class _ServicosFila extends ServicosFalsos {
   }
 }
 
+/// `relatorios()` responde depois de um `await`, como pelo isolate.
+class _ServicosCacheLento extends ServicosFalsos {
+  @override
+  Future<VisaoRelatorios> relatorios() async {
+    await Future<void>.value();
+    return super.relatorios();
+  }
+}
+
 class _Cena {
   _Cena(this.servicos, this.plataforma);
 
@@ -337,6 +346,108 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Novo'), findsOneWidget);
     expect(find.text('Velho'), findsNothing);
+  });
+
+  testWidgets('primeira abertura mostra o cache até a pasta responder', (
+    t,
+  ) async {
+    final s = _ServicosCacheLento()
+      ..visaoRelatorios = _visao(atual: _rel('2026-11-26', titulo: 'Do cache'));
+    final pasta = Completer<VisaoRelatorios>();
+    s.atualizarRelatoriosFn = () => pasta.future;
+    final mostrar = ValueNotifier(false);
+    addTearDown(mostrar.dispose);
+    await montarApp(
+      t,
+      servicos: s,
+      tela: ValueListenableBuilder<bool>(
+        key: const Key('mostrar-relatorios'),
+        valueListenable: mostrar,
+        builder: (_, m, _) => m ? const TelaRelatorios() : const SizedBox(),
+      ),
+    );
+    Provider.of<EstadoApp>(
+      t.element(find.byKey(const Key('mostrar-relatorios'))),
+      listen: false,
+    ).irPara(Aba.relatorios);
+    await t.pump();
+    // a aba já aberta quando a tela é criada
+    mostrar.value = true;
+    await t.pump();
+    await t.pump();
+    expect(_contar(s, 'atualizarRelatorios()'), 1);
+    expect(find.text('Do cache'), findsOneWidget);
+    pasta.complete(_visao(atual: _rel('2026-11-26', titulo: 'Da pasta')));
+    await t.pumpAndSettle();
+    expect(find.text('Da pasta'), findsOneWidget);
+    expect(find.text('Do cache'), findsNothing);
+  });
+
+  testWidgets('escopo insuficiente ao abrir pede para entrar de novo', (
+    t,
+  ) async {
+    final s = _servicos()
+      ..erros['abrirRelatorio'] = EscopoInsuficiente(
+        'Request had insufficient authentication scopes.',
+        403,
+      );
+    await _montar(t, servicos: s);
+    final antes = _contar(s, 'atualizarRelatorios()');
+    s.visaoRelatorios = _visao(
+      itens: const [],
+      semAtual: true,
+      situacao: SituacaoRelatorios.novoLogin,
+    );
+    await t.tap(_item('2026-11-25'));
+    await t.pumpAndSettle();
+    expect(_contar(s, 'atualizarRelatorios()'), antes + 1);
+    expect(find.textContaining('insufficient'), findsNothing);
+    expect(find.text(_textoNovoLogin), findsOneWidget);
+  });
+
+  group('sem conexão e sem o conteúdo do de hoje', () {
+    testWidgets('mostra o mais recente em cache sem tentar abrir o de hoje', (
+      t,
+    ) async {
+      final s = _servicos(
+        VisaoRelatorios(
+          itens: _itens(),
+          hoje: '2026-11-26',
+          atual: _rel('2026-11-25', titulo: 'Relatório do dia 25'),
+          nomeAtual: _nome('2026-11-25'),
+          situacao: SituacaoRelatorios.semConexao,
+        ),
+      );
+      await _montar(t, servicos: s);
+      expect(_contar(s, 'abrirRelatorio(${_nome('2026-11-26')})'), 0);
+      expect(find.text('Relatório do dia 25'), findsOneWidget);
+      expect(find.text(_textoSemConexao), findsOneWidget);
+      expect(find.text(_textoHoje), findsOneWidget);
+      expect(
+        find.text(
+          'Mostrando o relatório de Quarta-feira, 25 de novembro de 2026',
+        ),
+        findsOneWidget,
+      );
+      final item = t.widget<ListTile>(
+        find.descendant(
+          of: _item('2026-11-25'),
+          matching: find.byType(ListTile),
+        ),
+      );
+      expect(item.selected, isTrue);
+    });
+
+    testWidgets('nada em cache: só o aviso, sem tentar abrir', (t) async {
+      final s = _servicos(
+        _visao(semAtual: true, situacao: SituacaoRelatorios.semConexao),
+      );
+      await _montar(t, servicos: s);
+      expect(s.chamadas.where((c) => c.startsWith('abrirRelatorio')), isEmpty);
+      expect(find.text(_textoSemConexao), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(_item('2026-11-25'), findsOneWidget);
+    });
   });
 
   group('novo login', () {

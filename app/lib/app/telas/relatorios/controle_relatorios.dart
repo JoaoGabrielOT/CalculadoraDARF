@@ -1,12 +1,13 @@
 // Estado da aba Relatórios: a visão (cache e pasta do Drive), o relatório
 // aberto e o que acontece ao entrar na aba e ao trocar de conta. A pasta é
-// lida ao abrir a aba, no Atualizar e quando a conta muda; respostas de
-// pedidos antigos são descartadas.
+// lida ao abrir a aba, no Atualizar e quando a conta muda; a resposta de um
+// pedido antigo é descartada quando a de um mais novo já foi aplicada.
 
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../estado/estado_app.dart';
 import '../../regras/textos.dart';
@@ -28,6 +29,10 @@ class ControleRelatorios extends ChangeNotifier {
   late bool _naAba;
   String? _email;
   int _geracao = 0;
+
+  /// Geração da última visão aplicada; o cache (pedido antes do `atualizar`)
+  /// ainda vale enquanto a pasta não responde.
+  int _geracaoAplicada = 0;
   int _geracaoAbrir = 0;
   bool _descartado = false;
 
@@ -85,22 +90,24 @@ class ControleRelatorios extends ChangeNotifier {
     await _pedirVisao(_servicos.atualizarRelatorios);
   }
 
-  /// Vale a última leitura pedida.
+  /// Uma leitura só é descartada se outra mais nova já foi aplicada; o erro
+  /// vale só para a última pedida.
   Future<void> _pedirVisao(Future<VisaoRelatorios> Function() pedir) async {
     final geracao = ++_geracao;
+    var aplicou = false;
     try {
       final nova = await pedir();
-      if (geracao != _geracao) return;
-      erro = null;
+      if (geracao < _geracaoAplicada) return;
+      _geracaoAplicada = geracao;
+      aplicou = true;
+      if (geracao == _geracao) erro = null;
       _aplicar(nova);
     } catch (e) {
       if (geracao != _geracao) return;
       if (e is! PedidoSuperado) erro = textoErro(e);
     } finally {
-      if (geracao == _geracao) {
-        atualizando = false;
-        notifyListeners();
-      }
+      if (geracao == _geracao) atualizando = false;
+      if (aplicou || geracao == _geracao) notifyListeners();
     }
   }
 
@@ -108,7 +115,9 @@ class ControleRelatorios extends ChangeNotifier {
   /// visão.
   void _aplicar(VisaoRelatorios nova) {
     visao = nova;
-    final padrao = escolherRelatorio(nova.itens, nova.hoje).escolhido?.nome;
+    final padrao =
+        nova.nomeAtual ??
+        escolherRelatorio(nova.itens, nova.hoje).escolhido?.nome;
     // o tocado na lista vale como escolhido: a abertura dele vem depois
     final escolhido = _escolhido ?? _pedido;
     if (escolhido != null && nova.itens.any((i) => i.nome == escolhido)) {
@@ -124,13 +133,17 @@ class ControleRelatorios extends ChangeNotifier {
     _geracaoAbrir++;
     nomeAberto = padrao;
     aberto = nova.atual;
-    // o escolhido não está em cache: pede o conteúdo
-    if (aberto == null && padrao != null) {
+    // o escolhido não está em cache: pede o conteúdo (sem conexão, o
+    // download acabou de falhar)
+    if (aberto == null &&
+        padrao != null &&
+        nova.situacao != SituacaoRelatorios.semConexao) {
       unawaited(_abrir(padrao, escolha: false));
     }
   }
 
-  /// Abre um relatório da lista; se falhar, o anterior continua à vista.
+  /// Abre um relatório da lista; se falhar, o anterior continua à vista. Sem
+  /// o escopo da pasta, lista de novo, que mostra o "entrar de novo".
   Future<void> abrir(String nome) => _abrir(nome, escolha: true);
 
   Future<void> _abrir(String nome, {required bool escolha}) async {
@@ -145,6 +158,10 @@ class ControleRelatorios extends ChangeNotifier {
       erro = null;
     } catch (e) {
       if (geracao != _geracaoAbrir || e is PedidoSuperado) return;
+      if (e is EscopoInsuficiente) {
+        unawaited(atualizar());
+        return;
+      }
       erro = textoErro(e);
     } finally {
       if (geracao == _geracaoAbrir) _pedido = null;
