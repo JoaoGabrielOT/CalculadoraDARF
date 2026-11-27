@@ -6,9 +6,13 @@ import { COOKIE, NONCE, config, origensDeVolta } from '../_lib/oauth.js';
 // Os mesmos de escoposGoogle (app/lib/integracoes/google/constantes.dart).
 const ESCOPOS = [
   'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/spreadsheets.readonly',
 ];
+
+// Conta do "entrar de novo" (login_hint): e-mail simples e curto.
+const HINT = /^[^@\s<>"'&]{1,64}@[^@\s<>"'&]+\.[^@\s<>"'&]+$/;
+const HINT_MAX = 254;
 
 export function criar(dep) {
   return criarRota(
@@ -24,6 +28,9 @@ export function criar(dep) {
           if (!permitida(volta, origensDeVolta(dep.env))) return json(400, { erro: 'volta' });
           const nonce = url.searchParams.get('n') ?? '';
           if (!NONCE.test(nonce)) return json(400, { erro: 'nonce' });
+          // hint fora do formato: só não vai ao Google
+          const pedido = url.searchParams.get('hint');
+          const hint = pedido !== null && pedido.length <= HINT_MAX && HINT.test(pedido) ? pedido : null;
 
           const state = randomBytes(16).toString('base64url');
           const verificador = randomBytes(32).toString('base64url');
@@ -39,6 +46,7 @@ export function criar(dep) {
             code_challenge: desafio,
             code_challenge_method: 'S256',
             state,
+            ...(hint === null ? {} : { login_hint: hint }),
           }).toString();
           const cookie = cifrar(
             { k: 'cookie', s: state, v: verificador, o: volta, e: dep.agora() + 600_000, n: nonce },
