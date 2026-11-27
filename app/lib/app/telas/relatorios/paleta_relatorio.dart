@@ -32,6 +32,19 @@ abstract final class PaletaRelatorio {
   /// tema, para não sumir no fundo claro quando o tema é escuro.
   static const textoCaixa = Color(0xFF202124);
 
+  /// Verde da ★ e do realce dos destaques: no tema escuro, um verde claro que
+  /// não se perde no fundo.
+  static Color verdeDestaque(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFF81C995)
+      : positivaTexto;
+
+  /// Fundo da linha em destaque: um pouco mais forte no tema escuro.
+  static Color fundoDestaque(BuildContext context) => verdeDestaque(context)
+      .withValues(
+        alpha: Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.12,
+      );
+
   static (Color texto, Color fundo) coresLeitura(Leitura l) => switch (l) {
     Leitura.positiva => (positivaTexto, positivaFundo),
     Leitura.mista => (mistaTexto, mistaFundo),

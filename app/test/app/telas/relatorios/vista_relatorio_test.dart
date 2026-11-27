@@ -762,6 +762,47 @@ void main() {
       expect(textoEm('placar-RENT3', '1 compra'), findsOneWidget);
     });
 
+    testWidgets('tema escuro: ★ e fundo do destaque mais claros', (t) async {
+      Color? estrela(WidgetTester t) => t
+          .widget<Text>(find.byKey(const Key('estrela-tabela-PRIO3')))
+          .style
+          ?.color;
+      await montarComponente(
+        t,
+        _vista(r27()),
+        tamanho: _pcAlto,
+        tema: TemaVisual.terminal,
+      );
+      expect(estrela(t), const Color(0xFF81C995));
+      expect(
+        t.widget<Text>(find.text('★ PRIO3')).style?.color,
+        const Color(0xFF81C995),
+      );
+      await montarComponente(t, _vista(r27()), tamanho: _pcAlto);
+      await t.pumpAndSettle(); // o tema anima a troca
+      expect(estrela(t), PaletaRelatorio.positivaTexto);
+    });
+
+    testWidgets('potencial aparece sem casa, alvo nem url', (t) async {
+      final r = Relatorio.deJson({
+        'ativos': [
+          {
+            'ticker': 'POTE3',
+            'especialistas': {
+              'itens': [
+                {'potencial': '+10,0% até o alvo, com o preço de 26/11'},
+              ],
+            },
+          },
+        ],
+      });
+      await montarComponente(t, _vista(r), tamanho: _pcAlto);
+      expect(
+        textoEm('cartao-POTE3', '+10,0% até o alvo, com o preço de 26/11'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('ticker repetido em destaque não quebra', (t) async {
       final item = {
         'ticker': 'DUPL3',

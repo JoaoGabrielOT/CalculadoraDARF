@@ -35,16 +35,16 @@ class CartaoAtivo extends StatelessWidget {
             border: destaque
                 ? Border(
                     left: BorderSide(color: corLeitura, width: 5),
-                    top: const BorderSide(
-                      color: PaletaRelatorio.positivaTexto,
+                    top: BorderSide(
+                      color: PaletaRelatorio.verdeDestaque(context),
                       width: 2,
                     ),
-                    right: const BorderSide(
-                      color: PaletaRelatorio.positivaTexto,
+                    right: BorderSide(
+                      color: PaletaRelatorio.verdeDestaque(context),
                       width: 2,
                     ),
-                    bottom: const BorderSide(
-                      color: PaletaRelatorio.positivaTexto,
+                    bottom: BorderSide(
+                      color: PaletaRelatorio.verdeDestaque(context),
                       width: 2,
                     ),
                   )
@@ -115,16 +115,18 @@ class CartaoAtivo extends StatelessWidget {
                     if (esp.resumo case final r?) _texto(r),
                     if (placar.total > 0) _PlacarCartao(a.ticker, placar),
                     for (final i in esp.itens)
-                      if (_textoItem(i) case final t when t.isNotEmpty)
+                      if (_textoItem(i) case final t
+                          when t.isNotEmpty || i.potencial != null)
                         Wrap(
                           spacing: 8,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            LinkRelatorio(
-                              texto: t,
-                              url: i.url,
-                              aoAbrir: aoAbrirLink,
-                            ),
+                            if (t.isNotEmpty)
+                              LinkRelatorio(
+                                texto: t,
+                                url: i.url,
+                                aoAbrir: aoAbrirLink,
+                              ),
                             if (i.potencial case final p?)
                               Text(
                                 p,

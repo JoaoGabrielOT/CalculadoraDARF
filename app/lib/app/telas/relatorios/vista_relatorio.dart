@@ -44,6 +44,7 @@ class VistaRelatorio extends StatelessWidget {
       for (final a in ativos)
         if (emDestaque(a)) a,
     ];
+    final idDestaques = Set<AtivoRelatorio>.identity()..addAll(destaques);
     return CustomScrollView(
       slivers: [
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -76,7 +77,7 @@ class VistaRelatorio extends StatelessWidget {
             ),
           )
         else ...[
-          bloco(_TabelaResumo(ativos)),
+          bloco(_TabelaResumo(ativos, idDestaques)),
           // Cabeçalho de h; os cartões vêm preguiçosos logo abaixo.
           bloco(
             KeyedSubtree(key: const Key('secao-h'), child: _titulo('Ativos')),
@@ -417,7 +418,10 @@ class _Destaques extends StatelessWidget {
         decoration: BoxDecoration(
           color: c.cartao,
           borderRadius: BorderRadius.circular(c.raioCartao),
-          border: Border.all(color: PaletaRelatorio.positivaTexto, width: 2),
+          border: Border.all(
+            color: PaletaRelatorio.verdeDestaque(context),
+            width: 2,
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -457,8 +461,8 @@ class _LinhaDestaque extends StatelessWidget {
       children: [
         Text(
           '★ ${a.ticker}',
-          style: const TextStyle(
-            color: PaletaRelatorio.positivaTexto,
+          style: TextStyle(
+            color: PaletaRelatorio.verdeDestaque(context),
             fontSize: 14,
             fontWeight: FontWeight.w700,
           ),
@@ -476,12 +480,15 @@ class _LinhaDestaque extends StatelessWidget {
 // --- g) tabela-resumo
 
 class _TabelaResumo extends StatelessWidget {
-  const _TabelaResumo(this.ativos);
+  const _TabelaResumo(this.ativos, this.destaques);
 
   /// Soma das colunas fixas; abaixo dela a tabela rola na horizontal.
   static const _larguraFixa = 632.0;
 
   final List<AtivoRelatorio> ativos;
+
+  /// Os ativos em destaque (por identidade), calculados uma vez pelo build.
+  final Set<AtivoRelatorio> destaques;
 
   @override
   Widget build(BuildContext context) {
@@ -524,8 +531,8 @@ class _TabelaResumo extends StatelessWidget {
         for (final a in ativos)
           TableRow(
             decoration: BoxDecoration(
-              color: emDestaque(a)
-                  ? PaletaRelatorio.positivaTexto.withValues(alpha: 0.12)
+              color: destaques.contains(a)
+                  ? PaletaRelatorio.fundoDestaque(context)
                   : null,
               border: Border(top: BorderSide(color: c.linha)),
             ),
@@ -534,7 +541,7 @@ class _TabelaResumo extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (emDestaque(a)) _EstrelaTabela(a.ticker),
+                    if (destaques.contains(a)) _EstrelaTabela(a.ticker),
                     Flexible(
                       child: Text(
                         a.ticker,
@@ -591,8 +598,8 @@ class _EstrelaTabela extends StatelessWidget {
     child: Text(
       '★',
       key: Key('estrela-tabela-$ticker'),
-      style: const TextStyle(
-        color: PaletaRelatorio.positivaTexto,
+      style: TextStyle(
+        color: PaletaRelatorio.verdeDestaque(context),
         fontSize: 13,
         fontWeight: FontWeight.w700,
       ),
