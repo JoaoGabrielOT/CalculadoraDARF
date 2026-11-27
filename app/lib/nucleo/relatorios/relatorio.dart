@@ -213,18 +213,68 @@ class PrecoExterior {
   }
 }
 
+/// Texto normalizado (minúsculas, sem espaços nas pontas); vazio vira null.
+String? _normalizado(Object? v) {
+  final t = _chave(v);
+  return t == null || t.isEmpty ? null : t;
+}
+
+/// Votos das casas: compra, neutra e venda.
+class Placar {
+  const Placar({
+    required this.compra,
+    required this.neutra,
+    required this.venda,
+  });
+
+  final int compra;
+  final int neutra;
+  final int venda;
+
+  int get total => compra + neutra + venda;
+
+  /// Só aceita mapa com as três chaves inteiras >= 0; senão null.
+  static Placar? deJson(Object? json) {
+    final m = _mapa(json);
+    if (m == null) return null;
+    final c = _inteiro(m['compra']);
+    final n = _inteiro(m['neutra']);
+    final v = _inteiro(m['venda']);
+    if (c == null || n == null || v == null || c < 0 || n < 0 || v < 0) {
+      return null;
+    }
+    return Placar(compra: c, neutra: n, venda: v);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Placar &&
+      other.compra == compra &&
+      other.neutra == neutra &&
+      other.venda == venda;
+
+  @override
+  int get hashCode => Object.hash(compra, neutra, venda);
+}
+
 class ItemEspecialista {
   const ItemEspecialista({
     this.casa,
     this.recomendacao,
+    this.classificacao,
     this.precoAlvo,
+    this.potencial,
     this.data,
     this.url,
   });
 
   final String? casa;
   final String? recomendacao;
+
+  /// Texto cru normalizado: `compra`, `neutra`, `venda`, `sem_classificacao`…
+  final String? classificacao;
   final String? precoAlvo;
+  final String? potencial;
   final String? data;
   final String? url;
 
@@ -234,7 +284,9 @@ class ItemEspecialista {
     return ItemEspecialista(
       casa: _texto(m['casa']),
       recomendacao: _texto(m['recomendacao']),
+      classificacao: _normalizado(m['classificacao']),
       precoAlvo: _texto(m['precoAlvo']),
+      potencial: _texto(m['potencial']),
       data: _texto(m['data']),
       url: _texto(m['url']),
     );
@@ -242,9 +294,18 @@ class ItemEspecialista {
 }
 
 class Especialistas {
-  const Especialistas({this.resumo, this.itens = const []});
+  const Especialistas({
+    this.resumo,
+    this.consenso,
+    this.placar,
+    this.itens = const [],
+  });
 
   final String? resumo;
+
+  /// Texto cru normalizado; a conversão para o enum fica em `destaques.dart`.
+  final String? consenso;
+  final Placar? placar;
   final List<ItemEspecialista> itens;
 
   static Especialistas deJson(Object? json) {
@@ -252,6 +313,8 @@ class Especialistas {
     if (m == null) return const Especialistas();
     return Especialistas(
       resumo: _texto(m['resumo']),
+      consenso: _normalizado(m['consenso']),
+      placar: Placar.deJson(m['placar']),
       itens: [for (final e in _lista(m['itens'])) ?ItemEspecialista.deJson(e)],
     );
   }

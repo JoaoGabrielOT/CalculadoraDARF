@@ -316,4 +316,42 @@ void main() {
     expect(r.ativos.single.preco!.valor, isNull);
     expect(r.ativos.single.preco!.texto, 'R\$ 3,45');
   });
+
+  group('consenso, placar, classificação e potencial', () {
+    AtivoRelatorio ativo(Relatorio r, String t) =>
+        r.ativos.firstWhere((a) => a.ticker == t);
+
+    test('fixture de 27/11', () {
+      final r = Relatorio.deJson(fixtureRelatorio27());
+      final e = ativo(r, 'BPAC11').especialistas;
+      expect(e.consenso, 'compra');
+      expect(e.placar, const Placar(compra: 2, neutra: 1, venda: 0));
+      expect(e.placar!.total, 3);
+      expect(e.itens[0].classificacao, 'compra');
+      expect(
+        ativo(r, 'LREN3').especialistas.itens[0].potencial,
+        '+39,7% até o alvo, com o preço de 26/11',
+      );
+    });
+
+    test('placar inválido vira null', () {
+      for (final p in [
+        {'compra': 1.5, 'neutra': 0, 'venda': 0},
+        {'compra': -1, 'neutra': 0, 'venda': 0},
+        {'compra': 1},
+      ]) {
+        expect(Especialistas.deJson({'placar': p}).placar, isNull);
+      }
+    });
+
+    test('consenso é normalizado; fixture de 26/11 não tem os campos', () {
+      expect(
+        Especialistas.deJson({'consenso': '  Compra '}).consenso,
+        'compra',
+      );
+      final r = Relatorio.deJson(fixtureRelatorio());
+      final e = ativo(r, 'BPAC11').especialistas;
+      expect((e.consenso, e.placar), (null, null));
+    });
+  });
 }

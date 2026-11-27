@@ -25,3 +25,11 @@ Map<String, Object?> fixtureComAtivos(int n) {
   f['termometro'] = cont;
   return f;
 }
+
+const caminhoFixtureRelatorio27 =
+    '../tests/fixtures/relatorio-abertura-2026-11-27.json';
+
+/// A fixture de 27/11 (com consenso, placar, classificação e potencial).
+Map<String, Object?> fixtureRelatorio27() =>
+    (jsonDecode(File(caminhoFixtureRelatorio27).readAsStringSync()) as Map)
+        .cast<String, Object?>();
