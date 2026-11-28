@@ -287,11 +287,13 @@ class _BarraFiltrosState extends State<BarraFiltros> {
             valor: sit.valor,
             aoMudar: sit.aoMudar,
             compacto: !grande,
+            expandir: !grande,
           );
     final busca = CampoBusca(
       key: Key('busca-$id'),
       controller: _campo,
-      dica: 'Buscar ticker…',
+      // no celular a caixa é estreita: a dica longa seria cortada
+      dica: grande ? 'Buscar ticker…' : 'Buscar',
       aoMudar: widget.aoBuscar,
     );
     final menus = [

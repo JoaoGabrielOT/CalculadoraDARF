@@ -532,6 +532,9 @@ class SeletorCaixa<T> extends StatelessWidget {
           child: InputDecorator(
             isEmpty: false,
             isFocused: false,
+            // preenche a altura do pai: na densidade compacta (Terminal) o
+            // contorno encolheria para o conteúdo
+            expands: true,
             decoration: InputDecoration(
               labelText: rotulo,
               enabled: ativo,

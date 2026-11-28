@@ -91,6 +91,54 @@ void main() {
     }
   });
 
+  // o InputDecorator ocupa a altura do pai, mas o contorno desenhado pode ficar
+  // menor (Terminal, densidade compacta): confere a caixa realmente pintada
+  group('contorno desenhado', () {
+    final casos = <String, Widget Function()>{
+      'SeletorCaixa': () => SizedBox(
+        width: 240,
+        child: SeletorCaixa<String>(
+          rotulo: 'Tipo',
+          valor: 'a',
+          itens: const [('a', 'Alfa'), ('b', 'B')],
+          aoMudar: (_) {},
+        ),
+      ),
+      'CampoBusca': () => SizedBox(
+        width: 240,
+        child: CampoBusca(controller: TextEditingController(), dica: 'Buscar'),
+      ),
+    };
+    for (final tema in _temas) {
+      for (final e in casos.entries) {
+        for (final (tam, h) in [(_pc, 40.0), (_celular, 48.0)]) {
+          testWidgets(
+            '${e.key} pinta $h px (${tema.chave}, ${tam.width.toInt()})',
+            (t) async {
+              await montarComponente(t, e.value(), tema: tema, tamanho: tam);
+              expect(
+                t.renderObject(find.byType(InputDecorator).first),
+                paints..something((metodo, args) {
+                  final a = args.isEmpty ? null : args.first;
+                  final r = a is RRect
+                      ? a.outerRect
+                      : a is Path
+                      ? a.getBounds()
+                      : a is Rect
+                      ? a
+                      : null;
+                  return r != null &&
+                      r.width > 150 &&
+                      (r.height - h).abs() < 0.5;
+                }),
+              );
+            },
+          );
+        }
+      }
+    }
+  });
+
   testWidgets('BotaoIcone expõe tooltip e rótulo semântico', (t) async {
     final h = t.ensureSemantics();
     await montarComponente(

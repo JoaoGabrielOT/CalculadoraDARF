@@ -8,6 +8,8 @@ import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/componentes/logo_ativo.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
+import 'package:calculadoradarf/app/tema/cores_app.dart';
+import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:calculadoradarf/app/telas/noticias/mural.dart';
 import 'package:calculadoradarf/app/telas/noticias/tela_noticias.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
@@ -125,6 +127,7 @@ Future<_Cena> _montar(
   ServicosFalsos? servicos,
   Size tamanho = _pc,
   bool naAba = true,
+  TemaVisual tema = TemaVisual.claro,
 }) async {
   final cena = _Cena(servicos ?? ServicosFalsos(), PlataformaFalsa());
   await montarApp(
@@ -132,6 +135,7 @@ Future<_Cena> _montar(
     servicos: cena.servicos,
     plataforma: cena.plataforma,
     tamanho: tamanho,
+    tema: tema,
     tela: const TelaNoticias(),
   );
   await t.pumpAndSettle();
@@ -416,6 +420,21 @@ void main() {
     expect(find.text('Proventos'), findsOneWidget);
     expect(find.text('Resultado'), findsOneWidget);
   });
+
+  for (final tema in [TemaVisual.terminal, TemaVisual.moderno]) {
+    testWidgets('selo Nova usa a cor de realce do tema (${tema.chave})', (
+      t,
+    ) async {
+      final s = _servicos(
+        itens: [_n('a1')],
+        detalhes: {'a1': _d('a1')},
+        novas: {'a1'},
+      );
+      await _montar(t, servicos: s, tema: tema);
+      final c = CoresApp.de(t.element(find.widgetWithText(Selo, 'Nova')));
+      expect(t.widget<Text>(find.text('Nova')).style!.color, c.navAtivo);
+    });
+  }
 
   testWidgets('cartão lido não tem selo; resumo igual ao título não repete; '
       'sem fonte usa o domínio do link', (t) async {

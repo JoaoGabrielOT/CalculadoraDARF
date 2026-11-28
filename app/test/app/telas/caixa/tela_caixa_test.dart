@@ -405,6 +405,11 @@ void main() {
         find.text('Caixa de ana@exemplo.com · somente leitura'),
         findsOneWidget,
       );
+      // o rótulo fica na ponta esquerda da página, não empurrado para a direita
+      expect(
+        t.getTopLeft(find.textContaining('somente leitura')).dx,
+        t.getTopLeft(find.byType(SingleChildScrollView).first).dx + 24,
+      );
       expect(find.text('Aporte'), findsNothing);
       expect(find.text('Retirada'), findsNothing);
       expect(find.textContaining('Definir saldo'), findsNothing);

@@ -283,7 +283,8 @@ class _SeloNova extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    return Selo(texto: 'Nova', cor: c.destaque);
+    // navAtivo é o realce legível sobre fundo escuro (no claro é o destaque)
+    return Selo(texto: 'Nova', cor: c.navAtivo);
   }
 }
 

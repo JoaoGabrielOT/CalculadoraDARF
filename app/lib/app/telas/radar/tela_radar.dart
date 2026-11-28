@@ -380,7 +380,7 @@ class _AdicionarState extends State<_Adicionar> {
         controller: _campo,
         textCapitalization: TextCapitalization.characters,
         textAlignVertical: TextAlignVertical.center,
-        // preenche os 40 px: o contorno acompanha a altura do campo
+        // preenche a altura do SizedBox (40 ou 48 px): o contorno a acompanha
         expands: true,
         maxLines: null,
         minLines: null,

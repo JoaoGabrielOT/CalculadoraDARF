@@ -143,37 +143,48 @@ class _Expandido extends StatelessWidget {
           _Progresso(controle.carregando),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            // o dono do caixa à esquerda; as ações, na ponta direita
+            child: Row(
               children: [
-                if (amigo != null) _Dono(amigo),
-                if (amigo == null && visao != null) ...[
-                  BotaoLeve(
-                    icone: Icons.edit_outlined,
-                    rotulo: definido ? 'Definir saldo' : 'Informar saldo',
-                    onPressed: livre
-                        ? () => controle.editarSaldo(context)
-                        : null,
+                if (amigo != null) Expanded(child: _Dono(amigo)),
+                if (amigo == null && visao != null)
+                  Expanded(
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        BotaoLeve(
+                          icone: Icons.edit_outlined,
+                          rotulo: definido ? 'Definir saldo' : 'Informar saldo',
+                          onPressed: livre
+                              ? () => controle.editarSaldo(context)
+                              : null,
+                        ),
+                        BotaoSecundario(
+                          icone: Icons.remove,
+                          rotulo: 'Retirada',
+                          onPressed: livre && definido
+                              ? () => controle.editarSaldo(
+                                  context,
+                                  ModoSaldo.retirada,
+                                )
+                              : null,
+                        ),
+                        BotaoPrincipal(
+                          icone: Icons.add,
+                          rotulo: 'Aporte',
+                          onPressed: livre && definido
+                              ? () => controle.editarSaldo(
+                                  context,
+                                  ModoSaldo.aporte,
+                                )
+                              : null,
+                        ),
+                      ],
+                    ),
                   ),
-                  BotaoSecundario(
-                    icone: Icons.remove,
-                    rotulo: 'Retirada',
-                    onPressed: livre && definido
-                        ? () =>
-                              controle.editarSaldo(context, ModoSaldo.retirada)
-                        : null,
-                  ),
-                  BotaoPrincipal(
-                    icone: Icons.add,
-                    rotulo: 'Aporte',
-                    onPressed: livre && definido
-                        ? () => controle.editarSaldo(context, ModoSaldo.aporte)
-                        : null,
-                  ),
-                ],
               ],
             ),
           ),

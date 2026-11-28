@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show TextInputFormatter;
 
 import '../../nucleo/nucleo.dart';
-import 'cartao.dart';
+import 'controles.dart';
 import 'dialogos.dart';
 
 class CampoData extends StatefulWidget {
@@ -185,6 +185,10 @@ class _CampoDataState extends State<CampoData> {
   Widget build(BuildContext context) {
     final hoje = ambiente.hoje();
     final ontem = somarDias(hoje, -1);
+    final atalhos = [
+      for (final (rotulo, iso) in [('Hoje', hoje), ('Ontem', ontem)])
+        if (_permite(iso)) (iso, rotulo),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -207,18 +211,14 @@ class _CampoDataState extends State<CampoData> {
           ),
         ),
         const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          children: [
-            for (final (rotulo, iso) in [('Hoje', hoje), ('Ontem', ontem)])
-              if (_permite(iso))
-                ChipFiltro(
-                  rotulo: rotulo,
-                  selecionado: widget.valor == iso,
-                  aoTocar: () => _definir(iso),
-                ),
-          ],
-        ),
+        // escolha única: nenhuma marcada quando a data é outra
+        if (atalhos.isNotEmpty)
+          Segmentado<String>(
+            expandir: true,
+            opcoes: atalhos,
+            valor: widget.valor ?? '',
+            aoMudar: _definir,
+          ),
       ],
     );
   }

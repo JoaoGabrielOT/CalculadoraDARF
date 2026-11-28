@@ -4,6 +4,7 @@ import 'package:calculadoradarf/app/componentes/cartao.dart' show Cartao;
 import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
+import 'package:calculadoradarf/app/telas/apuracao/barra_filtros.dart';
 import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
 import 'package:calculadoradarf/app/telas/apuracao/lista_lotes.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
@@ -860,6 +861,30 @@ void main() {
       await t.pumpAndSettle();
       await _inverter(t, 'lotes');
       expect(_ponto('chip-lotes-ordem'), findsOneWidget);
+    });
+
+    testWidgets('Situação na largura da barra e dica curta sem truncar', (
+      t,
+    ) async {
+      await _montar(t, tamanho: tamanho, windows: false);
+      await t.ensureVisible(find.byKey(const Key('busca-lotes')));
+      await t.pumpAndSettle();
+      final situacao = find.byType(Segmentado<String>);
+      expect(
+        t.getSize(situacao).width,
+        moreOrLessEquals(
+          t.getSize(find.byType(BarraFiltros)).width,
+          epsilon: 1,
+        ),
+      );
+      final busca = find.descendant(
+        of: find.byKey(const Key('busca-lotes')),
+        matching: find.byType(CampoBusca),
+        matchRoot: true,
+      );
+      expect(t.widget<CampoBusca>(busca).dica, 'Buscar');
+      final dica = t.renderObject<RenderParagraph>(find.text('Buscar'));
+      expect(dica.didExceedMaxLines, isFalse);
     });
 
     testWidgets('a lista termina com folga para o + não cobrir o último '

@@ -587,15 +587,14 @@ class _AcoesCartao extends StatelessWidget {
     if (amigo) {
       final importar = acoes.aoImportar;
       return importar == null
-          ? OutlinedButton.icon(
-              onPressed: null,
-              icon: Icon(Icons.check),
-              label: Text('Já está no seu radar'),
+          ? const BotaoSecundario(
+              icone: Icons.check,
+              rotulo: 'Já está no seu radar',
             )
-          : FilledButton.icon(
+          : BotaoPrincipal(
+              icone: Icons.playlist_add,
+              rotulo: 'Adicionar ao meu radar',
               onPressed: importar,
-              icon: const Icon(Icons.playlist_add),
-              label: const Text('Adicionar ao meu radar'),
             );
     }
     return Row(

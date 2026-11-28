@@ -1,4 +1,5 @@
 import 'package:calculadoradarf/app/componentes/campo_data.dart';
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -66,6 +67,21 @@ void main() {
       expect(find.text('Ontem'), findsNothing);
     },
   );
+
+  testWidgets('CampoData: Hoje/Ontem é segmentado na largura do campo', (
+    t,
+  ) async {
+    await montarComponente(
+      t,
+      SizedBox(width: 320, child: CampoData(aoMudar: (_) {})),
+      tamanho: const Size(360, 800),
+    );
+    expect(find.byType(Segmentado<String>), findsOneWidget);
+    expect(
+      t.getSize(find.byType(Segmentado<String>)).width,
+      t.getSize(find.byType(TextField)).width,
+    );
+  });
 
   testWidgets('CampoData: data fora dos limites digitada não é aceita', (
     t,

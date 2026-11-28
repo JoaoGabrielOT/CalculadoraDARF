@@ -246,6 +246,26 @@ void main() {
     expect(t.getSize(r).height, 48);
   });
 
+  testWidgets('celular: cartão do amigo com Adicionar principal e "Já está" '
+      'secundário, de 48 px', (t) async {
+    final s = ServicosFalsos()..visaoRadarAmigo = _radarAmigo();
+    await _montar(t, servicos: s, tamanho: const Size(360, 1800));
+    await _estado(t).trocarVisao('ana@exemplo.com');
+    await t.pumpAndSettle();
+    final novo = _na(
+      _cartao('AAPL34'),
+      find.widgetWithText(BotaoPrincipal, 'Adicionar ao meu radar'),
+    );
+    expect(novo, findsOneWidget);
+    expect(t.getSize(novo).height, 48);
+    final tenho = _na(
+      _cartao('PETR4'),
+      find.widgetWithText(BotaoSecundario, 'Já está no seu radar'),
+    );
+    expect(tenho, findsOneWidget);
+    expect(t.getSize(tenho).height, 48);
+  });
+
   testWidgets('PC: linhas com Comprar tonal, Vender secundário e Remover em '
       'ícone destrutivo', (t) async {
     await _montar(t);
