@@ -1,7 +1,8 @@
-import 'package:calculadoradarf/app/componentes/cartao.dart';
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
+import 'package:calculadoradarf/app/telas/caixa/controle_caixa.dart';
 import 'package:calculadoradarf/app/telas/caixa/tela_caixa.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
@@ -80,13 +81,19 @@ int _chamadasCaixa(ServicosFalsos s) =>
 
 bool _habilitado(Finder f, WidgetTester t) {
   final w = t.widget(f);
-  if (w is FilledButton) return w.onPressed != null;
-  if (w is OutlinedButton) return w.onPressed != null;
+  if (w is BotaoPrincipal) return w.onPressed != null;
+  if (w is BotaoSecundario) return w.onPressed != null;
+  if (w is BotaoLeve) return w.onPressed != null;
   throw StateError('botão inesperado: $w');
 }
 
 Finder _naTabela(String texto) => find.descendant(
   of: find.byKey(const Key('tabela-lancamentos')),
+  matching: find.text(texto),
+);
+
+Finder _filtro(String texto) => find.descendant(
+  of: find.byType(Segmentado<FiltroAgenda>),
   matching: find.text(texto),
 );
 
@@ -165,32 +172,47 @@ void main() {
   testWidgets('Aporte/Retirada desabilitados sem saldo', (t) async {
     final s = ServicosFalsos()..visaoCaixa = _visao(saldo: null);
     await _montar(t, servicos: s);
-    expect(find.text('✎  Informar saldo'), findsOneWidget);
+    expect(find.text('Informar saldo'), findsOneWidget);
+    expect(_habilitado(find.byType(BotaoPrincipal), t), isFalse);
     expect(
-      _habilitado(find.widgetWithText(OutlinedButton, '+  Aporte'), t),
+      _habilitado(find.widgetWithText(BotaoSecundario, 'Retirada'), t),
       isFalse,
     );
     expect(
-      _habilitado(find.widgetWithText(OutlinedButton, '−  Retirada'), t),
-      isFalse,
-    );
-    expect(
-      _habilitado(find.widgetWithText(FilledButton, '✎  Informar saldo'), t),
+      _habilitado(find.widgetWithText(BotaoLeve, 'Informar saldo'), t),
       isTrue,
     );
 
     s.visaoCaixa = _visao();
     s.eventosFalsos.add(const EventoDadosMudaram());
     await t.pumpAndSettle();
-    expect(find.text('✎  Definir saldo'), findsOneWidget);
+    expect(find.text('Definir saldo'), findsOneWidget);
     expect(
-      _habilitado(find.widgetWithText(OutlinedButton, '+  Aporte'), t),
+      _habilitado(find.widgetWithText(BotaoPrincipal, 'Aporte'), t),
       isTrue,
     );
     expect(
-      _habilitado(find.widgetWithText(OutlinedButton, '−  Retirada'), t),
+      _habilitado(find.widgetWithText(BotaoSecundario, 'Retirada'), t),
       isTrue,
     );
+  });
+
+  testWidgets('PC: Aporte é a ação principal, na ponta direita da linha', (
+    t,
+  ) async {
+    final s = ServicosFalsos()..visaoCaixa = _visao();
+    await _montar(t, servicos: s);
+    expect(find.byType(BotaoPrincipal), findsOneWidget);
+    expect(find.widgetWithText(BotaoPrincipal, 'Aporte'), findsOneWidget);
+    final leve = find.widgetWithText(BotaoLeve, 'Definir saldo');
+    final retirada = find.widgetWithText(BotaoSecundario, 'Retirada');
+    final aporte = find.widgetWithText(BotaoPrincipal, 'Aporte');
+    expect(t.getTopLeft(leve).dy, t.getTopLeft(aporte).dy);
+    expect(t.getTopLeft(retirada).dy, t.getTopLeft(aporte).dy);
+    expect(t.getTopLeft(leve).dx, lessThan(t.getTopLeft(retirada).dx));
+    expect(t.getTopLeft(retirada).dx, lessThan(t.getTopLeft(aporte).dx));
+    expect(t.getSize(aporte).height, 40);
+    expect(t.getTopRight(aporte).dx, greaterThan(1366 - 24 - 40));
   });
 
   testWidgets('alerta de saldo negativo na liquidação com o texto do Python', (
@@ -323,18 +345,19 @@ void main() {
     expect(_naTabela('Liquidado'), findsOneWidget);
     expect(_naTabela('A liquidar'), findsNWidgets(3));
 
-    await t.tap(find.widgetWithText(ChipFiltro, 'A liquidar'));
+    expect(find.byType(Segmentado<FiltroAgenda>), findsOneWidget);
+    await t.tap(_filtro('A liquidar'));
     await t.pumpAndSettle();
     expect(_naTabela('ITUB4'), findsNothing);
     expect(_naTabela('PETR4'), findsNWidgets(2));
     expect(_naTabela('VALE3'), findsOneWidget);
 
-    await t.tap(find.widgetWithText(ChipFiltro, 'Liquidados'));
+    await t.tap(_filtro('Liquidados'));
     await t.pumpAndSettle();
     expect(_naTabela('ITUB4'), findsOneWidget);
     expect(_naTabela('PETR4'), findsNothing);
 
-    await t.tap(find.widgetWithText(ChipFiltro, 'Todos'));
+    await t.tap(_filtro('Todos'));
     await t.pumpAndSettle();
     // VALOR NA CONTA crescente: o maior débito (VALE3) vem primeiro
     await t.tap(find.text('VALOR NA CONTA ↕'));
@@ -343,6 +366,16 @@ void main() {
     await t.tap(find.text('VALOR NA CONTA ▲'));
     await t.pumpAndSettle();
     expect(_ordemTabela(t), ['PETR4', 'ITUB4', 'PETR4', 'VALE3']);
+  });
+
+  testWidgets('PC estreito (840): sem overflow e a tabela mostra as colunas', (
+    t,
+  ) async {
+    final s = ServicosFalsos()..visaoCaixa = _visao();
+    await _montar(t, servicos: s, tamanho: const Size(840, 800));
+    expect(t.takeException(), isNull);
+    expect(find.text('SITUAÇÃO'), findsOneWidget);
+    expect(find.widgetWithText(BotaoPrincipal, 'Aporte'), findsOneWidget);
   });
 
   testWidgets('lançamentos sem nada mostram o texto do Python', (t) async {
@@ -362,7 +395,7 @@ void main() {
     (t) async {
       final s = ServicosFalsos()..visaoCaixa = _visao();
       await _montar(t, servicos: s);
-      expect(find.text('✎  Definir saldo'), findsOneWidget);
+      expect(find.text('Definir saldo'), findsOneWidget);
 
       s.visaoCaixa = _visao(amigo: 'ana@exemplo.com', saldo: null);
       await _estado(t).trocarVisao('ana@exemplo.com');
@@ -372,8 +405,8 @@ void main() {
         find.text('Caixa de ana@exemplo.com · somente leitura'),
         findsOneWidget,
       );
-      expect(find.text('+  Aporte'), findsNothing);
-      expect(find.text('−  Retirada'), findsNothing);
+      expect(find.text('Aporte'), findsNothing);
+      expect(find.text('Retirada'), findsNothing);
       expect(find.textContaining('Definir saldo'), findsNothing);
       expect(find.textContaining('Informar saldo'), findsNothing);
       expect(
@@ -394,14 +427,14 @@ void main() {
       await _estado(t).trocarVisao(null);
       await t.pumpAndSettle();
       expect(find.textContaining('somente leitura'), findsNothing);
-      expect(find.text('✎  Definir saldo'), findsOneWidget);
+      expect(find.text('Definir saldo'), findsOneWidget);
     },
   );
 
   testWidgets('Aporte abre o formulário e a visão devolvida vale', (t) async {
     final s = ServicosFalsos()..visaoCaixa = _visao();
     await _montar(t, servicos: s);
-    await t.tap(find.text('+  Aporte'));
+    await t.tap(find.text('Aporte'));
     await t.pumpAndSettle();
     expect(find.byType(Dialog), findsOneWidget);
     s.visaoCaixa = _visao(saldo: 7777);
@@ -416,7 +449,7 @@ void main() {
     );
 
     // Cancelar não muda nada
-    await t.tap(find.text('✎  Definir saldo'));
+    await t.tap(find.text('Definir saldo'));
     await t.pumpAndSettle();
     await t.tap(find.text('Cancelar'));
     await t.pumpAndSettle();
@@ -507,7 +540,10 @@ void main() {
     expect(find.text('Liquidados recentemente'), findsOneWidget);
     expect(find.text('ITUB4 · Compra'), findsOneWidget);
     expect(find.text('PETR4 · Compra'), findsOneWidget);
-    expect(find.text('Editar'), findsOneWidget);
+    expect(find.byType(BotaoIcone), findsOneWidget);
+    expect(find.byTooltip('Editar'), findsOneWidget);
+    expect(find.text('Editar'), findsNothing);
+    expect(t.getSize(find.byType(BotaoIcone)).height, 48);
 
     s.visaoCaixa = _visao(saldo: null, lotes: []);
     s.eventosFalsos.add(const EventoDadosMudaram());
@@ -527,7 +563,7 @@ void main() {
     await _montar(t, servicos: s, tamanho: _celular);
     await _estado(t).trocarVisao('ana@exemplo.com');
     await t.pumpAndSettle();
-    expect(find.text('Editar'), findsNothing);
+    expect(find.byTooltip('Editar'), findsNothing);
     expect(
       find.text('Caixa de ana@exemplo.com · somente leitura'),
       findsOneWidget,

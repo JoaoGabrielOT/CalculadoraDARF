@@ -6,14 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' show Cartao;
 import '../../componentes/carregando.dart';
+import '../../componentes/controles.dart';
 import '../../componentes/tabela.dart';
 import '../../estado/estado_app.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
-import '../apuracao/lista_lotes.dart' show alturaTabela;
+import '../apuracao/lista_lotes.dart' show TabelaAjustada, alturaTabela;
 import 'controle_caixa.dart';
 
 /// Quantas liquidações futuras aparecem como cartão (py:1943).
@@ -143,32 +144,34 @@ class _Expandido extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
             child: Wrap(
-              spacing: 12,
+              alignment: WrapAlignment.end,
+              spacing: 8,
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 if (amigo != null) _Dono(amigo),
                 if (amigo == null && visao != null) ...[
-                  FilledButton(
+                  BotaoLeve(
+                    icone: Icons.edit_outlined,
+                    rotulo: definido ? 'Definir saldo' : 'Informar saldo',
                     onPressed: livre
                         ? () => controle.editarSaldo(context)
                         : null,
-                    child: Text(
-                      definido ? '✎  Definir saldo' : '✎  Informar saldo',
-                    ),
                   ),
-                  OutlinedButton(
-                    onPressed: livre && definido
-                        ? () => controle.editarSaldo(context, ModoSaldo.aporte)
-                        : null,
-                    child: const Text('+  Aporte'),
-                  ),
-                  OutlinedButton(
+                  BotaoSecundario(
+                    icone: Icons.remove,
+                    rotulo: 'Retirada',
                     onPressed: livre && definido
                         ? () =>
                               controle.editarSaldo(context, ModoSaldo.retirada)
                         : null,
-                    child: const Text('−  Retirada'),
+                  ),
+                  BotaoPrincipal(
+                    icone: Icons.add,
+                    rotulo: 'Aporte',
+                    onPressed: livre && definido
+                        ? () => controle.editarSaldo(context, ModoSaldo.aporte)
+                        : null,
                   ),
                 ],
               ],
@@ -531,7 +534,7 @@ class _CartaoLiquidacao extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (dmais != null) Pilula(texto: dmais),
+                if (dmais != null) Selo(texto: dmais, cor: c.chipTexto),
               ],
             ),
             Text(
@@ -691,17 +694,26 @@ class _Lancamentos extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Text(
-                'Lançamentos',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Lançamentos',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (r.definido) _InfoSaldo(resumo: r),
+                  ],
+                ),
               ),
-              if (r.definido) _InfoSaldo(resumo: r),
-              BotaoSegmentado<FiltroAgenda>(
+              Segmentado<FiltroAgenda>(
                 opcoes: [for (final f in FiltroAgenda.values) (f, f.rotulo)],
                 valor: controle.filtro,
                 aoMudar: controle.definirFiltro,
@@ -711,14 +723,18 @@ class _Lancamentos extends StatelessWidget {
           const SizedBox(height: 8),
           SizedBox(
             height: alturaTabela(context, linhas.length),
-            child: Tabela<LancamentoCaixa>(
-              key: const Key('tabela-lancamentos'),
+            child: TabelaAjustada<LancamentoCaixa>(
               colunas: colunas,
               linhas: linhas,
-              id: (l) => l.id,
-              vazio:
-                  'Nenhum lançamento. Compras e vendas aparecem aqui com a '
-                  'data em que o dinheiro entra ou sai.',
+              montar: (cols) => Tabela<LancamentoCaixa>(
+                key: const Key('tabela-lancamentos'),
+                colunas: cols,
+                linhas: linhas,
+                id: (l) => l.id,
+                vazio:
+                    'Nenhum lançamento. Compras e vendas aparecem aqui com a '
+                    'data em que o dinheiro entra ou sai.',
+              ),
             ),
           ),
         ],
@@ -834,12 +850,12 @@ class _Compacto extends StatelessWidget {
               children: [
                 const Expanded(child: _Rotulo('Saldo disponível (D+0)')),
                 if (amigo == null)
-                  FilledButton.icon(
+                  BotaoIcone(
+                    icone: Icons.edit_outlined,
+                    tooltip: 'Editar',
                     onPressed: controle.editando
                         ? null
                         : () => controle.editarSaldo(context),
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Editar'),
                   ),
               ],
             ),
