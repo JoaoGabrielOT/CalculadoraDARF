@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Material+Symbols+Rounded:opsz,wght,FILL@20..48,400,0..1&display=block" rel="stylesheet">
+<style>
+:root{--fundo:#0B0E1A;--txt:#F1F3FB;--suave:#8F97BA;--alta:#55EFC4;--queda:#FF7675;--roxo:#6C5CE7;--nav:#A29BFE;--borda:#7C84A8;--cartao:rgba(255,255,255,.05);--cb:rgba(255,255,255,.07);--linha:rgba(255,255,255,.07)}
+*{box-sizing:border-box;margin:0}
+body{width:1366px;height:768px;font:14px Roboto,sans-serif;color:var(--txt);background:linear-gradient(160deg,#151A2E 0,#0B0E1A 60%);display:flex;overflow:hidden}
+.ms{font-family:'Material Symbols Rounded';font-size:20px;line-height:1;vertical-align:middle}
+nav{width:210px;padding:14px 12px;background:rgba(0,0,0,.18)}
+nav div{display:flex;align-items:center;gap:14px;padding:9px 12px;border-radius:20px;color:var(--suave);margin-bottom:4px;font-size:14px}
+nav div.on{background:rgba(108,92,231,.22);color:var(--nav)}
+main{flex:1;padding:16px 24px;display:flex;flex-direction:column;gap:14px}
+.row{display:flex;align-items:center;gap:10px}
+.sp{flex:1}
+h1{font-size:24px;font-weight:700}
+.sub{color:var(--suave);font-size:14px}
+.btn{height:40px;padding:0 18px;border-radius:20px;display:inline-flex;align-items:center;gap:8px;font-weight:500;white-space:nowrap}
+.fill{background:var(--roxo);color:#fff}
+.out{border:1px solid var(--borda)}
+.ghost{color:var(--txt);padding:0 12px}
+.ghost .ms{color:var(--nav)}
+.icon{width:40px;height:40px;border-radius:20px;display:inline-flex;align-items:center;justify-content:center;color:var(--suave)}
+.icon.del{color:var(--queda)}
+.sync{font-size:12px;font-weight:700;color:var(--alta);display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:4px;background:var(--alta)}
+.avatar{width:36px;height:36px;border-radius:18px;background:var(--roxo);display:flex;align-items:center;justify-content:center;font-weight:700}
+.campo{height:40px;border:1px solid var(--borda);border-radius:10px;display:inline-flex;align-items:center;gap:8px;padding:0 12px;position:relative}
+.campo small{position:absolute;top:-8px;left:10px;font-size:11px;color:var(--suave);background:#121628;padding:0 4px}
+.seg{display:inline-flex;height:40px;border:1px solid var(--borda);border-radius:20px;overflow:hidden}
+.seg span{display:flex;align-items:center;gap:6px;padding:0 16px;border-right:1px solid var(--borda)}
+.seg span:last-child{border-right:0}
+.seg span.on{background:rgba(108,92,231,.35);color:#fff}
+.selo{height:26px;padding:0 10px;border-radius:13px;background:rgba(0,184,148,.18);color:var(--alta);font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.card{background:var(--cartao);border:1px solid var(--cb);border-radius:18px;padding:16px}
+.card .l{color:var(--suave);font-size:12px}.card .v{font-size:22px;font-weight:700;margin:6px 0 4px}.card .s{color:var(--suave);font-size:12px}
+.g{color:var(--alta)}
+.mes{display:inline-flex;align-items:center;height:40px;border:1px solid var(--borda);border-radius:20px}
+.mes .ms{padding:0 8px;color:var(--suave)}.mes b{font-weight:500;padding:0 6px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{color:var(--suave);font-size:12px;font-weight:700;text-align:right;padding:10px 8px;border-bottom:1px solid var(--linha)}
+td{text-align:right;padding:11px 8px;border-bottom:1px solid var(--linha)}
+th:nth-child(-n+2),td:nth-child(-n+2){text-align:left}
+tr.sel td{background:rgba(108,92,231,.14)}
+.tag{position:absolute;background:#FDCB6E;color:#1b1b1b;font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px}
+.cnt{background:rgba(255,255,255,.08);border-radius:10px;padding:2px 8px;font-size:12px;color:var(--suave)}
+.mini{font-size:12px;color:var(--suave)}
+</style></head><body>
+<nav>
+ <div class="on"><span class="ms">receipt_long</span>Apuração / DARF</div>
+ <div><span class="ms">account_balance_wallet</span>Caixa</div>
+ <div><span class="ms">monitoring</span>Radar</div>
+ <div><span class="ms">newspaper</span>Notícias</div>
+ <div><span class="ms">description</span>Relatórios</div>
+ <div><span class="ms">account_circle</span>Conta</div>
+</nav>
+<main>
+ <div class="row">
+  <div><h1>Calculadora DARF</h1><div class="sub">Ações e BDRs · apuração mensal de IR</div></div>
+  <div class="sp"></div>
+  <span class="sync"><span class="dot"></span>Sincronizado às 00:39</span>
+  <span class="btn ghost"><span class="ms">account_balance_wallet</span>R$ 15.823,45</span>
+  <span class="btn ghost"><span class="ms">target</span>Meta de lucro · 2</span>
+  <span class="btn ghost"><span class="ms">group</span>Amigos</span>
+  <span class="avatar">J</span><span class="ms" style="color:var(--suave)">expand_more</span>
+ </div>
+
+ <div class="row">
+  <span class="campo"><small>Visualizando</small>Meus dados<span class="ms" style="color:var(--suave)">arrow_drop_down</span></span>
+  <span style="width:14px"></span>
+  <span class="mes"><span class="ms">chevron_left</span><b>11/2026</b><span class="ms">chevron_right</span></span>
+  <span class="selo"><span class="dot"></span>Aberto</span>
+  <div class="sp"></div>
+  <span class="btn fill"><span class="ms">lock</span>Fechar mês</span>
+ </div>
+
+ <div class="cards">
+  <div class="card"><div class="l">Lucro bruto</div><div class="v g">R$ 1.787,77</div><div class="s">3 vendas no mês</div></div>
+  <div class="card"><div class="l">Lucro líquido</div><div class="v g">R$ 1.600,85</div><div class="s">após taxas e impostos</div></div>
+  <div class="card"><div class="l">Imposto devido</div><div class="v">R$ 175,30</div><div class="s">IRRF já retido: R$ 1,20</div></div>
+  <div class="card"><div class="l">Total da DARF</div><div class="v">R$ 174,10</div><div class="s">vence no último dia útil de 12/2026</div></div>
+ </div>
+
+ <div class="card" style="flex:1;display:flex;flex-direction:column;gap:12px">
+  <div class="row">
+   <h2 style="font-size:17px">Ativos comprados</h2><span class="cnt">12</span>
+   <div class="sp"></div>
+   <span class="icon" title="Editar"><span class="ms">edit</span></span>
+   <span class="icon del" title="Excluir"><span class="ms">delete</span></span>
+   <span class="btn out"><span class="ms">sell</span>Registrar venda</span>
+   <span class="btn fill"><span class="ms">add</span>Novo ativo</span>
+  </div>
+  <div class="row">
+   <span class="seg"><span>Posição em 28/11/2026</span><span class="on"><span class="ms" style="font-size:18px">check</span>Carteira atual</span></span>
+   <div class="sp"></div>
+   <span class="mini">Cotação atual · Yahoo · 28/11 00:39</span>
+  </div>
+  <div class="row">
+   <span class="seg"><span class="on"><span class="ms" style="font-size:18px">check</span>Todos</span><span>Em aberto</span><span>Vendidos</span></span>
+   <span class="campo" style="width:240px;color:var(--suave)"><span class="ms">search</span>Buscar ticker…</span>
+   <span class="btn out"><span class="ms">filter_list</span>Tipo</span>
+   <span class="btn out"><span class="ms">swap_vert</span>Cadastro ↑</span>
+  </div>
+  <table>
+   <tr><th>TICKER</th><th>TIPO</th><th>COMPRA</th><th>QTD</th><th>PREÇO</th><th>ATUAL</th><th>GANHO/PERDA</th></tr>
+   <tr class="sel"><td>PETR4</td><td>Ação</td><td>05/11/2026</td><td>100</td><td>R$ 32,50</td><td>R$ 36,20</td><td class="g">▲ +R$ 370,00 (+11,38%)</td></tr>
+   <tr><td>VALE3</td><td>Ação</td><td>08/11/2026</td><td>200</td><td>R$ 60,10</td><td>R$ 58,40</td><td style="color:var(--queda)">▼ -R$ 340,00 (-2,83%)</td></tr>
+  </table>
+ </div>
+</main>
+</body></html>
