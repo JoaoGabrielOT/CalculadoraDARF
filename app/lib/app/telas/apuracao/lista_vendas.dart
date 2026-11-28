@@ -217,14 +217,11 @@ class _ExpandidoState extends State<_Expandido> {
                     for (final p in g.partes) GrupoVenda(p, [p], filha: true),
                 ],
               ],
-              descartar: const ['TAXAS B3', 'LUCRO BRUTO', 'TIPO', 'PREÇO'],
               montar: (colunas) => Tabela<GrupoVenda>(
                 key: const Key('tabela-vendas'),
-                // com outras colunas, o índice do título clicado muda
                 reiniciarOrdem: (
                   controle.filtroVendas.ordem,
                   controle.filtroVendas.desc,
-                  colunas.length,
                 ),
                 colunas: colunas,
                 linhas: itens,

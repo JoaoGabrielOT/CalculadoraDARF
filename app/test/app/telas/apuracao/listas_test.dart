@@ -523,43 +523,115 @@ void main() {
         .ancestor(of: find.byKey(Key(chave)), matching: find.byType(Cartao))
         .first;
 
-    testWidgets('a tabela cabe no cartão: o ganho/perda da primeira linha '
-        'aparece inteiro', (t) async {
+    Finder rolagemDe(String chave) => find.ancestor(
+      of: find.byKey(Key(chave)),
+      matching: find.byWidgetPredicate(
+        (w) =>
+            w is SingleChildScrollView && w.scrollDirection == Axis.horizontal,
+      ),
+    );
+
+    testWidgets('compras: TICKER…GANHO/PERDA à vista sem rolar; o resto à '
+        'direita, alcançável rolando com a barra visível', (t) async {
       await montarApp1366(t);
+      final rolagem = rolagemDe('tabela-lotes');
+      expect(rolagem, findsOneWidget);
+      final posicao = t
+          .state<ScrollableState>(
+            find
+                .descendant(of: rolagem, matching: find.byType(Scrollable))
+                .first,
+          )
+          .position;
+      expect(posicao.pixels, 0);
+      expect(posicao.maxScrollExtent, greaterThan(0));
+      expect(
+        find.ancestor(
+          of: find.byKey(const Key('tabela-lotes')),
+          matching: find.byWidgetPredicate(
+            (w) => w is Scrollbar && w.thumbVisibility == true,
+          ),
+        ),
+        findsOneWidget,
+      );
       final ganho = _celula('L1', 6);
       expect(t.widget<Text>(ganho).data, startsWith('▲ +R\$'));
       final cartao = t.getRect(cartaoDe('tabela-lotes'));
       final texto = t.getRect(ganho);
       expect(cartao.left <= texto.left && texto.right <= cartao.right, isTrue);
       expect(t.renderObject<RenderParagraph>(ganho).didExceedMaxLines, isFalse);
-      // nada rola na horizontal: a tabela inteira está à vista
-      expect(
-        find.ancestor(
-          of: find.byKey(const Key('tabela-lotes')),
-          matching: find.byWidgetPredicate(
-            (w) =>
-                w is SingleChildScrollView &&
-                w.scrollDirection == Axis.horizontal,
-          ),
-        ),
-        findsNothing,
+      // nenhuma coluna some
+      for (final titulo in ['TOTAL ↕', 'VENDIDA', 'RESTANTE ↕', 'SITUAÇÃO']) {
+        expect(_tituloLotes(titulo), findsOneWidget, reason: titulo);
+      }
+      // nenhuma célula corta o texto
+      final celulas = find.descendant(
+        of: find.byKey(const Key('linha-L1')),
+        matching: find.byType(Text),
       );
+      for (var i = 0; i < celulas.evaluate().length; i++) {
+        expect(
+          t.renderObject<RenderParagraph>(celulas.at(i)).didExceedMaxLines,
+          isFalse,
+        );
+      }
     });
 
-    testWidgets('vendas: a tabela cabe no cartão, sem rolar', (t) async {
+    testWidgets('vendas: todas as colunas, sem cortar texto; as de fora '
+        'rolam', (t) async {
       // a altura só traz o cartão de vendas à vista; a largura é a de 1366
       await montarApp1366(t, altura: 1400);
-      final cartao = t.getRect(cartaoDe('tabela-vendas'));
+      for (final titulo in ['TAXAS B3 ↕', 'LUCRO BRUTO ↕', 'APÓS TAXAS ↕']) {
+        expect(
+          find.descendant(
+            of: find.byKey(const Key('tabela-vendas')),
+            matching: find.text(titulo),
+          ),
+          findsOneWidget,
+          reason: titulo,
+        );
+      }
       final textos = find.descendant(
         of: find.byKey(const Key('linha-V1')),
         matching: find.byType(Text),
       );
-      expect(textos, findsWidgets);
       for (var i = 0; i < textos.evaluate().length; i++) {
-        final f = textos.at(i);
-        expect(t.getRect(f).right, lessThanOrEqualTo(cartao.right));
-        expect(t.renderObject<RenderParagraph>(f).didExceedMaxLines, isFalse);
+        expect(
+          t.renderObject<RenderParagraph>(textos.at(i)).didExceedMaxLines,
+          isFalse,
+        );
       }
+      expect(rolagemDe('tabela-vendas'), findsOneWidget);
+    });
+
+    testWidgets('a ordenação pelo título não reinicia ao mudar a largura', (
+      t,
+    ) async {
+      await montarApp1366(t);
+      await t.tap(_tituloLotes('TICKER ↕'));
+      await t.pumpAndSettle();
+      expect(_tituloLotes('TICKER ▲'), findsOneWidget);
+      t.view.physicalSize = const Size(1900, 768);
+      await t.pumpAndSettle();
+      expect(_tituloLotes('TICKER ▲'), findsOneWidget);
+      // largo, cabe tudo: não há o que rolar
+      expect(
+        t
+            .state<ScrollableState>(
+              find
+                  .descendant(
+                    of: rolagemDe('tabela-lotes'),
+                    matching: find.byType(Scrollable),
+                  )
+                  .first,
+            )
+            .position
+            .maxScrollExtent,
+        0,
+      );
+      t.view.physicalSize = const Size(1366, 768);
+      await t.pumpAndSettle();
+      expect(_tituloLotes('TICKER ▲'), findsOneWidget);
     });
 
     testWidgets('filtros numa linha: Situação, busca, Tipo e Ordenar', (
