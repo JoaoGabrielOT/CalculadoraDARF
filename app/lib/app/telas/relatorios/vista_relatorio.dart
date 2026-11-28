@@ -16,7 +16,6 @@ import 'barra_filtros_relatorio.dart';
 import 'cartao_ativo.dart';
 import 'especialistas_ativo.dart';
 import 'paleta_relatorio.dart';
-import 'resumo_especialistas.dart';
 
 class VistaRelatorio extends StatefulWidget {
   const VistaRelatorio({
@@ -134,15 +133,8 @@ class _EstadoVista extends State<VistaRelatorio> {
               total: ativos.length,
             ),
           ),
-          if (filtrados.isNotEmpty) ...[
+          if (filtrados.isNotEmpty)
             bloco(_TabelaResumo(filtrados, idDestaques)),
-            bloco(
-              KeyedSubtree(
-                key: const Key('secao-resumo-especialistas'),
-                child: ResumoEspecialistas(filtrados, aoAbrirLink: aoAbrirLink),
-              ),
-            ),
-          ],
           // Cabeçalho de h; os cartões (preguiçosos) vêm logo abaixo.
           bloco(
             KeyedSubtree(key: const Key('secao-h'), child: _titulo('Ativos')),

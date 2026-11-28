@@ -251,6 +251,12 @@ String _textoAtual(Lote l, Map<String, double?> precos) {
 double? _precoAberto(Lote l, Map<String, double?> precos) =>
     restante(l) > 0 ? precos[l.ticker] : null;
 
+/// Ganho ou perda de hoje do saldo do lote; nulo sem cotação.
+double? _ganhoAtual(Lote l, Map<String, double?> precos) {
+  final p = _precoAberto(l, precos);
+  return p == null || p == 0 ? null : resultadoAberto(l, p)?.$1;
+}
+
 String _setaResultado((double, double)? res) => res != null && res.$1 > 0.004
     ? '▲ '
     : res != null && res.$1 < -0.004
@@ -478,6 +484,7 @@ class _Expandido extends StatelessWidget {
           prefixoItem: 'extremo-lote',
           rotuloMelhor: 'Maior lucro possível até agora',
           rotuloPior: 'Maior perda possível até agora',
+          legendaReal: 'Hoje',
           itens: [
             for (final l in abertos)
               ItemExtremos(
@@ -486,6 +493,7 @@ class _Expandido extends StatelessWidget {
                     '${l.ticker} · compra ${fmtData(l.dataCompra)} · '
                     'saldo ${restante(l)}',
                 analise: controle.analiseLote(l)!,
+                real: _ganhoAtual(l, controle.precos),
               ),
           ],
         ),
@@ -752,6 +760,8 @@ class _CartaoLote extends StatelessWidget {
                   analise: analise,
                   rotuloMelhor: 'Maior lucro possível até agora',
                   rotuloPior: 'Maior perda possível até agora',
+                  real: _ganhoAtual(l, controle.precos),
+                  legendaReal: 'Hoje',
                 ),
               ],
             ),

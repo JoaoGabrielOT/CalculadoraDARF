@@ -370,9 +370,13 @@ void main() {
       await t.pumpAndSettle();
       final chave = abas.first.evaluate().single.widget.key!;
       final ticker = (chave as ValueKey<String>).value.substring(5);
-      await t.tap(
-        find.descendant(of: find.byKey(chave), matching: find.text('Gráficos')),
+      final aba = find.descendant(
+        of: find.byKey(chave),
+        matching: find.text('Gráficos'),
       );
+      await t.ensureVisible(aba);
+      await t.pumpAndSettle();
+      await t.tap(aba);
       await t.pumpAndSettle();
       expect(_pedidos(s), 1);
       // rola para longe (o cartão sai da janela) e volta

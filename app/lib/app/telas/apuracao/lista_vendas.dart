@@ -269,6 +269,7 @@ class _ExpandidoState extends State<_Expandido> {
           prefixoItem: 'extremo-venda',
           rotuloMelhor: 'Melhor possível',
           rotuloPior: 'Pior possível',
+          legendaReal: 'Resultado real',
           itens: [
             for (final g in itens)
               ItemExtremos(
@@ -277,6 +278,7 @@ class _ExpandidoState extends State<_Expandido> {
                     '${g.op.ticker} · ${fmtData(g.op.data)} · '
                     '${g.op.qtd} un.',
                 analise: controle.analiseVenda(g),
+                real: g.op.liquido,
               ),
           ],
         ),
@@ -459,6 +461,7 @@ class _CartaoVendaState extends State<_CartaoVenda> {
             analise: controle.analiseVenda(grupo),
             rotuloMelhor: 'Melhor possível',
             rotuloPior: 'Pior possível',
+            real: grupo.op.liquido,
           ),
           if (grupo.agrupado)
             TextButton.icon(

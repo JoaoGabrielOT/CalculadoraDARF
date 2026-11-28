@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:calculadoradarf/app/estado/estado_app.dart';
+import 'package:calculadoradarf/app/regras/apresentacao.dart';
 import 'package:calculadoradarf/app/regras/filtros.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
@@ -41,6 +42,9 @@ const _ext = Extremos(
   maximo: Extremo(preco: 38, data: '2026-10-14'),
   minimo: Extremo(preco: 5, data: '2026-10-21'),
 );
+
+/// Texto do selo: seta e valor, como em `textoExtremo`.
+String _s(double v) => '${setaDe(sinalDe(v))}${brl(v)}';
 
 Lote _l1() => mesAbertoExemplo().lotes.first;
 
@@ -154,12 +158,12 @@ void main() {
       );
       expect(_em(linha, 'Melhor possível'), findsOneWidget);
       expect(_em(linha, 'Pior possível'), findsOneWidget);
-      // brl puro: sem "+" e cor só no negativo
-      final tMelhor = t.widget<Text>(_em(linha, brl(melhor)));
-      final tPior = t.widget<Text>(_em(linha, brl(pior)));
+      // selo: verde com ▲ no positivo, vermelho com ▼ no negativo
+      final tMelhor = t.widget<Text>(_em(linha, _s(melhor)));
+      final tPior = t.widget<Text>(_em(linha, _s(pior)));
       expect(brl(melhor), isNot(contains('+')));
-      expect(tMelhor.style?.color, isNull);
       final ctx = t.element(find.byKey(const Key(linha)));
+      expect(tMelhor.style?.color, CoresApp.de(ctx).alta);
       expect(tPior.style?.color, CoresApp.de(ctx).queda);
       // o período começa na compra (05/10), não no início do mês
       expect(_em(linha, _ref(_ext, '05/10 a 28/10')), findsOneWidget);
@@ -221,7 +225,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        _em('extremo-venda-FV1', brl(resultadoHipotetico(lote, 100, e.maximo))),
+        _em('extremo-venda-FV1', _s(resultadoHipotetico(lote, 100, e.maximo))),
         findsOneWidget,
       );
     });
@@ -277,14 +281,14 @@ void main() {
       expect(
         _em(
           'extremo-venda-G1',
-          brl(resultadoHipotetico(a, 10, max) + resultadoHipotetico(b, 6, max)),
+          _s(resultadoHipotetico(a, 10, max) + resultadoHipotetico(b, 6, max)),
         ),
         findsOneWidget,
       );
       expect(
         _em(
           'extremo-venda-G1',
-          brl(resultadoHipotetico(a, 10, min) + resultadoHipotetico(b, 6, min)),
+          _s(resultadoHipotetico(a, 10, min) + resultadoHipotetico(b, 6, min)),
         ),
         findsOneWidget,
       );
@@ -298,8 +302,8 @@ void main() {
       final pior = resultadoHipotetico(_l1(), 40, _ext.minimo);
       expect(_em('cartao-venda-V1', 'Melhor possível'), findsOneWidget);
       expect(_em('cartao-venda-V1', 'Pior possível'), findsOneWidget);
-      expect(_em('cartao-venda-V1', brl(melhor)), findsOneWidget);
-      expect(_em('cartao-venda-V1', brl(pior)), findsOneWidget);
+      expect(_em('cartao-venda-V1', _s(melhor)), findsOneWidget);
+      expect(_em('cartao-venda-V1', _s(pior)), findsOneWidget);
       expect(
         _em('cartao-venda-V1', _ref(_ext, '05/10 a 28/10')),
         findsOneWidget,
@@ -358,8 +362,8 @@ void main() {
       const linha = 'extremo-lote-L1';
       expect(_em(linha, 'Maior lucro possível até agora'), findsOneWidget);
       expect(_em(linha, 'Maior perda possível até agora'), findsOneWidget);
-      expect(_em(linha, brl(lucro)), findsOneWidget);
-      expect(_em(linha, brl(perda)), findsOneWidget);
+      expect(_em(linha, _s(lucro)), findsOneWidget);
+      expect(_em(linha, _s(perda)), findsOneWidget);
       expect(_em(linha, _ref(_ext, '05/10 a 28/10')), findsOneWidget);
     });
 
@@ -399,11 +403,11 @@ void main() {
       const alta = Extremo(preco: 42, data: hojeExemplo);
       const baixa = Extremo(preco: 39, data: hojeExemplo);
       expect(
-        _em('extremo-lote-L9', brl(resultadoHipotetico(lote, 10, alta))),
+        _em('extremo-lote-L9', _s(resultadoHipotetico(lote, 10, alta))),
         findsOneWidget,
       );
       expect(
-        _em('extremo-lote-L9', brl(resultadoHipotetico(lote, 10, baixa))),
+        _em('extremo-lote-L9', _s(resultadoHipotetico(lote, 10, baixa))),
         findsOneWidget,
       );
       expect(
@@ -423,7 +427,7 @@ void main() {
       const c = 'cartao-lote-L1';
       expect(_em(c, 'Maior lucro possível até agora'), findsOneWidget);
       expect(_em(c, 'Maior perda possível até agora'), findsOneWidget);
-      expect(_em(c, brl(lucro)), findsOneWidget);
+      expect(_em(c, _s(lucro)), findsOneWidget);
       expect(find.byKey(const Key('extremos-lotes')), findsNothing);
       expect(t.takeException(), isNull);
     });
@@ -433,6 +437,79 @@ void main() {
       s.visoes['2026-10'] = visaoExemplo(mesAbertoExemplo(), amigo: 'ana');
       await _montar(t, servicos: s);
       expect(find.byKey(const Key('extremo-lote-L1')), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+  });
+
+  group('mini-cartões e resultado real', () {
+    testWidgets('PC: mini-cartões de 300 px, lado a lado', (t) async {
+      final s = await _montar(t);
+      expect(s, isNotNull);
+      final v1 = find.byKey(const Key('extremo-venda-V1'));
+      expect(t.getSize(v1).width, 300);
+      final lotes = [
+        find.byKey(const Key('extremo-lote-L1')),
+        find.byKey(const Key('extremo-lote-L2')),
+      ];
+      expect(t.getSize(lotes[0]).width, 300);
+      // lado a lado, com 12 px entre eles
+      expect(t.getTopLeft(lotes[1]).dx - t.getTopRight(lotes[0]).dx, 12);
+      expect(t.getTopLeft(lotes[1]).dy, t.getTopLeft(lotes[0]).dy);
+    });
+
+    testWidgets('venda: marcador e legenda com o resultado líquido', (t) async {
+      await _montar(t);
+      final liquido = apurar(mesAbertoExemplo()).ops.first.liquido;
+      expect(
+        _em('extremo-venda-V1', 'Resultado real: ${brl(liquido)}'),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('extremo-venda-V1')),
+          matching: find.byKey(const Key('marcador-extremos')),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('lote sem cotação: faixa sem marcador nem legenda', (t) async {
+      await _montar(t);
+      expect(find.textContaining('Hoje:'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('extremo-lote-L1')),
+          matching: find.byKey(const Key('faixa-extremos')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('extremo-lote-L1')),
+          matching: find.byKey(const Key('marcador-extremos')),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('lote: legenda Hoje com a cotação disponível', (t) async {
+      final s = ServicosFalsos()..precos = {'PETR4': 36.2};
+      await _montar(t, servicos: s);
+      final hoje = resultadoAberto(_l1(), 36.2)!.$1;
+      expect(_em('extremo-lote-L1', 'Hoje: ${brl(hoje)}'), findsOneWidget);
+    });
+
+    testWidgets('compacto: o cartão da venda tem o selo e o marcador', (
+      t,
+    ) async {
+      await _montar(t, tamanho: _celular, windows: false);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('cartao-venda-V1')),
+          matching: find.byKey(const Key('faixa-extremos')),
+        ),
+        findsOneWidget,
+      );
       expect(t.takeException(), isNull);
     });
   });
@@ -471,7 +548,7 @@ void main() {
       expect(_em('extremo-venda-V1', 'Carregando…'), findsNothing);
       expect(_em('extremo-venda-V1', 'Indisponível'), findsNothing);
       final melhor = resultadoHipotetico(_l1(), 40, _ext.maximo);
-      expect(_em('extremo-venda-V1', brl(melhor)), findsOneWidget);
+      expect(_em('extremo-venda-V1', _s(melhor)), findsOneWidget);
       // a resposta nova troca os valores
       espera.complete(
         Diarias(barras: [_b('2026-10-14', 50, 30), _b('2026-10-21', 36, 5)]),
@@ -479,7 +556,7 @@ void main() {
       await t.pumpAndSettle();
       const novo = Extremo(preco: 50, data: '2026-10-14');
       expect(
-        _em('extremo-venda-V1', brl(resultadoHipotetico(_l1(), 40, novo))),
+        _em('extremo-venda-V1', _s(resultadoHipotetico(_l1(), 40, novo))),
         findsOneWidget,
       );
     });
@@ -575,7 +652,7 @@ void main() {
       );
       const alta = Extremo(preco: 40, data: '2026-09-15');
       expect(
-        _em('extremo-venda-PV1', brl(resultadoHipotetico(lote, 10, alta))),
+        _em('extremo-venda-PV1', _s(resultadoHipotetico(lote, 10, alta))),
         findsOneWidget,
       );
       expect(_em('extremo-venda-PV1', 'Indisponível'), findsNothing);
