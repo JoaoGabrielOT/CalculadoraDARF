@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags: ["v*", "[0-9]*"]
-    branches: [migracao-flutter]  # só verifica (versão e testes); publicar é só por tag
+    branches: [main, migracao-flutter]  # só verifica (versão e testes); publicar é só por tag
   workflow_dispatch:  # gera os arquivos para teste, sem publicar release
     inputs:
       publicar_web:

@@ -1,6 +1,0 @@
-customtkinter
-google-auth
-google-auth-oauthlib
-pillow
-requests
-yfinance

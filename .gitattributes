@@ -1,0 +1,8 @@
+# Versão Python antiga (até a 1.12.1): fica só como referência de comportamento
+# (agente paridade, ferramentas/gerar_referencias.py) e para o CI conferir que o
+# atualizador antigo detecta as releases novas. Não entra na estatística de
+# linguagens do GitHub; o app é o Flutter em app/.
+/*.py linguist-vendored
+/android/main.py linguist-vendored
+/ferramentas/** linguist-vendored
+/tests/*.py linguist-vendored
