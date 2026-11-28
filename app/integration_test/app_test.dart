@@ -46,8 +46,8 @@ Finder _naLateral(String texto) => find.descendant(
 /// Aba -> rótulo na barra lateral e um texto próprio da tela.
 const _abas = {
   'apuracao': ('Apuração / DARF', 'Ativos comprados'),
-  'caixa': ('Caixa', '+  Aporte'),
-  'radar': ('Radar', '+  Adicionar'),
+  'caixa': ('Caixa', 'Aporte'),
+  'radar': ('Radar', 'Adicionar'),
   'noticias': ('Notícias', 'Notificar notícias relevantes'),
   'conta': ('Conta', 'Verificar atualização'),
 };
@@ -170,7 +170,7 @@ void main() {
 
     // radar rolando enquanto as cotações falham: a mensagem fica na linha
     await t.tap(_naLateral('Radar'));
-    await ate(t, find.text('+  Adicionar'));
+    await ate(t, find.text('Adicionar'));
     await t.scrollUntilVisible(
       find.text('LREN3'),
       200,

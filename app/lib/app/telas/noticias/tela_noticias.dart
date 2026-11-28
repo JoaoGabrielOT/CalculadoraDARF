@@ -258,19 +258,23 @@ class _Expandido extends StatelessWidget {
                 Row(
                   spacing: 16,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Notícias do radar',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                    // metade do espaço livre: um status longo (muitas falhas)
+                    // quebra linha em vez de empurrar os controles para fora
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Notícias do radar',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        _Status(controle),
-                      ],
+                          _Status(controle),
+                        ],
+                      ),
                     ),
                     // os controles à direita; se faltar largura, quebram
                     Expanded(

@@ -622,6 +622,31 @@ void main() {
       );
     });
 
+    testWidgets('PC: status longo (16 falhas) quebra linha e não estoura o '
+        'cabeçalho', (t) async {
+      final hora = DateTime(2026, 10, 28, 9, 5).millisecondsSinceEpoch / 1000;
+      const tickers = [
+        'PETR4', 'VALE3', 'ITUB4', 'BBDC4', 'BBAS3', 'WEGE3', 'ABEV3', //
+        'MGLU3', 'RENT3', 'SUZB3', 'GGBR4', 'CSNA3', 'PRIO3', 'RADL3',
+        'EQTL3', 'LREN3',
+      ];
+      final s = _servicos(
+        hora: hora,
+        erros: {for (final k in tickers) k: '503'},
+      );
+      await _montar(t, servicos: s, tamanho: const Size(1366, 768));
+      expect(_textoStatus(t), contains('falha em ABEV3, BBAS3'));
+      expect(t.takeException(), isNull);
+      final cartao = t.getRect(
+        find.ancestor(
+          of: find.byType(Segmentado<String>),
+          matching: find.byType(Cartao),
+        ),
+      );
+      final botao = t.getRect(find.widgetWithIcon(BotaoIcone, Icons.refresh));
+      expect(botao.right, lessThanOrEqualTo(cartao.right));
+    });
+
     testWidgets('com hora e sem falhas', (t) async {
       final hora = DateTime(2026, 10, 28, 14, 30).millisecondsSinceEpoch / 1000;
       await _montar(t, servicos: _servicos(hora: hora));
