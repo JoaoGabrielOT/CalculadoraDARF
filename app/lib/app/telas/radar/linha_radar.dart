@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/cartao.dart';
+import '../../componentes/controles.dart' hide Selo;
 import '../../componentes/grafico_linha.dart';
 import '../../componentes/logo_ativo.dart';
 import '../../servicos/api.dart';
@@ -29,10 +30,10 @@ const colunasRadar = <(String, int, TextAlign)>[
   ('', 0, TextAlign.right),
 ];
 const larguraRisco = 170.0;
-const larguraAcoes = 250.0;
+const larguraAcoes = 260.0;
 
 /// Largura mínima da tabela; abaixo disso ela rola na horizontal.
-const larguraMinimaTabelaRadar = 1040.0;
+const larguraMinimaTabelaRadar = 1050.0;
 
 /// Mini-gráfico do dia.
 const _miniLargura = 48.0;
@@ -65,19 +66,18 @@ Color? _corHex(String hex) {
   return v == null ? null : Color(0xFF000000 | v);
 }
 
-/// Rótulo de risco com as cores da faixa (iguais nos três temas, como no
-/// Python).
+/// Cor da faixa de risco (a mesma nos três temas, como no Python).
+Color? corFaixaRisco(Risco risco) => _corHex(risco.fundo);
+
+/// Rótulo de risco com as cores da faixa.
 class SeloRisco extends StatelessWidget {
-  const SeloRisco(this.risco, {super.key, this.texto});
+  const SeloRisco(this.risco, {super.key});
 
   final Risco risco;
 
-  /// Sobrescreve o rótulo (a legenda junta a faixa de ATR%).
-  final String? texto;
-
   @override
   Widget build(BuildContext context) => Pilula(
-    texto: texto ?? risco.rotulo,
+    texto: risco.rotulo,
     fundo: _corHex(risco.fundo),
     cor: _corHex(risco.texto),
   );
@@ -321,9 +321,6 @@ class _AcoesLinha extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
-    const medidas = Size(72, 32);
-    const margem = EdgeInsets.symmetric(horizontal: 8);
     // parte do estilo do tema (fonte do app), só menor
     final texto = Theme.of(context).textTheme.labelLarge
         ?.copyWith(fontSize: 12, fontWeight: FontWeight.bold);
@@ -347,38 +344,47 @@ class _AcoesLinha extends StatelessWidget {
               child: const Text('+  Meu radar'),
             );
     }
+    final c = CoresApp.de(context);
+    // a linha só existe no PC: botões de 40 px, como o resto do kit
+    final estilo = ButtonStyle(
+      fixedSize: const WidgetStatePropertyAll(Size.fromHeight(40)),
+      minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 10),
+      ),
+      // tonal: o tema dos botões cheios também vale para ele, então a cor
+      // vem daqui (destaque suave)
+      backgroundColor: WidgetStatePropertyAll(
+        c.destaque.withValues(alpha: acoes.aoComprar == null ? .06 : .12),
+      ),
+      foregroundColor: WidgetStatePropertyAll(c.destaque),
+      textStyle: WidgetStatePropertyAll(
+        Theme.of(context).textTheme.labelLarge
+            ?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       spacing: 6,
       children: [
-        FilledButton(
+        FilledButton.tonalIcon(
           onPressed: acoes.aoComprar,
-          style: FilledButton.styleFrom(
-            minimumSize: medidas,
-            padding: margem,
-            textStyle: texto,
-          ),
-          child: const Text('Comprar'),
+          style: estilo,
+          icon: const Icon(Icons.add_shopping_cart, size: 18),
+          label: const Text('Comprar'),
         ),
-        OutlinedButton(
+        BotaoSecundario(
+          compacto: true,
+          icone: Icons.sell,
+          rotulo: 'Vender',
           onPressed: acoes.aoVender,
-          style: OutlinedButton.styleFrom(
-            minimumSize: medidas,
-            padding: margem,
-            textStyle: texto,
-          ),
-          child: const Text('Vender'),
         ),
-        OutlinedButton(
+        BotaoIcone(
+          icone: Icons.delete_outline,
+          tooltip: 'Remover',
+          destrutivo: true,
           onPressed: acoes.aoRemover,
-          style: OutlinedButton.styleFrom(
-            minimumSize: medidas,
-            padding: margem,
-            textStyle: texto,
-            foregroundColor: c.queda,
-            side: BorderSide(color: c.queda),
-          ),
-          child: const Text('Remover'),
         ),
       ],
     );

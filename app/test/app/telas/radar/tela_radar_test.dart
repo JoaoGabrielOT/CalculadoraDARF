@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/componentes/grafico_linha.dart';
 import 'package:calculadoradarf/app/componentes/logo_ativo.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
@@ -144,6 +145,118 @@ void main() {
       await _montar(t, tamanho: tamanho);
       expect(find.byType(DropdownButton<String>), findsNothing);
       expect(find.text('Visualizando'), findsNothing);
+    });
+  }
+
+  testWidgets('PC: topo com campo de 40 px, Adicionar principal e Atualizar em '
+      'ícone', (t) async {
+    await _montar(t);
+    expect(t.getSize(find.byKey(const Key('campo-ticker'))).height, 40);
+    final principal = find.widgetWithText(BotaoPrincipal, 'Adicionar');
+    expect(principal, findsOneWidget);
+    expect(t.getSize(principal).height, 40);
+    final refresh = find.widgetWithIcon(BotaoIcone, Icons.refresh);
+    expect(refresh, findsOneWidget);
+    expect(find.byTooltip('Atualizar'), findsOneWidget);
+    expect(t.getSize(refresh).height, 40);
+    // um só principal na tela
+    expect(find.byType(BotaoPrincipal), findsOneWidget);
+    // mesma linha, campo antes do botão e do ícone
+    expect(
+      t.getCenter(principal).dy,
+      t.getCenter(find.byKey(const Key('campo-ticker'))).dy,
+    );
+    expect(t.getTopLeft(refresh).dx, greaterThan(t.getTopRight(principal).dx));
+  });
+
+  testWidgets('celular: campo e + roxo de 40 px na mesma linha', (t) async {
+    final s = ServicosFalsos();
+    await _montar(t, servicos: s, tamanho: const Size(360, 800));
+    final campo = find.byKey(const Key('campo-ticker'));
+    final mais = find.byTooltip('Adicionar');
+    expect(mais, findsOneWidget);
+    expect(t.getSize(campo).height, 40);
+    expect(t.getSize(mais), const Size(40, 40));
+    expect(t.getCenter(campo).dy, t.getCenter(mais).dy);
+    final cores = CoresApp.de(t.element(find.byType(TelaRadar)));
+    expect(Theme.of(t.element(mais)).colorScheme.primary, cores.destaque);
+    await t.enterText(campo, 'bbas3');
+    await t.tap(mais);
+    await t.pumpAndSettle();
+    expect(s.chamadas, contains('adicionarRadar(bbas3)'));
+  });
+
+  testWidgets('filtros: Segmentado e Ordenar sem direção; 360 px sem '
+      'overflow', (t) async {
+    for (final tamanho in [const Size(360, 800), const Size(840, 800), _pc]) {
+      await _montar(t, tamanho: tamanho);
+      expect(t.takeException(), isNull, reason: '$tamanho');
+      expect(find.byType(Segmentado<String>), findsOneWidget);
+      final ordenar = t.widget<BotaoOrdenar<String>>(
+        find.byKey(const Key('menu-ordem')),
+      );
+      expect(ordenar.aoInverter, isNull);
+      expect(find.text('Em carteira'), findsOneWidget);
+    }
+  });
+
+  testWidgets('PC: linhas com Comprar tonal, Vender secundário e Remover em '
+      'ícone destrutivo', (t) async {
+    await _montar(t);
+    final linha = _linha('PETR4');
+    expect(_na(linha, find.text('Comprar')), findsOneWidget);
+    expect(
+      _na(linha, find.widgetWithText(BotaoSecundario, 'Vender')),
+      findsOneWidget,
+    );
+    final remover = _na(
+      linha,
+      find.widgetWithIcon(BotaoIcone, Icons.delete_outline),
+    );
+    expect(remover, findsOneWidget);
+    expect(t.widget<BotaoIcone>(remover).destrutivo, isTrue);
+    expect(t.widget<BotaoIcone>(remover).tooltip, 'Remover');
+    expect(t.getSize(remover).height, 40);
+  });
+
+  for (final (nome, tamanho) in [
+    ('PC', _pc),
+    ('celular', const Size(360, 800)),
+  ]) {
+    testWidgets('$nome: legenda de risco com título próprio e 4 faixas', (
+      t,
+    ) async {
+      await _montar(t, tamanho: tamanho);
+      final titulo = find.text('RISCO PELO ATR%');
+      final faixas = find.byType(LegendaPonto);
+      expect(titulo, findsOneWidget);
+      expect(faixas, findsNWidgets(4));
+      const textos = [
+        'Menor Risco · < 2,2%',
+        'Médio Risco · 2,2% a 3,0%',
+        'Alto Risco · 3,0% a 4,5%',
+        'Alto Risco / Muito Alto · > 4,5%',
+      ];
+      for (var i = 0; i < 4; i++) {
+        expect(t.widget<LegendaPonto>(faixas.at(i)).texto, textos[i]);
+      }
+      final dy = [for (var i = 0; i < 4; i++) t.getTopLeft(faixas.at(i)).dy];
+      final dx = [for (var i = 0; i < 4; i++) t.getTopLeft(faixas.at(i)).dx];
+      final base = t.getBottomLeft(titulo).dy;
+      for (final y in dy) {
+        expect(y, greaterThanOrEqualTo(base));
+      }
+      if (tamanho == _pc) {
+        expect(dy.toSet().length, 1);
+      } else {
+        expect(dy[0], dy[1]);
+        expect(dy[2], dy[3]);
+        expect(dy[2], greaterThan(dy[0]));
+        expect(dx[0], dx[2]);
+        expect(dx[1], dx[3]);
+        expect(dx[1], greaterThan(dx[0]));
+        expect(t.takeException(), isNull);
+      }
     });
   }
 
@@ -401,7 +514,7 @@ void main() {
 
     s.erros['adicionarRadar'] = ErroValidacao('Ticker inválido.');
     await t.enterText(find.byKey(const Key('campo-ticker')), 'xx');
-    await t.tap(find.text('+  Adicionar'));
+    await t.tap(find.text('Adicionar'));
     await t.pumpAndSettle();
     expect(find.text('Radar'), findsOneWidget); // título do diálogo
     expect(find.text('Ticker inválido.'), findsOneWidget);
@@ -413,7 +526,7 @@ void main() {
     s.erros.clear();
     s.chamadas.clear();
     await t.enterText(find.byKey(const Key('campo-ticker')), 'bbas3');
-    await t.tap(find.text('+  Adicionar'));
+    await t.tap(find.text('Adicionar'));
     await t.pumpAndSettle();
     expect(campo.controller!.text, '');
     expect(s.chamadas, contains('adicionarRadar(bbas3)'));
@@ -475,10 +588,10 @@ void main() {
     await t.pumpAndSettle();
 
     // sem custódia o botão fica desabilitado
-    final vender = t.widget<OutlinedButton>(
+    final vender = t.widget<BotaoSecundario>(
       find.descendant(
         of: _linha('MXRF11'),
-        matching: find.widgetWithText(OutlinedButton, 'Vender'),
+        matching: find.widgetWithText(BotaoSecundario, 'Vender'),
       ),
     );
     expect(vender.onPressed, isNull);
@@ -488,14 +601,14 @@ void main() {
     final s = ServicosFalsos();
     await _montar(t, servicos: s);
 
-    await t.tap(_na(_linha('WEGE3'), find.text('Remover')));
+    await t.tap(_na(_linha('WEGE3'), find.byTooltip('Remover')));
     await t.pumpAndSettle();
     expect(find.text('Remover WEGE3 do radar?'), findsOneWidget);
     await t.tap(find.text('Cancelar'));
     await t.pumpAndSettle();
     expect(_linha('WEGE3'), findsOneWidget);
 
-    await t.tap(_na(_linha('WEGE3'), find.text('Remover')));
+    await t.tap(_na(_linha('WEGE3'), find.byTooltip('Remover')));
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(FilledButton, 'Remover'));
     await t.pumpAndSettle();
@@ -520,13 +633,13 @@ void main() {
         s.chamadas.where((c) => c.startsWith('atualizarNoticias')).length;
 
     await t.enterText(find.byKey(const Key('campo-ticker')), 'BBAS3');
-    await t.tap(find.text('+  Adicionar'));
+    await t.tap(find.text('Adicionar'));
     await t.pumpAndSettle();
     expect(buscas(), 1);
     expect(s.chamadas, contains('atualizarNoticias(false)'));
 
     final versao = _estado(t).versaoNoticias;
-    await t.tap(_na(_linha('WEGE3'), find.text('Remover')));
+    await t.tap(_na(_linha('WEGE3'), find.byTooltip('Remover')));
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(FilledButton, 'Remover'));
     await t.pumpAndSettle();
@@ -538,7 +651,7 @@ void main() {
     await t.tap(find.text('+  Meu radar'));
     await t.pumpAndSettle();
     expect(buscas(), 2);
-    await t.tap(find.text('+  Importar todos para o meu radar'));
+    await t.tap(find.text('Importar todos para o meu radar'));
     await t.pumpAndSettle();
     // nada novo: só avisa, sem buscar
     await t.tap(find.text('OK'));
@@ -551,7 +664,7 @@ void main() {
     await _montar(t, servicos: s);
     await _estado(t).trocarVisao('ana@exemplo.com');
     await t.pumpAndSettle();
-    await t.tap(find.text('+  Importar todos para o meu radar'));
+    await t.tap(find.text('Importar todos para o meu radar'));
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(FilledButton, 'Importar'));
     await t.pumpAndSettle();
@@ -589,7 +702,7 @@ void main() {
     await t.pumpAndSettle();
 
     // importar um só
-    await t.tap(find.text('+  Importar todos para o meu radar'));
+    await t.tap(find.text('Importar todos para o meu radar'));
     await t.pumpAndSettle();
     expect(find.text('Importar radar'), findsOneWidget);
     expect(
@@ -603,7 +716,7 @@ void main() {
     expect(find.text('✓  No meu radar'), findsNWidgets(2));
 
     // nada novo: só avisa
-    await t.tap(find.text('+  Importar todos para o meu radar'));
+    await t.tap(find.text('Importar todos para o meu radar'));
     await t.pumpAndSettle();
     expect(
       find.text('Todos os ativos do radar do amigo já estão no seu radar.'),
@@ -674,9 +787,9 @@ void main() {
 
     // pedidos durante a atualização entram na espera, sem chamada nova
     s.chamadas.clear();
-    await t.tap(find.text('Atualizar'));
+    await t.tap(find.byTooltip('Atualizar'));
     await t.pump();
-    await t.tap(find.text('Atualizar'));
+    await t.tap(find.byTooltip('Atualizar'));
     await t.pump();
     expect(s.chamadas.where((c) => c.startsWith('cotacao(')), isEmpty);
     expect(s.chamadas, isNot(contains('limparCacheCotacoes()')));
@@ -708,7 +821,7 @@ void main() {
       'MXRF11': _ok('MXRF11'),
     };
     s.chamadas.clear();
-    await t.tap(find.text('Atualizar'));
+    await t.tap(find.byTooltip('Atualizar'));
     await t.pumpAndSettle();
     expect(s.chamadas.first, 'limparCacheCotacoes()');
     expect(s.chamadas.where((c) => c.startsWith('cotacao(')).length, 3);
@@ -725,7 +838,7 @@ void main() {
     expect(_na(_linha('PETR4'), find.text(brl(32.5))), findsOneWidget);
 
     s.cotacoesFalsas['PETR4'] = const CotacaoErro('PETR4', 'Sem conexão.');
-    await t.tap(find.text('Atualizar'));
+    await t.tap(find.byTooltip('Atualizar'));
     await t.pumpAndSettle();
     expect(_na(_linha('PETR4'), find.text(brl(32.5))), findsOneWidget);
   });

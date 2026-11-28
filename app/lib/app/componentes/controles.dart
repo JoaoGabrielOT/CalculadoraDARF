@@ -674,9 +674,15 @@ class LegendaPonto extends StatelessWidget {
     children: [
       _Ponto(cor),
       const SizedBox(width: 6),
-      Text(
-        texto,
-        style: TextStyle(color: CoresApp.de(context).textoSuave, fontSize: 12),
+      // quebra em vez de estourar quando a coluna é estreita
+      Flexible(
+        child: Text(
+          texto,
+          style: TextStyle(
+            color: CoresApp.de(context).textoSuave,
+            fontSize: 12,
+          ),
+        ),
       ),
     ],
   );

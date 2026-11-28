@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/cartao.dart';
 import '../../componentes/carregando.dart';
+import '../../componentes/controles.dart' hide Selo;
 import '../../estado/estado_app.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
@@ -204,37 +205,49 @@ class _Status extends StatelessWidget {
   }
 }
 
-/// "RISCO PELO ATR%" e as quatro faixas (py:2007-2012).
+/// "RISCO PELO ATR%" e as quatro faixas (py:2007-2012): título numa linha
+/// própria; as faixas, numa linha no PC e numa grade de 2 colunas iguais no
+/// celular.
 class _Legenda extends StatelessWidget {
   const _Legenda();
 
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    final faixas = [
+      for (final (i, atr) in _atrDaFaixa.indexed)
+        () {
+          final risco = classificarRisco(atr);
+          return LegendaPonto(
+            texto: '${risco.rotulo} · ${_faixasRotulo[i]}',
+            cor: corFaixaRisco(risco) ?? c.textoSuave,
+          );
+        }(),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 8,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: Text(
-            'RISCO PELO ATR%',
-            style: TextStyle(
-              color: c.textoSuave,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
+        Text(
+          'RISCO PELO ATR%',
+          style: TextStyle(
+            color: c.textoSuave,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
           ),
         ),
-        for (final (i, atr) in _atrDaFaixa.indexed)
-          () {
-            final risco = classificarRisco(atr);
-            return SeloRisco(
-              risco,
-              texto: '${risco.rotulo} · ${_faixasRotulo[i]}',
-            );
-          }(),
+        if (expandido(context))
+          Wrap(spacing: 20, runSpacing: 6, children: faixas)
+        else
+          for (var i = 0; i < faixas.length; i += 2)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 12,
+              children: [
+                Expanded(child: faixas[i]),
+                Expanded(child: faixas[i + 1]),
+              ],
+            ),
       ],
     );
   }
@@ -248,63 +261,26 @@ class _Filtros extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
     final (altas, quedas, media) = controle.resumo;
-    final rotuloOrdem = ordensRadar
-        .firstWhere(
-          (o) => o.$1 == controle.ordem,
-          orElse: () => ordensRadar.first,
-        )
-        .$2;
-    return Wrap(
-      spacing: 12,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        BotaoSegmentado<String>(
-          opcoes: [for (final f in filtrosRadar) (f, f)],
-          valor: controle.filtro,
-          aoMudar: controle.definirFiltro,
-        ),
-        PopupMenuButton<String>(
-          key: const Key('menu-ordem'),
-          tooltip: 'Ordenar',
-          initialValue: controle.ordem,
-          onSelected: (k) => unawaited(controle.definirOrdem(k)),
-          itemBuilder: (_) => [
-            for (final (chave, rotulo) in ordensRadar)
-              PopupMenuItem(value: chave, child: Text(rotulo)),
-          ],
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border.all(color: c.bordaCampo),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: expandido(context) ? 40 : 48,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 14, right: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Ordenar: $rotuloOrdem',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (media != null)
-          Text(
+    final grande = expandido(context);
+    final segmentado = Segmentado<String>(
+      opcoes: [for (final f in filtrosRadar) (f, f)],
+      valor: controle.filtro,
+      aoMudar: controle.definirFiltro,
+      compacto: !grande,
+    );
+    Widget ordenar({required bool soIcone}) => BotaoOrdenar<String>(
+      key: const Key('menu-ordem'),
+      campos: ordensRadar,
+      campo: ordensRadar.any((o) => o.$1 == controle.ordem)
+          ? controle.ordem
+          : ordensRadar.first.$1,
+      aoCampo: (k) => unawaited(controle.definirOrdem(k)),
+      soIcone: soIcone,
+    );
+    final resumo = media == null
+        ? null
+        : Text(
             'Hoje: $altas em alta · $quedas em queda · média ${fmtPct(media)}',
             key: const Key('resumo-dia'),
             style: TextStyle(
@@ -312,8 +288,40 @@ class _Filtros extends StatelessWidget {
               fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
+          );
+    if (!grande) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 10,
+        children: [
+          segmentado,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ordenar(soIcone: false),
           ),
-      ],
+          ?resumo,
+        ],
+      );
+    }
+    // os dois controles andam juntos; se não couberem com o rótulo, o
+    // Ordenar vira ícone (nenhum fica sozinho numa linha)
+    return LayoutBuilder(
+      builder: (context, caixa) => Wrap(
+        spacing: 16,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 12,
+            children: [
+              segmentado,
+              ordenar(soIcone: caixa.maxWidth < 640),
+            ],
+          ),
+          ?resumo,
+        ],
+      ),
     );
   }
 }
@@ -345,35 +353,41 @@ class _AdicionarState extends State<_Adicionar> {
 
   @override
   Widget build(BuildContext context) {
-    final campo = TextField(
-      key: const Key('campo-ticker'),
-      controller: _campo,
-      textCapitalization: TextCapitalization.characters,
-      onSubmitted: (_) => unawaited(_enviar()),
-      decoration: widget.compacto
-          ? const InputDecoration(
-              labelText: 'Adicionar ticker',
-              hintText: 'Ex.: VALE3',
-              isDense: true,
-            )
-          : const InputDecoration(
-              hintText: 'Ticker (ex.: VALE3)',
-              isDense: true,
-            ),
+    final campo = SizedBox(
+      height: 40,
+      child: TextField(
+        key: const Key('campo-ticker'),
+        controller: _campo,
+        textCapitalization: TextCapitalization.characters,
+        textAlignVertical: TextAlignVertical.center,
+        // preenche os 40 px: o contorno acompanha a altura do campo
+        expands: true,
+        maxLines: null,
+        minLines: null,
+        onSubmitted: (_) => unawaited(_enviar()),
+        decoration: InputDecoration(
+          hintText: widget.compacto
+              ? 'Adicionar ticker (ex.: VALE3)'
+              : 'Ticker (ex.: VALE3)',
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        ),
+      ),
     );
     if (widget.compacto) {
       return Row(
         spacing: 8,
         children: [
           Expanded(child: campo),
-          IconButton(
+          IconButton.filled(
             onPressed: () => unawaited(_enviar()),
-            icon: Icon(
-              Icons.add_circle,
-              color: CoresApp.de(context).alta,
-              size: 32,
-            ),
+            icon: const Icon(Icons.add),
             tooltip: 'Adicionar',
+            style: IconButton.styleFrom(
+              fixedSize: const Size.square(40),
+              minimumSize: const Size.square(40),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
         ],
       );
@@ -382,10 +396,11 @@ class _AdicionarState extends State<_Adicionar> {
       mainAxisSize: MainAxisSize.min,
       spacing: 8,
       children: [
-        SizedBox(width: 200, child: campo),
-        FilledButton(
+        SizedBox(width: 220, child: campo),
+        BotaoPrincipal(
+          icone: Icons.add,
+          rotulo: 'Adicionar',
           onPressed: () => unawaited(_enviar()),
-          child: const Text('+  Adicionar'),
         ),
       ],
     );
@@ -402,22 +417,21 @@ class _ImportarTodos extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!compacto) {
-      return FilledButton(
+      return BotaoPrincipal(
+        icone: Icons.playlist_add,
+        rotulo: 'Importar todos para o meu radar',
         onPressed: () => unawaited(controle.importarTodos(context)),
-        child: const Text('+  Importar todos para o meu radar'),
       );
     }
     final faltam = controle.novosDoAmigo.length;
-    return FilledButton.icon(
+    return BotaoPrincipal(
+      icone: Icons.playlist_add,
+      rotulo: faltam == 0
+          ? 'Todos já estão no seu radar'
+          : 'Importar $faltam para o meu radar',
       onPressed: faltam == 0
           ? null
           : () => unawaited(controle.importarTodos(context)),
-      icon: const Icon(Icons.playlist_add),
-      label: Text(
-        faltam == 0
-            ? 'Todos já estão no seu radar'
-            : 'Importar $faltam para o meu radar',
-      ),
     );
   }
 }
@@ -474,10 +488,11 @@ class _Expandido extends StatelessWidget {
                           _Adicionar(controle: controle, compacto: false)
                         else
                           _ImportarTodos(controle: controle, compacto: false),
-                        OutlinedButton(
+                        BotaoIcone(
+                          icone: Icons.refresh,
+                          tooltip: 'Atualizar',
                           onPressed: () =>
                               unawaited(controle.atualizar(forcar: true)),
-                          child: const Text('Atualizar'),
                         ),
                       ],
                     ),
@@ -675,11 +690,11 @@ class _Compacto extends StatelessWidget {
                         ),
                       ),
                     ),
-                    IconButton(
+                    BotaoIcone(
+                      icone: Icons.refresh,
+                      tooltip: 'Atualizar',
                       onPressed: () =>
                           unawaited(controle.atualizar(forcar: true)),
-                      icon: const Icon(Icons.refresh),
-                      tooltip: 'Atualizar',
                     ),
                   ],
                 ),
