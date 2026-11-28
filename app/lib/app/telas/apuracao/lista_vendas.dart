@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' show Cartao;
+import '../../componentes/controles.dart';
 import '../../componentes/tabela.dart';
 import '../../regras/filtros.dart';
 import '../../tema/cores_app.dart';
@@ -15,7 +16,7 @@ import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
 import 'extremos_vista.dart';
 import 'menu_contexto.dart';
-import 'lista_lotes.dart' show CabecalhoLista, alturaTabela, estiloPerigo;
+import 'lista_lotes.dart' show CabecalhoLista, RolagemTabela, alturaTabela;
 
 /// Vendas do mês; [sliver] como em `ListaLotes`.
 class ListaVendas extends StatelessWidget {
@@ -191,67 +192,71 @@ class _ExpandidoState extends State<_Expandido> {
             contagemKey: const Key('contagem-vendas'),
             contagem: widget.contagem,
             acoes: [
-              OutlinedButton(
+              BotaoIcone(
+                icone: Icons.edit,
+                tooltip: 'Editar venda',
                 onPressed: livre ? () => controle.editarVenda(context) : null,
-                child: const Text('Editar venda'),
               ),
-              OutlinedButton(
-                style: estiloPerigo(context),
+              BotaoIcone(
+                icone: Icons.delete,
+                tooltip: 'Excluir venda',
+                destrutivo: true,
                 onPressed: livre ? () => controle.excluirVenda(context) : null,
-                child: const Text('Excluir venda'),
               ),
             ],
           ),
           ?widget.barra,
           SizedBox(
             height: alturaTabela(context, linhasVisiveis),
-            child: Tabela<GrupoVenda>(
-              key: const Key('tabela-vendas'),
-              reiniciarOrdem: (
-                controle.filtroVendas.ordem,
-                controle.filtroVendas.desc,
-              ),
-              colunas: colunas,
-              linhas: itens,
-              vazio: widget.vazio,
-              id: (g) => g.op.vendaId,
-              filhas: (g) => [
-                for (final p in g.partes) GrupoVenda(p, [p], filha: true),
-              ],
-              expandidas: _abertos,
-              selecionado: controle.vendaSelecionada,
-              aoSelecionar: (g) {
-                controle.selecionarVenda(grupoDe(g.op.vendaId));
-                if (g.agrupado) {
-                  setState(() {
-                    if (!_abertos.remove(g.op.vendaId)) {
-                      _abertos.add(g.op.vendaId);
-                    }
-                  });
-                }
-              },
-              aoClicarDireito: (g, posicao) {
-                controle.selecionarVenda(grupoDe(g.op.vendaId));
-                unawaited(
-                  abrirMenuApuracao(
-                    context,
-                    posicao,
-                    alvo: AlvoMenu(
-                      ticker: g.op.ticker,
-                      cabecalho:
-                          '${g.op.ticker} · ${g.op.qtd} un. · '
-                          '${brl(g.op.preco)}',
-                      vendaId: g.op.vendaId,
+            child: RolagemTabela(
+              child: Tabela<GrupoVenda>(
+                key: const Key('tabela-vendas'),
+                reiniciarOrdem: (
+                  controle.filtroVendas.ordem,
+                  controle.filtroVendas.desc,
+                ),
+                colunas: colunas,
+                linhas: itens,
+                vazio: widget.vazio,
+                id: (g) => g.op.vendaId,
+                filhas: (g) => [
+                  for (final p in g.partes) GrupoVenda(p, [p], filha: true),
+                ],
+                expandidas: _abertos,
+                selecionado: controle.vendaSelecionada,
+                aoSelecionar: (g) {
+                  controle.selecionarVenda(grupoDe(g.op.vendaId));
+                  if (g.agrupado) {
+                    setState(() {
+                      if (!_abertos.remove(g.op.vendaId)) {
+                        _abertos.add(g.op.vendaId);
+                      }
+                    });
+                  }
+                },
+                aoClicarDireito: (g, posicao) {
+                  controle.selecionarVenda(grupoDe(g.op.vendaId));
+                  unawaited(
+                    abrirMenuApuracao(
+                      context,
+                      posicao,
+                      alvo: AlvoMenu(
+                        ticker: g.op.ticker,
+                        cabecalho:
+                            '${g.op.ticker} · ${g.op.qtd} un. · '
+                            '${brl(g.op.preco)}',
+                        vendaId: g.op.vendaId,
+                      ),
                     ),
-                  ),
-                );
-              },
-              aoDuploClique: editavel
-                  ? (g) {
-                      controle.selecionarVenda(grupoDe(g.op.vendaId));
-                      controle.editarVenda(context, id: g.op.vendaId);
-                    }
-                  : null,
+                  );
+                },
+                aoDuploClique: editavel
+                    ? (g) {
+                        controle.selecionarVenda(grupoDe(g.op.vendaId));
+                        controle.editarVenda(context, id: g.op.vendaId);
+                      }
+                    : null,
+              ),
             ),
           ),
         ],
@@ -401,7 +406,7 @@ class _CartaoVendaState extends State<_CartaoVenda> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Pilula(texto: o.regime),
+                        Selo(texto: o.regime, cor: c.textoSuave),
                       ],
                     ),
                     Text(

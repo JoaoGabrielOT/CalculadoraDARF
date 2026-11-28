@@ -9,11 +9,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' show Cartao;
+import '../../componentes/controles.dart';
 import '../../componentes/tabela.dart';
 import '../../regras/filtros.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
+import '../../tema/layout.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
 import 'extremos_vista.dart';
@@ -29,7 +31,30 @@ double alturaTabela(BuildContext context, int linhas) {
   return a.cabecalho + math.min(linhas, 8) * a.linha;
 }
 
-/// Título da lista, contagem ("N" ou "visíveis/total" com filtro) e ações.
+/// Largura mínima das tabelas: com menos, as colunas não se espremem e só a
+/// tabela rola na horizontal; título, ações e filtros do cartão ficam à vista.
+const larguraMinimaTabela = 1168.0;
+
+class RolagemTabela extends StatelessWidget {
+  const RolagemTabela({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, caixa) {
+      if (caixa.maxWidth >= larguraMinimaTabela) return child;
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(width: larguraMinimaTabela, child: child),
+      );
+    },
+  );
+}
+
+/// Título da lista e contagem ("N" ou "visíveis/total" com filtro) à
+/// esquerda; as ações na ponta direita, a principal por último. Sem espaço
+/// (PC estreito), as ações descem para a linha de baixo.
 class CabecalhoLista extends StatelessWidget {
   const CabecalhoLista({
     super.key,
@@ -47,43 +72,59 @@ class CabecalhoLista extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text(
-          titulo,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-        ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: c.chipFundo,
-            borderRadius: BorderRadius.circular(12),
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 8,
+            children: [
+              Flexible(
+                child: Text(
+                  titulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: c.chipFundo,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
+                  child: Text(
+                    contagem,
+                    key: contagemKey,
+                    style: TextStyle(color: c.textoSuave, fontSize: 12),
+                  ),
+                ),
+              ),
+            ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            child: Text(
-              contagem,
-              key: contagemKey,
-              style: TextStyle(color: c.textoSuave, fontSize: 12),
+          if (acoes.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: acoes,
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        ...acoes,
-      ],
+        ],
+      ),
     );
   }
-}
-
-/// Botão de perigo (Excluir): texto e borda no vermelho do tema.
-ButtonStyle estiloPerigo(BuildContext context) {
-  final c = CoresApp.de(context);
-  return OutlinedButton.styleFrom(
-    foregroundColor: c.queda,
-    side: BorderSide(color: c.queda),
-  );
 }
 
 /// "Cotação atual · Yahoo · dd/mm hh:mm": fonte e hora da consulta, no fuso de
@@ -95,7 +136,7 @@ String textoSeloCotacao(CotacaoAtual c) {
       '${d.substring(8, 10)}/${d.substring(5, 7)} ${h.horaMinuto}';
 }
 
-/// Selo da cotação atual dos ativos à vista ([ControleApuracao.tickersCotacao]):
+/// Texto da cotação atual dos ativos à vista ([ControleApuracao.tickersCotacao]):
 /// vale a hora da consulta mais antiga, para nenhum valor parecer mais novo do
 /// que é. Sem cotação, diz o estado em vez de mostrar valor.
 class SeloCotacaoAtual extends StatelessWidget {
@@ -110,42 +151,72 @@ class SeloCotacaoAtual extends StatelessWidget {
       for (final t in tickers)
         if (controle.cotacoes[t] != null) controle.cotacoes[t]!,
     ];
+    final String texto;
     if (chegadas.isNotEmpty) {
       final antiga = ordenadoCom(chegadas, (a, b) => a.hora.compareTo(b.hora));
-      return Selo(texto: textoSeloCotacao(antiga.first));
+      texto = textoSeloCotacao(antiga.first);
+    } else {
+      final tentou = tickers.every(controle.cotacoes.containsKey);
+      texto = tentou
+          ? 'cotação atual indisponível'
+          : 'carregando cotação atual…';
     }
-    final tentou = tickers.every(controle.cotacoes.containsKey);
     return Text(
-      tentou ? 'cotação atual indisponível' : 'carregando cotação atual…',
+      texto,
       style: TextStyle(color: CoresApp.de(context).textoSuave, fontSize: 12),
     );
   }
 }
 
-/// Posição no fim do mês ou carteira atual (lotes do mês aberto). Na carteira
-/// de outro mês que o da tela, diz de qual mês vêm os lotes.
+/// Posição no fim do mês ou carteira atual (lotes do mês aberto), com a
+/// [cotacao] à direita no PC e embaixo no celular (sem ela, na carteira, a
+/// cotação atual). Na carteira de outro mês que o da tela, diz de qual mês vêm
+/// os lotes.
 class SeletorLista extends StatelessWidget {
-  const SeletorLista({super.key});
+  const SeletorLista({super.key, this.cotacao});
+
+  final Widget? cotacao;
 
   @override
   Widget build(BuildContext context) {
     final controle = context.watch<ControleApuracao>();
     final c = CoresApp.de(context);
+    final grande = expandido(context);
     final aberto = controle.mesAberto;
     final modo = controle.modoLista;
+    final seletor = Segmentado<ModoLista>(
+      key: const Key('seletor-posicao'),
+      opcoes: [
+        (ModoLista.posicao, 'Posição em ${fmtData(controle.dataCorte)}'),
+        (ModoLista.carteira, 'Carteira atual'),
+      ],
+      valor: modo,
+      aoMudar: controle.escolherModo,
+      compacto: !grande,
+    );
+    final cotacao =
+        this.cotacao ??
+        (modo == ModoLista.carteira ? const SeloCotacaoAtual() : null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 6,
       children: [
-        BotaoSegmentado<ModoLista>(
-          key: const Key('seletor-posicao'),
-          opcoes: [
-            (ModoLista.posicao, 'Posição em ${fmtData(controle.dataCorte)}'),
-            (ModoLista.carteira, 'Carteira atual'),
-          ],
-          valor: modo,
-          aoMudar: controle.escolherModo,
-        ),
+        // a cotação na ponta direita; sem espaço (fonte larga), desce
+        if (grande)
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 6,
+              children: [seletor, ?cotacao],
+            ),
+          )
+        else ...[
+          seletor,
+          ?cotacao,
+        ],
         if (modo == ModoLista.carteira &&
             aberto != null &&
             aberto != controle.mes)
@@ -153,7 +224,6 @@ class SeletorLista extends StatelessWidget {
             'Lotes do mês aberto (${fmtMes(aberto)})',
             style: TextStyle(color: c.textoSuave, fontSize: 11),
           ),
-        if (modo == ModoLista.carteira) const SeloCotacaoAtual(),
       ],
     );
   }
@@ -217,11 +287,7 @@ class ListaLotes extends StatelessWidget {
         : '${todos.length}';
     final barra = todos.isEmpty
         ? null
-        : BarraFiltrosLotes(
-            filtro: f,
-            aoMudar: controle.definirFiltroLotes,
-            segmentada: !sliver,
-          );
+        : BarraFiltrosLotes(filtro: f, aoMudar: controle.definirFiltroLotes);
     return sliver
         ? _Compacto(
             controle: controle,
@@ -402,24 +468,28 @@ class _Expandido extends StatelessWidget {
             contagemKey: const Key('contagem-lotes'),
             contagem: contagem,
             acoes: [
-              FilledButton(
-                onPressed: livre ? () => controle.novaCompra(context) : null,
-                child: const Text('+  Novo ativo'),
+              BotaoIcone(
+                icone: Icons.edit,
+                tooltip: 'Editar',
+                onPressed: livre ? () => controle.editarLote(context) : null,
               ),
-              OutlinedButton(
+              BotaoIcone(
+                icone: Icons.delete,
+                tooltip: 'Excluir',
+                destrutivo: true,
+                onPressed: livre ? () => controle.excluirLote(context) : null,
+              ),
+              BotaoSecundario(
+                icone: Icons.sell,
+                rotulo: 'Registrar venda',
                 onPressed: livre
                     ? () => controle.registrarVenda(context)
                     : null,
-                child: const Text('Registrar venda'),
               ),
-              OutlinedButton(
-                onPressed: livre ? () => controle.editarLote(context) : null,
-                child: const Text('Editar'),
-              ),
-              OutlinedButton(
-                style: estiloPerigo(context),
-                onPressed: livre ? () => controle.excluirLote(context) : null,
-                child: const Text('Excluir'),
+              BotaoPrincipal(
+                icone: Icons.add,
+                rotulo: 'Novo ativo',
+                onPressed: livre ? () => controle.novaCompra(context) : null,
               ),
             ],
           ),
@@ -431,38 +501,41 @@ class _Expandido extends StatelessWidget {
           ),
           SizedBox(
             height: alturaTabela(context, itens.length),
-            child: Tabela<Lote>(
-              key: const Key('tabela-lotes'),
-              reiniciarOrdem: (
-                controle.filtroLotes.ordem,
-                controle.filtroLotes.desc,
-              ),
-              colunas: colunas,
-              linhas: itens,
-              vazio: vazioTexto,
-              id: (l) => l.id,
-              selecionado: controle.loteSelecionado,
-              aoSelecionar: (l) => controle.selecionarLote(l.id),
-              aoClicarDireito: (l, posicao) {
-                controle.selecionarLote(l.id);
-                unawaited(
-                  abrirMenuApuracao(
-                    context,
-                    posicao,
-                    alvo: AlvoMenu(
-                      ticker: l.ticker,
-                      cabecalho: '${l.ticker} · ${l.qtd} un. · ${brl(l.preco)}',
-                      lote: l,
+            child: RolagemTabela(
+              child: Tabela<Lote>(
+                key: const Key('tabela-lotes'),
+                reiniciarOrdem: (
+                  controle.filtroLotes.ordem,
+                  controle.filtroLotes.desc,
+                ),
+                colunas: colunas,
+                linhas: itens,
+                vazio: vazioTexto,
+                id: (l) => l.id,
+                selecionado: controle.loteSelecionado,
+                aoSelecionar: (l) => controle.selecionarLote(l.id),
+                aoClicarDireito: (l, posicao) {
+                  controle.selecionarLote(l.id);
+                  unawaited(
+                    abrirMenuApuracao(
+                      context,
+                      posicao,
+                      alvo: AlvoMenu(
+                        ticker: l.ticker,
+                        cabecalho:
+                            '${l.ticker} · ${l.qtd} un. · ${brl(l.preco)}',
+                        lote: l,
+                      ),
                     ),
-                  ),
-                );
-              },
-              aoDuploClique: editavel
-                  ? (l) {
-                      controle.selecionarLote(l.id);
-                      controle.registrarVenda(context, lote: l);
-                    }
-                  : null,
+                  );
+                },
+                aoDuploClique: editavel
+                    ? (l) {
+                        controle.selecionarLote(l.id);
+                        controle.registrarVenda(context, lote: l);
+                      }
+                    : null,
+              ),
             ),
           ),
         ],
@@ -525,22 +598,19 @@ class _Compacto extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 12,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: CabecalhoLista(
-                titulo: 'Ativos comprados',
-                contagemKey: const Key('contagem-lotes'),
-                contagem: contagem,
-              ),
-            ),
+        CabecalhoLista(
+          titulo: 'Ativos comprados',
+          contagemKey: const Key('contagem-lotes'),
+          contagem: contagem,
+          // ícone: com o texto, o título não caberia em 360 px
+          acoes: [
             if (editavel)
-              OutlinedButton.icon(
+              BotaoIcone(
+                icone: Icons.sell,
+                tooltip: 'Registrar venda',
                 onPressed: controle.gravando
                     ? null
                     : () => controle.registrarVenda(context),
-                icon: const Icon(Icons.sell),
-                label: const Text('Registrar venda'),
               ),
           ],
         ),
@@ -580,12 +650,12 @@ class _Compacto extends StatelessWidget {
                 style: TextStyle(color: c.textoSuave, fontSize: 12),
               ),
               if (editavel)
-                FilledButton.icon(
+                BotaoPrincipal(
+                  icone: Icons.add,
+                  rotulo: 'Nova compra',
                   onPressed: controle.gravando
                       ? null
                       : () => controle.novaCompra(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Nova compra'),
                 ),
             ],
           ),
@@ -684,7 +754,7 @@ class _CartaoLote extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Pilula(texto: l.tipo),
+                  Selo(texto: l.tipo, cor: c.textoSuave),
                 ],
               ),
               Text(

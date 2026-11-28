@@ -92,7 +92,12 @@ class BotaoIcone extends StatelessWidget {
     final h = _altura(context);
     final botao = IconButton(
       onPressed: onPressed,
-      icon: Icon(icone, size: 20, color: destrutivo ? c.queda : null),
+      // desabilitado, fica com a cor apagada do tema, como os outros
+      icon: Icon(
+        icone,
+        size: 20,
+        color: destrutivo && onPressed != null ? c.queda : null,
+      ),
       style: ButtonStyle(
         fixedSize: WidgetStatePropertyAll(Size.square(h)),
         minimumSize: WidgetStatePropertyAll(Size.square(h)),
@@ -214,7 +219,11 @@ class Segmentado<T> extends StatelessWidget {
           ),
       ],
       selected: {valor},
-      onSelectionChanged: (s) => aoMudar(s.first),
+      // tocar na opção já escolhida a "desmarca" (conjunto vazio) e avisa
+      // com ela mesma, como o BotaoSegmentado: há escolhas que valem mesmo
+      // iguais ao padrão; o valor continua vindo de fora
+      emptySelectionAllowed: true,
+      onSelectionChanged: (s) => aoMudar(s.isEmpty ? valor : s.first),
     ),
   );
 }
@@ -323,7 +332,8 @@ PopupMenuItem<T> itemMenu<T>(
   ),
 );
 
-/// Botão que abre uma lista de opções; [marcado] leva o ✓.
+/// Botão que abre uma lista de opções; [marcado] leva o ✓. Com [soIcone],
+/// [ativo] desenha o ponto de filtro fora do padrão.
 class BotaoMenu<T> extends StatelessWidget {
   const BotaoMenu({
     super.key,
@@ -333,6 +343,7 @@ class BotaoMenu<T> extends StatelessWidget {
     required this.aoEscolher,
     this.marcado,
     this.soIcone = false,
+    this.ativo = false,
   });
 
   final IconData icone;
@@ -341,6 +352,7 @@ class BotaoMenu<T> extends StatelessWidget {
   final ValueChanged<T> aoEscolher;
   final T? marcado;
   final bool soIcone;
+  final bool ativo;
 
   @override
   Widget build(BuildContext context) => _GatilhoMenu<T>(
@@ -348,6 +360,7 @@ class BotaoMenu<T> extends StatelessWidget {
     rotulo: rotulo,
     tooltip: rotulo,
     soIcone: soIcone,
+    ativo: ativo,
     entradas: () => [
       for (final (v, texto) in itens)
         itemMenu<T>(
@@ -361,7 +374,7 @@ class BotaoMenu<T> extends StatelessWidget {
 }
 
 /// Ordenação: o rótulo mostra o campo e a direção; o menu troca o campo e,
-/// havendo [aoInverter], inverte a direção.
+/// havendo [aoInverter], inverte a direção. [ativo] como em [BotaoMenu].
 class BotaoOrdenar<T> extends StatelessWidget {
   const BotaoOrdenar({
     super.key,
@@ -371,6 +384,7 @@ class BotaoOrdenar<T> extends StatelessWidget {
     required this.aoCampo,
     this.aoInverter,
     this.soIcone = false,
+    this.ativo = false,
     this.chaveItem,
     this.chaveInverter,
   });
@@ -381,6 +395,7 @@ class BotaoOrdenar<T> extends StatelessWidget {
   final ValueChanged<T> aoCampo;
   final VoidCallback? aoInverter;
   final bool soIcone;
+  final bool ativo;
   final Key Function(T)? chaveItem;
   final Key? chaveInverter;
 
@@ -393,6 +408,7 @@ class BotaoOrdenar<T> extends StatelessWidget {
       rotulo: '$nome$seta',
       tooltip: 'Ordenar',
       soIcone: soIcone,
+      ativo: ativo,
       entradas: () => [
         for (final (v, texto) in campos)
           itemMenu<T>(
@@ -423,6 +439,7 @@ class _GatilhoMenu<T> extends StatelessWidget {
     required this.rotulo,
     required this.tooltip,
     required this.soIcone,
+    required this.ativo,
     required this.entradas,
   });
 
@@ -430,6 +447,7 @@ class _GatilhoMenu<T> extends StatelessWidget {
   final String rotulo;
   final String tooltip;
   final bool soIcone;
+  final bool ativo;
   final List<PopupMenuEntry<T>> Function() entradas;
 
   @override
@@ -439,7 +457,12 @@ class _GatilhoMenu<T> extends StatelessWidget {
       builder: (ctx) {
         void abrir() => abrirMenuAncorado<T>(ctx, entradas());
         if (soIcone) {
-          return BotaoIcone(icone: icone, tooltip: tooltip, onPressed: abrir);
+          return BotaoIcone(
+            icone: icone,
+            tooltip: tooltip,
+            marcado: ativo,
+            onPressed: abrir,
+          );
         }
         return Tooltip(
           message: tooltip,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
@@ -7,6 +8,7 @@ import 'package:calculadoradarf/app/telas/apuracao/lista_lotes.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -78,13 +80,58 @@ Finder _item(String texto) => find.widgetWithText(PopupMenuItem<String>, texto);
 double _y(WidgetTester t, String texto) =>
     t.getTopLeft(find.text(texto).first).dy;
 
-Finder _botao(String texto) => find.ancestor(
-  of: find.text(texto),
-  matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
-);
+/// Ações que são só ícone (o tooltip é o rótulo antigo).
+const _soIcone = {'Editar', 'Excluir', 'Editar venda', 'Excluir venda'};
 
-bool _habilitado(WidgetTester t, String texto) =>
-    t.widget<ButtonStyleButton>(_botao(texto)).onPressed != null;
+Finder _botao(String rotulo) => _soIcone.contains(rotulo)
+    ? find.descendant(
+        of: find.byTooltip(rotulo),
+        matching: find.byType(IconButton),
+      )
+    : find.ancestor(
+        of: find.text(rotulo),
+        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+      );
+
+bool _habilitado(WidgetTester t, String rotulo) =>
+    switch (t.widget(_botao(rotulo))) {
+      final ButtonStyleButton b => b.onPressed != null,
+      final IconButton b => b.onPressed != null,
+      final w => throw StateError('botão inesperado: $w'),
+    };
+
+/// Texto do campo de busca da lista [id] ('lotes' ou 'vendas').
+String _busca(WidgetTester t, String id) => t
+    .widget<TextField>(
+      find.descendant(
+        of: find.byKey(Key('busca-$id')),
+        matching: find.byType(TextField),
+      ),
+    )
+    .controller!
+    .text;
+
+/// Abre o Ordenar da lista [id] e inverte a direção.
+Future<void> _inverter(WidgetTester t, String id) async {
+  await t.tap(find.byKey(Key('chip-$id-ordem')));
+  await t.pumpAndSettle();
+  await t.tap(find.byKey(Key('inverter-$id')));
+  await t.pumpAndSettle();
+}
+
+String _rotuloOrdenar(WidgetTester t, String id) => t
+    .widget<Text>(
+      find.descendant(
+        of: find.byKey(Key('chip-$id-ordem')),
+        matching: find.byType(Text),
+      ),
+    )
+    .data!;
+
+Finder _ponto(String chave) => find.descendant(
+  of: find.byKey(Key(chave)),
+  matching: find.byKey(const ValueKey('ponto-marcado')),
+);
 
 Finder _noDialogo(String texto) =>
     find.descendant(of: find.byType(AlertDialog), matching: find.text(texto));
@@ -349,7 +396,7 @@ void main() {
       ),
     );
     await _montar(t, servicos: s);
-    await t.tap(_botao('+  Novo ativo'));
+    await t.tap(_botao('Novo ativo'));
     await t.pumpAndSettle();
     await t.enterText(find.byKey(const ValueKey('ticker')), 'ITUB4');
     await t.enterText(find.byKey(const ValueKey('qtd')), '10');
@@ -374,9 +421,7 @@ void main() {
       await _montar(t, tamanho: tamanho);
       expect(find.text('Limpar'), findsNothing);
 
-      // busca
-      await t.tap(find.byTooltip('Buscar ticker').first);
-      await t.pumpAndSettle();
+      // busca: o campo fica sempre à vista
       await t.enterText(find.byKey(const Key('busca-lotes')), 'vale');
       await t.pumpAndSettle();
       expect(find.byKey(const Key('contagem-lotes')), findsOneWidget);
@@ -385,15 +430,19 @@ void main() {
         '1/3',
       );
       expect(find.text('AAPL34'), findsNothing);
-      expect(find.text('Limpar'), findsWidgets);
+      expect(find.byKey(const Key('limpar-lotes')), findsOneWidget);
       await t.tap(find.text('Limpar').first);
       await t.pumpAndSettle();
       expect(t.widget<Text>(find.byKey(const Key('contagem-lotes'))).data, '3');
-      expect(find.byKey(const Key('busca-lotes')), findsNothing);
+      expect(_busca(t, 'lotes'), '');
+      expect(find.text('Limpar'), findsNothing);
 
       // tipo
       await t.tap(find.byKey(const Key('chip-lotes-tipo')));
       await t.pumpAndSettle();
+      for (final opcao in ['Todos', 'Ação', 'BDR']) {
+        expect(_item(opcao), findsOneWidget, reason: opcao);
+      }
       await t.tap(_item('BDR'));
       await t.pumpAndSettle();
       expect(
@@ -404,15 +453,14 @@ void main() {
       await t.tap(find.text('Limpar').first);
       await t.pumpAndSettle();
 
-      // ordem por ticker (crescente) e inversão
+      // ordem por ticker (crescente) e inversão pelo item do menu
       await t.tap(find.byKey(const Key('chip-lotes-ordem')));
       await t.pumpAndSettle();
       await t.tap(_item('Ticker'));
       await t.pumpAndSettle();
       expect(_y(t, 'AAPL34') < _y(t, 'PETR4'), isTrue);
       expect(_y(t, 'PETR4') < _y(t, 'VALE3'), isTrue);
-      await t.tap(find.byKey(const Key('inverter-lotes')));
-      await t.pumpAndSettle();
+      await _inverter(t, 'lotes');
       expect(_y(t, 'VALE3') < _y(t, 'PETR4'), isTrue);
       expect(_y(t, 'PETR4') < _y(t, 'AAPL34'), isTrue);
     });
@@ -428,6 +476,9 @@ void main() {
       );
       await t.tap(find.byKey(const Key('chip-vendas-operacao')));
       await t.pumpAndSettle();
+      for (final opcao in ['Todas', 'Swing', 'Day trade']) {
+        expect(_item(opcao), findsOneWidget, reason: opcao);
+      }
       await t.tap(_item('Day trade'));
       await t.pumpAndSettle();
       expect(
@@ -435,7 +486,7 @@ void main() {
         '0/2',
       );
       expect(find.text('Nenhuma venda para esse filtro.'), findsOneWidget);
-      await t.tap(find.text('Limpar').first);
+      await t.tap(find.byKey(const Key('limpar-vendas')));
       await t.pumpAndSettle();
 
       await t.tap(find.byKey(const Key('chip-vendas-tipo')));
@@ -443,11 +494,9 @@ void main() {
       await t.tap(_item('BDR'));
       await t.pumpAndSettle();
       expect(find.text('Nenhuma venda para esse filtro.'), findsOneWidget);
-      await t.tap(find.text('Limpar').first);
+      await t.tap(find.byKey(const Key('limpar-vendas')));
       await t.pumpAndSettle();
 
-      await t.tap(find.byTooltip('Buscar ticker').last);
-      await t.pumpAndSettle();
       await t.enterText(find.byKey(const Key('busca-vendas')), 'itub');
       await t.pumpAndSettle();
       expect(
@@ -456,6 +505,239 @@ void main() {
       );
     });
   }
+
+  group('controles do cartão (PC)', () {
+    testWidgets('Ativos comprados: ícones Editar e Excluir, Registrar venda '
+        'secundário e Novo ativo principal, na ponta direita', (t) async {
+      await _montar(t);
+      final editar = t.widget<BotaoIcone>(
+        find.ancestor(of: _botao('Editar'), matching: find.byType(BotaoIcone)),
+      );
+      expect(editar.icone, Icons.edit);
+      expect(editar.destrutivo, isFalse);
+      final excluir = t.widget<BotaoIcone>(
+        find.ancestor(of: _botao('Excluir'), matching: find.byType(BotaoIcone)),
+      );
+      expect(excluir.icone, Icons.delete);
+      expect(excluir.destrutivo, isTrue);
+      expect(
+        find.widgetWithText(BotaoSecundario, 'Registrar venda'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(BotaoPrincipal, 'Novo ativo'), findsOneWidget);
+      // da esquerda para a direita: Editar, Excluir, Registrar venda, Novo
+      final xs = [
+        for (final r in ['Editar', 'Excluir', 'Registrar venda', 'Novo ativo'])
+          t.getCenter(_botao(r)).dx,
+      ];
+      expect(xs, [...xs]..sort());
+      expect(
+        t.getCenter(_botao('Editar')).dy,
+        moreOrLessEquals(t.getCenter(_botao('Novo ativo')).dy, epsilon: 1),
+      );
+      // o título fica à esquerda, longe das ações
+      expect(
+        t.getCenter(find.text('Ativos comprados')).dx,
+        lessThan(xs.first - 200),
+      );
+    });
+
+    testWidgets('Posição | Carteira segmentado, com a cotação em texto à '
+        'direita', (t) async {
+      await _montar(t);
+      final seletor = find.byKey(const Key('seletor-posicao'));
+      expect(seletor, findsOneWidget);
+      expect(t.widget(seletor), isA<Segmentado<ModoLista>>());
+      expect(
+        find.descendant(of: seletor, matching: find.text('Carteira atual')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: seletor,
+          matching: find.text('Posição em 28/10/2026'),
+        ),
+        findsOneWidget,
+      );
+      final cotacao = find.textContaining(RegExp('[Cc]otação atual'));
+      expect(cotacao, findsOneWidget);
+      expect(t.getTopLeft(cotacao).dx, greaterThan(t.getTopRight(seletor).dx));
+    });
+
+    testWidgets('filtros: Situação segmentada, busca, Tipo e Ordenar com as '
+        'opções de hoje', (t) async {
+      final s = ServicosFalsos();
+      s.visoes['2026-10'] = visaoExemplo(_mesComVendido());
+      await _montar(t, servicos: s);
+      final situacao = find.byType(Segmentado<String>);
+      expect(situacao, findsOneWidget);
+      expect(t.widget<Segmentado<String>>(situacao).compacto, isFalse);
+      for (final o in ['Todos', 'Em aberto', 'Vendidos']) {
+        expect(
+          find.descendant(of: situacao, matching: find.text(o)),
+          findsOneWidget,
+        );
+      }
+      final busca = find.descendant(
+        of: find.byKey(const Key('busca-lotes')),
+        matching: find.byType(CampoBusca),
+        matchRoot: true,
+      );
+      expect(t.widget<CampoBusca>(busca).dica, 'Buscar ticker…');
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('chip-lotes-tipo')),
+          matching: find.text('Tipo'),
+        ),
+        findsOneWidget,
+      );
+      expect(_rotuloOrdenar(t, 'lotes'), 'Cadastro ↑');
+      await t.tap(find.byKey(const Key('chip-lotes-ordem')));
+      await t.pumpAndSettle();
+      for (final o in [
+        'Cadastro',
+        'Data da compra',
+        'Ticker',
+        'Quantidade',
+        'Preço de compra',
+        'Preço atual',
+        'Total',
+        'Ganho/perda',
+        'Restante',
+      ]) {
+        expect(_item(o), findsOneWidget, reason: o);
+      }
+      // trocar de campo usa a direção padrão dele (Total: decrescente)
+      await t.tap(_item('Total'));
+      await t.pumpAndSettle();
+      expect(_rotuloOrdenar(t, 'lotes'), 'Total ↓');
+      await t.tap(find.byKey(const Key('chip-lotes-ordem')));
+      await t.pumpAndSettle();
+      await t.tap(_item('Cadastro'));
+      await t.pumpAndSettle();
+      // cadastro: PETR4 antes de AAPL34; invertido, ao contrário
+      expect(_y(t, 'PETR4') < _y(t, 'AAPL34'), isTrue);
+      await _inverter(t, 'lotes');
+      expect(_rotuloOrdenar(t, 'lotes'), 'Cadastro ↓');
+      expect(_y(t, 'AAPL34') < _y(t, 'PETR4'), isTrue);
+
+      // a situação segmentada filtra
+      await t.tap(
+        find.descendant(of: situacao, matching: find.text('Vendidos')),
+      );
+      await t.pumpAndSettle();
+      expect(
+        t.widget<Text>(find.byKey(const Key('contagem-lotes'))).data,
+        '1/4',
+      );
+      expect(find.byKey(const Key('limpar-lotes')), findsOneWidget);
+    });
+
+    testWidgets('Vendas do mês: ícones Editar venda e Excluir venda, menus '
+        'Operação e Tipo e Ordenar', (t) async {
+      await _montar(t);
+      expect(
+        t
+            .widget<BotaoIcone>(
+              find.ancestor(
+                of: _botao('Excluir venda'),
+                matching: find.byType(BotaoIcone),
+              ),
+            )
+            .destrutivo,
+        isTrue,
+      );
+      expect(_botao('Editar venda'), findsOneWidget);
+      for (final (chave, rotulo) in [
+        ('chip-vendas-operacao', 'Operação'),
+        ('chip-vendas-tipo', 'Tipo'),
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(Key(chave)),
+            matching: find.text(rotulo),
+          ),
+          findsOneWidget,
+          reason: rotulo,
+        );
+      }
+      expect(_rotuloOrdenar(t, 'vendas'), 'Data da venda ↓');
+      final busca = find.descendant(
+        of: find.byKey(const Key('busca-vendas')),
+        matching: find.byType(CampoBusca),
+        matchRoot: true,
+      );
+      expect(t.widget<CampoBusca>(busca).dica, 'Buscar ticker…');
+    });
+  });
+
+  group('celular 360', () {
+    const tamanho = Size(360, 800);
+
+    testWidgets('Situação compacta, busca expandida e ícones Tipo e Ordenar '
+        'com ponto fora do padrão', (t) async {
+      await _montar(t, tamanho: tamanho, windows: false);
+      final situacao = find.byType(Segmentado<String>);
+      expect(situacao, findsOneWidget);
+      expect(t.widget<Segmentado<String>>(situacao).compacto, isTrue);
+      await t.ensureVisible(find.byKey(const Key('busca-lotes')));
+      await t.pumpAndSettle();
+      // o título cabe inteiro: Registrar venda vira ícone no celular
+      final titulo = t.renderObject<RenderParagraph>(
+        find.text('Ativos comprados'),
+      );
+      expect(titulo.didExceedMaxLines, isFalse);
+      expect(find.byTooltip('Registrar venda'), findsOneWidget);
+      // busca na linha de baixo, ocupando o que sobra dos ícones
+      final busca = find.byKey(const Key('busca-lotes'));
+      final tipo = find.byKey(const Key('chip-lotes-tipo'));
+      final ordem = find.byKey(const Key('chip-lotes-ordem'));
+      expect(t.getTopLeft(busca).dy, greaterThan(t.getBottomLeft(situacao).dy));
+      expect(t.getSize(busca).width, greaterThan(150));
+      expect(t.getCenter(tipo).dy, moreOrLessEquals(t.getCenter(busca).dy));
+      expect(t.getCenter(ordem).dy, moreOrLessEquals(t.getCenter(busca).dy));
+      expect(t.getTopRight(ordem).dx, lessThanOrEqualTo(360 - 16 + 0.5));
+      expect(find.byTooltip('Tipo'), findsWidgets);
+      expect(find.byTooltip('Ordenar'), findsWidgets);
+      expect(_ponto('chip-lotes-tipo'), findsNothing);
+      expect(_ponto('chip-lotes-ordem'), findsNothing);
+
+      await t.tap(tipo);
+      await t.pumpAndSettle();
+      await t.tap(_item('Ação'));
+      await t.pumpAndSettle();
+      expect(_ponto('chip-lotes-tipo'), findsOneWidget);
+      expect(_ponto('chip-lotes-ordem'), findsNothing);
+
+      await t.ensureVisible(ordem);
+      await t.pumpAndSettle();
+      await _inverter(t, 'lotes');
+      expect(_ponto('chip-lotes-ordem'), findsOneWidget);
+    });
+
+    testWidgets('a lista termina com folga para o + não cobrir o último '
+        'cartão', (t) async {
+      final s = ServicosFalsos();
+      s.visoes['2026-10'] = visaoExemplo(_mesComVendido());
+      await _montar(t, servicos: s, tamanho: tamanho, windows: false);
+      final pos = t
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position;
+      for (var i = 0; i < 4; i++) {
+        pos.jumpTo(pos.maxScrollExtent);
+        await t.pumpAndSettle();
+      }
+      final ultimo = find.byWidgetPredicate(
+        (w) => w.key is Key && w.key.toString().contains('cartao-venda-'),
+      );
+      final fim = t.getBottomLeft(ultimo.last).dy;
+      expect(tamanho.height - fim, greaterThanOrEqualTo(88));
+      expect(
+        fim,
+        lessThanOrEqualTo(t.getTopLeft(find.byType(FloatingActionButton)).dy),
+      );
+    });
+  });
 
   Mes mesComGrupo() {
     final base = mesAbertoExemplo();
@@ -732,7 +1014,7 @@ void main() {
     );
     await _montar(t, servicos: s);
     for (final b in [
-      '+  Novo ativo',
+      'Novo ativo',
       'Registrar venda',
       'Editar',
       'Excluir',
@@ -751,7 +1033,7 @@ void main() {
     final s = await _montar(t);
     await _estado(t).trocarVisao('ana@exemplo.com');
     await t.pumpAndSettle();
-    for (final b in ['+  Novo ativo', 'Excluir', 'Editar venda']) {
+    for (final b in ['Novo ativo', 'Excluir', 'Editar venda']) {
       expect(_habilitado(t, b), isFalse, reason: b);
     }
     await _duploToque(t, find.byKey(const Key('linha-L2')));
@@ -778,15 +1060,13 @@ void main() {
       erroLeitura: 'Mês ilegível.',
     );
     await _montar(t, servicos: s);
-    expect(_habilitado(t, '+  Novo ativo'), isFalse);
+    expect(_habilitado(t, 'Novo ativo'), isFalse);
   });
 
   testWidgets('seleção invisível pelo filtro some: Excluir avisa e não chama '
       'o serviço', (t) async {
     final s = await _montar(t);
     await _selecionar(t, 'L2'); // VALE3
-    await t.tap(find.byTooltip('Buscar ticker').first);
-    await t.pumpAndSettle();
     await t.enterText(find.byKey(const Key('busca-lotes')), 'petr');
     await t.pumpAndSettle();
     expect(find.byKey(const Key('linha-L2')), findsNothing);
@@ -817,7 +1097,7 @@ void main() {
     expect(_chamadasA(s, 'excluirVenda'), 0);
   });
 
-  testWidgets('expandido: o chip Ordenar vale depois do clique no título', (
+  testWidgets('expandido: o Ordenar vale depois do clique no título', (
     t,
   ) async {
     await _montar(t);
@@ -833,8 +1113,7 @@ void main() {
     expect(_tituloLotes('TICKER ↕'), findsOneWidget);
     expect(_y(t, 'PETR4') < _y(t, 'AAPL34'), isTrue);
     expect(_y(t, 'AAPL34') < _y(t, 'VALE3'), isTrue);
-    await t.tap(find.byKey(const Key('inverter-lotes')));
-    await t.pumpAndSettle();
+    await _inverter(t, 'lotes');
     expect(_y(t, 'VALE3') < _y(t, 'AAPL34'), isTrue);
   });
 
@@ -986,6 +1265,6 @@ void main() {
     await t.tap(find.text('OK'));
     await t.pumpAndSettle();
     expect(_habilitado(t, 'Excluir'), isTrue);
-    expect(_habilitado(t, '+  Novo ativo'), isTrue);
+    expect(_habilitado(t, 'Novo ativo'), isTrue);
   });
 }

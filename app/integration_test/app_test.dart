@@ -143,8 +143,8 @@ void main() {
 
     // compra nova: interface -> isolate -> disco -> interface
     await t.tap(_naLateral('Apuração / DARF'));
-    await ate(t, find.text('+  Novo ativo'));
-    await t.tap(find.text('+  Novo ativo'));
+    await ate(t, find.text('Novo ativo'));
+    await t.tap(find.text('Novo ativo'));
     await ate(t, find.byKey(const ValueKey('ticker')));
     await t.enterText(find.byKey(const ValueKey('ticker')), 'wege3');
     await t.enterText(find.byKey(const ValueKey('qtd')), '10');

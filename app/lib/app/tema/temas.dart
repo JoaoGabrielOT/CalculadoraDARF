@@ -381,7 +381,14 @@ ThemeData _montar(
                 : c.bordaCampo,
           ),
         ),
-        textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 13)),
+        // a família vai junto: este estilo substitui o padrão, não se soma
+        textStyle: const WidgetStatePropertyAll(
+          TextStyle(
+            fontSize: 13,
+            fontFamily: 'Roboto',
+            fontFamilyFallback: _simbolos,
+          ),
+        ),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(

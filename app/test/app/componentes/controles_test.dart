@@ -192,6 +192,30 @@ void main() {
       await t.tap(find.text('Dois'));
       expect(v, 2);
     });
+    testWidgets('rótulo usa a fonte do app (Roboto)', (t) async {
+      await montarComponente(
+        t,
+        Segmentado<int>(opcoes: const [(1, 'Um')], valor: 1, aoMudar: (_) {}),
+      );
+      final estilo = DefaultTextStyle.of(t.element(find.text('Um'))).style;
+      expect(estilo.fontFamily, 'Roboto');
+    });
+    testWidgets('tocar na opção já escolhida também chama aoMudar', (t) async {
+      final log = <int>[];
+      await montarComponente(
+        t,
+        Segmentado<int>(
+          opcoes: const [(1, 'Um'), (2, 'Dois')],
+          valor: 1,
+          aoMudar: log.add,
+        ),
+      );
+      await t.tap(find.text('Um'));
+      await t.pumpAndSettle();
+      expect(log, [1]);
+      // continua escolhida (o valor vem de fora)
+      expect(find.byIcon(Icons.check), findsOneWidget);
+    });
     testWidgets('compacto não mostra o check; normal mostra', (t) async {
       await montarComponente(
         t,
@@ -437,6 +461,40 @@ void main() {
     await t.tap(find.text('Beta'));
     await t.pumpAndSettle();
     expect(v, 'b');
+  });
+
+  testWidgets('só ícone com ativo desenha o ponto (BotaoMenu e BotaoOrdenar)', (
+    t,
+  ) async {
+    await montarComponente(
+      t,
+      Row(
+        children: [
+          BotaoMenu<String>(
+            icone: Icons.filter_list,
+            rotulo: 'Tipo',
+            itens: const [('a', 'Alfa')],
+            aoEscolher: (_) {},
+            soIcone: true,
+            ativo: true,
+          ),
+          BotaoOrdenar<String>(
+            campos: const [('a', 'Alfa')],
+            campo: 'a',
+            aoCampo: (_) {},
+            soIcone: true,
+          ),
+        ],
+      ),
+    );
+    expect(find.byKey(const ValueKey('ponto-marcado')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(BotaoMenu<String>),
+        matching: find.byKey(const ValueKey('ponto-marcado')),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Selo e LegendaPonto mostram o texto', (t) async {

@@ -1,5 +1,7 @@
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
+import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
@@ -86,10 +88,16 @@ Future<void> _tocar(WidgetTester t, String texto) async {
   await t.pumpAndSettle();
 }
 
-Finder _botao(String texto) => find.ancestor(
-  of: find.text(texto),
-  matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
-);
+/// Editar e Excluir são só ícone (o tooltip é o rótulo antigo).
+Finder _botao(String rotulo) => const {'Editar', 'Excluir'}.contains(rotulo)
+    ? find.descendant(
+        of: find.byTooltip(rotulo),
+        matching: find.byType(IconButton),
+      )
+    : find.ancestor(
+        of: find.text(rotulo),
+        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+      );
 
 /// Abre o ativo e o "Mais detalhes" dele.
 Future<void> _abrirDetalhes(WidgetTester t, String ticker) async {
@@ -102,8 +110,12 @@ Future<void> _abrirDetalhes(WidgetTester t, String ticker) async {
   await t.pumpAndSettle();
 }
 
-bool _habilitado(WidgetTester t, String texto) =>
-    t.widget<ButtonStyleButton>(_botao(texto)).onPressed != null;
+bool _habilitado(WidgetTester t, String rotulo) =>
+    switch (t.widget(_botao(rotulo))) {
+      final ButtonStyleButton b => b.onPressed != null,
+      final IconButton b => b.onPressed != null,
+      final w => throw StateError('botão inesperado: $w'),
+    };
 
 void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: hojeExemplo));
@@ -246,6 +258,40 @@ void main() {
     expect(_habilitado(t, 'Registrar venda'), isTrue);
     expect(_habilitado(t, 'Editar'), isTrue);
     expect(_habilitado(t, 'Excluir'), isTrue);
+  });
+
+  for (final (nome, tamanho, windows) in [
+    ('PC', _pc, true),
+    ('celular', const Size(360, 800), false),
+  ]) {
+    testWidgets('posição ($nome): sem filtros nem ações, com o segmentado e o '
+        'texto da cotação', (t) async {
+      await _montar(t, tamanho: tamanho, windows: windows);
+      await _tocar(t, 'Posição em 28/10/2026');
+      expect(
+        t.widget(find.byKey(const Key('seletor-posicao'))),
+        isA<Segmentado<ModoLista>>(),
+      );
+      // os filtros que restam são os das vendas
+      expect(find.byKey(const Key('busca-lotes')), findsNothing);
+      expect(find.byKey(const Key('chip-lotes-tipo')), findsNothing);
+      expect(find.byKey(const Key('chip-lotes-ordem')), findsNothing);
+      expect(find.byType(Segmentado<String>), findsNothing);
+      expect(find.byTooltip('Editar'), findsNothing);
+      expect(find.text('Cotação atual · Yahoo · 07/11 14:05'), findsOneWidget);
+    });
+  }
+
+  testWidgets('celular: o tipo do ativo na posição é um Selo', (t) async {
+    await _montar(t, tamanho: _celular, windows: false);
+    await _tocar(t, 'Posição em 28/10/2026');
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('ativo-PETR4')),
+        matching: find.widgetWithText(Selo, 'Ação'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('carteira atual de um mês histórico mostra os lotes do mês '

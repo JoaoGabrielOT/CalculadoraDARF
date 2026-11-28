@@ -10,8 +10,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' show Cartao;
 import '../../componentes/carregando.dart';
+import '../../componentes/controles.dart';
 import '../../estado/estado_app.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
@@ -117,10 +118,7 @@ class _Expandido extends StatelessWidget {
             _Progresso(controle.carregando || controle.verificando),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _Barra(controle: controle, compacto: false),
-              ),
+              child: _Barra(controle: controle, compacto: false),
             ),
             _Avisos(controle),
             if (visao == null)
@@ -311,8 +309,8 @@ class _Avisos extends StatelessWidget {
   }
 }
 
-/// Barra da tela (py:1279-1295; o seletor de dados fica na casca).
-/// Expandido: Mês, selo e Fechar mês. Compacto: mês, selo e menu.
+/// Barra da tela (py:1279-1295; o seletor de dados fica na casca): ◂ mês ▸ e
+/// o selo à esquerda; Fechar mês na ponta direita (PC) ou no menu (celular).
 class _Barra extends StatelessWidget {
   const _Barra({required this.controle, required this.compacto});
 
@@ -321,53 +319,52 @@ class _Barra extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
     final estado = context.watch<EstadoApp>();
     final visao = controle.visao;
     final pode = controle.podeFechar;
-    final botaoMes = OutlinedButton(
-      onPressed: () => controle.escolher(context),
-      child: Text('${fmtMes(estado.mes)}  ▾'),
+    final mes = SeletorMes(
+      mes: estado.mes,
+      maximo: ambiente.hoje().substring(0, 7),
+      aoMudar: estado.trocarMes,
+      aoAbrir: () => controle.escolher(context),
     );
     final selo = visao == null ? null : _Selo(visao);
-    if (compacto) {
-      return Row(
-        spacing: 8,
-        children: [
-          botaoMes,
-          ?selo,
-          const Spacer(),
-          if (visao != null && visao.editavel)
-            PopupMenuButton<String>(
-              tooltip: 'Mais ações',
-              enabled: pode,
-              onSelected: (_) => controle.fecharMes(context),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'fechar', child: Text('Fechar mês')),
-              ],
-            ),
-        ],
-      );
-    }
-    return Wrap(
-      spacing: 12,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    final inicio = Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 8,
+      children: [mes, ?selo],
+    );
+    return Row(
+      spacing: 8,
       children: [
-        Text(
-          'Mês',
-          style: TextStyle(
-            color: c.textoSuave,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
+        if (compacto)
+          // abaixo de 360 px, o mês e o selo encolhem em vez de estourar
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: inicio,
+            ),
+          )
+        else ...[
+          inicio,
+          const Spacer(),
+        ],
+        if (!compacto)
+          BotaoPrincipal(
+            icone: Icons.lock,
+            rotulo: 'Fechar mês',
+            onPressed: pode ? () => controle.fecharMes(context) : null,
+          )
+        else if (visao != null && visao.editavel)
+          PopupMenuButton<String>(
+            tooltip: 'Mais ações',
+            enabled: pode,
+            onSelected: (_) => controle.fecharMes(context),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'fechar', child: Text('Fechar mês')),
+            ],
           ),
-        ),
-        botaoMes,
-        ?selo,
-        FilledButton(
-          onPressed: pode ? () => controle.fecharMes(context) : null,
-          child: const Text('Fechar mês'),
-        ),
       ],
     );
   }
@@ -383,10 +380,10 @@ class _Selo extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     if (visao.somenteLeitura) {
-      return Pilula(texto: 'Somente leitura', cor: c.aviso);
+      return Selo(texto: 'Somente leitura', cor: c.aviso);
     }
-    if (visao.dados.fechado) return const Pilula(texto: 'Fechado');
-    return Pilula(texto: '● Aberto', fundo: c.seloAltaFundo, cor: c.alta);
+    if (visao.dados.fechado) return Selo(texto: 'Fechado', cor: c.textoSuave);
+    return Selo(texto: 'Aberto', cor: c.alta, ponto: true);
   }
 }
 
@@ -433,31 +430,11 @@ class _CartaoLink extends StatelessWidget {
 }
 
 /// Ativos comprados e Vendas do mês, para o parâmetro `conteudo`. Expandido:
-/// duas tabelas numa lista rolável (com menos de [larguraMinimaListas] px, as
-/// colunas não se espremem: a área rola na horizontal); compacto: cartões (a
-/// rolagem é da tela).
-const larguraMinimaListas = 1200.0;
-
-Widget listasApuracao(BuildContext c) {
-  const lotes = ListaAtivos();
-  const vendas = ListaVendas();
-  return LayoutBuilder(
-    builder: (context, caixa) {
-      final lista = ListView(
-        children: const [lotes, SizedBox(height: 16), vendas],
-      );
-      if (caixa.maxWidth >= larguraMinimaListas) return lista;
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width: larguraMinimaListas,
-          height: caixa.maxHeight,
-          child: lista,
-        ),
-      );
-    },
-  );
-}
+/// os dois cartões numa lista rolável (estreita, só as tabelas rolam na
+/// horizontal: [RolagemTabela]); compacto: cartões (a rolagem é da tela).
+Widget listasApuracao(BuildContext c) => ListView(
+  children: const [ListaAtivos(), SizedBox(height: 16), ListaVendas()],
+);
 
 /// Conteúdo do celular: cartões das compras e vendas, montados sob demanda.
 List<Widget> listasSliversApuracao(BuildContext c) => const [

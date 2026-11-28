@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:calculadoradarf/app/componentes/campo_data.dart';
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
@@ -61,6 +62,17 @@ EstadoApp _estado(WidgetTester t) =>
     Provider.of<EstadoApp>(t.element(find.byType(TelaApuracao)), listen: false);
 
 Finder get _botaoFechar => find.widgetWithText(FilledButton, 'Fechar mês');
+
+/// O mês no centro do seletor ◂ mês ▸ da barra.
+Finder _mes(String texto) =>
+    find.descendant(of: find.byType(SeletorMes), matching: find.text(texto));
+
+IconButton _seta(WidgetTester t, String tooltip) => t.widget<IconButton>(
+  find.descendant(
+    of: find.byTooltip(tooltip),
+    matching: find.byType(IconButton),
+  ),
+);
 
 bool _habilitado(Finder f, WidgetTester t) {
   final w = t.widget(f);
@@ -237,9 +249,64 @@ void main() {
   testWidgets('selo e botões por estado: aberto, fechado, amigo', (t) async {
     final s = ServicosFalsos();
     await _montar(t, servicos: s);
-    expect(find.text('● Aberto'), findsOneWidget);
-    expect(find.text('10/2026  ▾'), findsOneWidget);
+    expect(find.text('Aberto'), findsOneWidget);
+    expect(_mes('10/2026'), findsOneWidget);
     expect(_habilitado(_botaoFechar, t), isTrue);
+  });
+
+  testWidgets('barra PC: seletor de mês, selo e Fechar mês principal na '
+      'ponta direita', (t) async {
+    await _montar(t);
+    expect(find.byType(SeletorMes), findsOneWidget);
+    final selo = t.widget<Selo>(find.widgetWithText(Selo, 'Aberto'));
+    expect(selo.ponto, isTrue);
+    final fechar = find.widgetWithText(BotaoPrincipal, 'Fechar mês');
+    expect(fechar, findsOneWidget);
+    expect(t.widget<BotaoPrincipal>(fechar).icone, Icons.lock);
+    // seletor e selo à esquerda; o botão na ponta direita, na mesma linha
+    expect(
+      t.getTopLeft(find.byType(SeletorMes)).dx,
+      lessThan(t.getTopLeft(find.byType(Selo)).dx),
+    );
+    expect(
+      t.getCenter(fechar).dy,
+      moreOrLessEquals(t.getCenter(find.byType(SeletorMes)).dy, epsilon: 1),
+    );
+    expect(t.getTopRight(fechar).dx, greaterThan(1000));
+    expect(find.text('Mês'), findsNothing);
+  });
+
+  testWidgets('barra PC: ◂ vai ao mês anterior; ▸ fica desabilitado no mês '
+      'atual', (t) async {
+    final s = await _montar(t);
+    expect(_seta(t, 'Próximo mês').onPressed, isNull);
+    await t.tap(find.byTooltip('Mês anterior'));
+    await t.pumpAndSettle();
+    expect(s.chamadas, contains('carregarMes(2026-09, null)'));
+    expect(_mes('09/2026'), findsOneWidget);
+    expect(find.text('Fechado'), findsOneWidget);
+    expect(_seta(t, 'Próximo mês').onPressed, isNotNull);
+    await t.tap(find.byTooltip('Próximo mês'));
+    await t.pumpAndSettle();
+    expect(_mes('10/2026'), findsOneWidget);
+  });
+
+  testWidgets('barra celular: seletor de mês, selo e menu com Fechar mês', (
+    t,
+  ) async {
+    await _montar(t, tamanho: _celular);
+    expect(find.byType(SeletorMes), findsOneWidget);
+    expect(find.widgetWithText(Selo, 'Aberto'), findsOneWidget);
+    expect(find.byType(BotaoPrincipal), findsNothing);
+    final menu = find.byTooltip('Mais ações');
+    expect(menu, findsOneWidget);
+    expect(
+      t.getCenter(menu).dy,
+      moreOrLessEquals(t.getCenter(find.byType(SeletorMes)).dy, epsilon: 1),
+    );
+    await t.tap(menu);
+    await t.pumpAndSettle();
+    expect(find.text('Fechar mês'), findsOneWidget);
   });
 
   testWidgets('selo e botões: mês fechado', (t) async {
@@ -262,21 +329,21 @@ void main() {
     t,
   ) async {
     final s = await _montar(t);
-    await t.tap(find.text('10/2026  ▾'));
+    await t.tap(_mes('10/2026'));
     await t.pumpAndSettle();
     expect(find.text('2026'), findsOneWidget);
     await t.tap(find.text('Set'));
     await t.pumpAndSettle();
     expect(s.chamadas, contains('carregarMes(2026-09, null)'));
-    expect(find.text('09/2026  ▾'), findsOneWidget);
+    expect(_mes('09/2026'), findsOneWidget);
     expect(find.text('Fechado'), findsOneWidget);
 
-    await t.tap(find.text('09/2026  ▾'));
+    await t.tap(_mes('09/2026'));
     await t.pumpAndSettle();
     await t.tap(find.text('Mês atual'));
     await t.pumpAndSettle();
-    expect(find.text('10/2026  ▾'), findsOneWidget);
-    expect(find.text('● Aberto'), findsOneWidget);
+    expect(_mes('10/2026'), findsOneWidget);
+    expect(find.text('Aberto'), findsOneWidget);
   });
 
   group('Fechar mês', () {
@@ -636,7 +703,7 @@ void main() {
       findsOneWidget,
     );
     expect(_habilitado(_botaoFechar, t), isFalse);
-    await t.tap(find.text('10/2026  ▾'));
+    await t.tap(_mes('10/2026'));
     await t.pumpAndSettle();
     await t.tap(find.text('Set'));
     await t.pumpAndSettle();
@@ -653,7 +720,7 @@ void main() {
     await _montar(t, servicos: s);
     expect(find.text('Arquivo ilegível.'), findsOneWidget);
     s.erros.clear();
-    await t.tap(find.text('10/2026  ▾'));
+    await t.tap(_mes('10/2026'));
     await t.pumpAndSettle();
     await t.tap(find.text('Set'));
     await t.pumpAndSettle();
@@ -776,8 +843,16 @@ void main() {
         find.ancestor(of: texto, matching: find.byType(InkWell)),
         findsNothing,
       );
-      // só o cartão de saldo leva a outra tela e mostra a seta
-      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+      // só o cartão de saldo leva a outra tela e mostra a seta (a outra é o
+      // próximo mês da barra)
+      expect(
+        find.descendant(
+          of: find.byType(SeletorMes),
+          matching: find.byIcon(Icons.chevron_right),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
     });
 
     testWidgets('cartão de saldo mostra o caixa e leva à aba Caixa', (t) async {

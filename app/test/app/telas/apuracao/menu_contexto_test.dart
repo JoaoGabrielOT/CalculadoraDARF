@@ -53,7 +53,7 @@ Future<void> _direito(WidgetTester t, Finder f) async {
 Finder _linha(String id) => find.byKey(Key('linha-$id'));
 
 /// O selo do mês, na barra: área sem menu próprio (cai no menu geral).
-Finder get _seloMes => find.text('● Aberto');
+Finder get _seloMes => find.text('Aberto');
 
 Finder _item(String texto) => find.ancestor(
   of: find.text(texto),

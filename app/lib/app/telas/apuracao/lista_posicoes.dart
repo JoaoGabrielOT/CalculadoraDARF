@@ -10,7 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' show Cartao;
+import '../../componentes/controles.dart';
 import '../../componentes/sinal.dart';
 import '../../regras/apresentacao.dart';
 import '../../servicos/api.dart';
@@ -64,8 +65,7 @@ class ListaPosicoes extends StatelessWidget {
           contagemKey: const Key('contagem-posicoes'),
           contagem: p == null ? '…' : '${itens.length}',
         ),
-        const SeletorLista(),
-        _Cotacao(controle: controle),
+        SeletorLista(cotacao: _Cotacao(controle: controle)),
       ],
     );
     final Widget aviso = Text(
@@ -119,8 +119,7 @@ class ListaPosicoes extends StatelessWidget {
               child: aviso,
             )
           else
-            // largura limitada: com a área rolando na horizontal (< 1200 px)
-            // as colunas não se perdem além da borda
+            // largura limitada: num cartão largo as colunas não se espalham
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 700),
               child: Column(
@@ -310,7 +309,7 @@ class _LinhaAtivoState extends State<_LinhaAtivo> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Pilula(texto: a.tipo),
+                      Selo(texto: a.tipo, cor: c.textoSuave),
                       Expanded(
                         child: Text(
                           textoAberto,
