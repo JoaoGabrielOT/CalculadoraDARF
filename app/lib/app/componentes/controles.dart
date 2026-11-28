@@ -1,0 +1,652 @@
+// Kit de controles: botões, escolha única, busca, menus, seletor de mês e
+// selos. Altura de 40 px no PC e 48 px no celular; cores só pelos tokens de
+// `CoresApp`. Os nomes `Selo` daqui e de cartao.dart coexistem até as telas
+// migrarem (não importar os dois no mesmo arquivo).
+
+import 'package:flutter/material.dart';
+
+import '../../nucleo/datas.dart';
+import '../tema/cores_app.dart';
+import '../tema/layout.dart';
+
+double _altura(BuildContext context) => expandido(context) ? 40.0 : 48.0;
+
+/// Altura fixa, sem a área de toque extra do Material (que somaria 8 px).
+ButtonStyle _estilo(BuildContext context) => ButtonStyle(
+  fixedSize: WidgetStatePropertyAll(Size.fromHeight(_altura(context))),
+  minimumSize: WidgetStatePropertyAll(Size(0, _altura(context))),
+  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  visualDensity: VisualDensity.standard,
+);
+
+class BotaoPrincipal extends StatelessWidget {
+  const BotaoPrincipal({
+    super.key,
+    required this.icone,
+    required this.rotulo,
+    this.onPressed,
+  });
+
+  final IconData icone;
+  final String rotulo;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => FilledButton.icon(
+    style: _estilo(context),
+    onPressed: onPressed,
+    icon: Icon(icone, size: 18),
+    label: Text(rotulo),
+  );
+}
+
+class BotaoSecundario extends StatelessWidget {
+  const BotaoSecundario({
+    super.key,
+    required this.icone,
+    required this.rotulo,
+    this.onPressed,
+    this.compacto = false,
+  });
+
+  final IconData icone;
+  final String rotulo;
+  final VoidCallback? onPressed;
+  final bool compacto;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    style: _estilo(context).copyWith(
+      padding: compacto
+          ? const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10))
+          : null,
+    ),
+    onPressed: onPressed,
+    icon: Icon(icone, size: 18),
+    label: Text(rotulo),
+  );
+}
+
+/// Botão só de ícone: o tooltip serve também de rótulo para o leitor de tela.
+class BotaoIcone extends StatelessWidget {
+  const BotaoIcone({
+    super.key,
+    required this.icone,
+    required this.tooltip,
+    this.onPressed,
+    this.destrutivo = false,
+    this.marcado = false,
+  });
+
+  final IconData icone;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool destrutivo;
+
+  /// Ponto no canto, para um filtro ativo.
+  final bool marcado;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final h = _altura(context);
+    final botao = IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(icone, size: 20, color: destrutivo ? c.queda : null),
+      style: ButtonStyle(
+        fixedSize: WidgetStatePropertyAll(Size.square(h)),
+        minimumSize: WidgetStatePropertyAll(Size.square(h)),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
+      ),
+    );
+    // O tooltip do Material só vira `tooltip` semântico, não rótulo: o
+    // rótulo explícito faz o leitor de tela falar o nome do botão.
+    final comRotulo = Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: tooltip,
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: botao,
+    );
+    if (!marcado) return comRotulo;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        comRotulo,
+        Positioned(
+          top: 8,
+          right: 8,
+          child: ExcludeSemantics(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                key: const ValueKey('ponto-marcado'),
+                decoration: BoxDecoration(
+                  color: c.destaque,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: c.fundo, width: 1.5),
+                ),
+                child: const SizedBox.square(dimension: 9),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Ação de baixa ênfase (texto com ícone); o rótulo longo vira reticências.
+class BotaoLeve extends StatelessWidget {
+  const BotaoLeve({
+    super.key,
+    required this.icone,
+    required this.rotulo,
+    this.onPressed,
+    this.cor,
+    this.larguraMaxRotulo = 180,
+  });
+
+  final IconData icone;
+  final String rotulo;
+  final VoidCallback? onPressed;
+  final Color? cor;
+  final double larguraMaxRotulo;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+    style: _estilo(context).copyWith(
+      foregroundColor: cor == null ? null : WidgetStatePropertyAll(cor),
+    ),
+    onPressed: onPressed,
+    icon: Icon(icone, size: 18),
+    label: ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: larguraMaxRotulo),
+      child: Text(rotulo, maxLines: 1, overflow: TextOverflow.ellipsis),
+    ),
+  );
+}
+
+/// Escolha única entre poucas opções, lado a lado. [compacto] tira o ✓ e
+/// aperta a margem (cabe mais opções em 360 px).
+class Segmentado<T> extends StatelessWidget {
+  const Segmentado({
+    super.key,
+    required this.opcoes,
+    required this.valor,
+    required this.aoMudar,
+    this.compacto = false,
+    this.chaveOpcao,
+  });
+
+  final List<(T, String)> opcoes;
+  final T valor;
+  final ValueChanged<T> aoMudar;
+  final bool compacto;
+  final Key Function(T)? chaveOpcao;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: _altura(context),
+    child: SegmentedButton<T>(
+      showSelectedIcon: !compacto,
+      // O SegmentedButton ignora fixedSize: a altura é 40 mais o ajuste da
+      // densidade vertical (2 = +8 px, o que dá 48 no celular).
+      style: ButtonStyle(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity(vertical: expandido(context) ? 0 : 2),
+        padding: compacto
+            ? const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10))
+            : null,
+      ),
+      segments: [
+        for (final (v, rotulo) in opcoes)
+          ButtonSegment<T>(
+            value: v,
+            label: Text(rotulo, key: chaveOpcao?.call(v)),
+          ),
+      ],
+      selected: {valor},
+      onSelectionChanged: (s) => aoMudar(s.first),
+    ),
+  );
+}
+
+/// Campo de busca com lupa e, havendo texto, botão de limpar.
+class CampoBusca extends StatelessWidget {
+  const CampoBusca({
+    super.key,
+    required this.controller,
+    required this.dica,
+    this.aoMudar,
+    this.largura,
+  });
+
+  final TextEditingController controller;
+  final String dica;
+  final ValueChanged<String>? aoMudar;
+  final double? largura;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = _altura(context);
+    final c = CoresApp.de(context);
+    final restricao = BoxConstraints.tightFor(width: h, height: h);
+    return SizedBox(
+      width: largura,
+      height: h,
+      child: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) => TextField(
+          controller: controller,
+          onChanged: aoMudar,
+          textAlignVertical: TextAlignVertical.center,
+          decoration: InputDecoration(
+            hintText: dica,
+            isDense: true,
+            contentPadding: EdgeInsets.zero,
+            prefixIcon: Icon(Icons.search, size: 20, color: c.textoSuave),
+            prefixIconConstraints: restricao,
+            suffixIconConstraints: restricao,
+            suffixIcon: controller.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Limpar',
+                    icon: const Icon(Icons.close, size: 18),
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      controller.clear();
+                      aoMudar?.call('');
+                    },
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Abre um menu ancorado embaixo do widget de [context]. Cada item age pelo
+/// próprio `onTap`; o valor devolvido pelo menu não é usado.
+Future<void> _abrirMenu<T>(
+  BuildContext context,
+  List<PopupMenuEntry<T>> entradas,
+) {
+  final caixa = context.findRenderObject()! as RenderBox;
+  final sobreposicao =
+      Overlay.of(context).context.findRenderObject()! as RenderBox;
+  final topoEsq = caixa.localToGlobal(
+    Offset(0, caixa.size.height),
+    ancestor: sobreposicao,
+  );
+  final baixoDir = caixa.localToGlobal(
+    caixa.size.bottomRight(Offset.zero),
+    ancestor: sobreposicao,
+  );
+  return showMenu<T>(
+    context: context,
+    position: RelativeRect.fromRect(
+      Rect.fromPoints(topoEsq, baixoDir),
+      Offset.zero & sobreposicao.size,
+    ),
+    items: entradas,
+  );
+}
+
+PopupMenuItem<T> _item<T>(
+  T valor,
+  String texto, {
+  required bool marcado,
+  required VoidCallback aoTocar,
+  Key? chave,
+}) => PopupMenuItem<T>(
+  key: chave,
+  value: valor,
+  onTap: aoTocar,
+  child: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      SizedBox(
+        width: 22,
+        child: marcado ? const Icon(Icons.check, size: 16) : null,
+      ),
+      Flexible(child: Text(texto)),
+    ],
+  ),
+);
+
+/// Botão que abre uma lista de opções; [marcado] leva o ✓.
+class BotaoMenu<T> extends StatelessWidget {
+  const BotaoMenu({
+    super.key,
+    required this.icone,
+    required this.rotulo,
+    required this.itens,
+    required this.aoEscolher,
+    this.marcado,
+    this.soIcone = false,
+  });
+
+  final IconData icone;
+  final String rotulo;
+  final List<(T, String)> itens;
+  final ValueChanged<T> aoEscolher;
+  final T? marcado;
+  final bool soIcone;
+
+  @override
+  Widget build(BuildContext context) => _GatilhoMenu<T>(
+    icone: icone,
+    rotulo: rotulo,
+    tooltip: rotulo,
+    soIcone: soIcone,
+    entradas: () => [
+      for (final (v, texto) in itens)
+        _item<T>(v, texto, marcado: v == marcado, aoTocar: () => aoEscolher(v)),
+    ],
+  );
+}
+
+/// Ordenação: o rótulo mostra o campo e a direção; o menu troca o campo e,
+/// havendo [aoInverter], inverte a direção.
+class BotaoOrdenar<T> extends StatelessWidget {
+  const BotaoOrdenar({
+    super.key,
+    required this.campos,
+    required this.campo,
+    this.desc = false,
+    required this.aoCampo,
+    this.aoInverter,
+    this.soIcone = false,
+    this.chaveItem,
+    this.chaveInverter,
+  });
+
+  final List<(T, String)> campos;
+  final T campo;
+  final bool desc;
+  final ValueChanged<T> aoCampo;
+  final VoidCallback? aoInverter;
+  final bool soIcone;
+  final Key Function(T)? chaveItem;
+  final Key? chaveInverter;
+
+  @override
+  Widget build(BuildContext context) {
+    final nome = campos.firstWhere((p) => p.$1 == campo).$2;
+    final seta = aoInverter == null ? '' : (desc ? ' ↓' : ' ↑');
+    return _GatilhoMenu<T>(
+      icone: Icons.swap_vert,
+      rotulo: '$nome$seta',
+      tooltip: 'Ordenar',
+      soIcone: soIcone,
+      entradas: () => [
+        for (final (v, texto) in campos)
+          _item<T>(
+            v,
+            texto,
+            marcado: v == campo,
+            aoTocar: () => aoCampo(v),
+            chave: chaveItem?.call(v),
+          ),
+        if (aoInverter != null) ...[
+          const PopupMenuDivider(),
+          _item<T>(
+            campo,
+            desc ? 'Crescente ↑' : 'Decrescente ↓',
+            marcado: false,
+            aoTocar: aoInverter!,
+            chave: chaveInverter,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _GatilhoMenu<T> extends StatelessWidget {
+  const _GatilhoMenu({
+    required this.icone,
+    required this.rotulo,
+    required this.tooltip,
+    required this.soIcone,
+    required this.entradas,
+  });
+
+  final IconData icone;
+  final String rotulo;
+  final String tooltip;
+  final bool soIcone;
+  final List<PopupMenuEntry<T>> Function() entradas;
+
+  @override
+  Widget build(BuildContext context) {
+    // O Builder faz o menu ancorar no botão, não no widget inteiro.
+    return Builder(
+      builder: (ctx) {
+        void abrir() => _abrirMenu<T>(ctx, entradas());
+        if (soIcone) {
+          return BotaoIcone(icone: icone, tooltip: tooltip, onPressed: abrir);
+        }
+        return Tooltip(
+          message: tooltip,
+          child: OutlinedButton.icon(
+            style: _estilo(ctx),
+            onPressed: abrir,
+            icon: Icon(icone, size: 18),
+            label: Text(rotulo),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Caixa contornada com rótulo flutuante que abre uma lista; [aoMudar] nulo
+/// deixa o campo desabilitado.
+class SeletorCaixa<T> extends StatelessWidget {
+  const SeletorCaixa({
+    super.key,
+    required this.rotulo,
+    required this.valor,
+    required this.itens,
+    this.aoMudar,
+    this.largura,
+  });
+
+  final String rotulo;
+  final T valor;
+  final List<(T, String)> itens;
+  final ValueChanged<T>? aoMudar;
+  final double? largura;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = _altura(context);
+    final c = CoresApp.de(context);
+    final ativo = aoMudar != null;
+    final atual = itens.where((p) => p.$1 == valor).map((p) => p.$2);
+    return SizedBox(
+      width: largura,
+      height: h,
+      child: Builder(
+        builder: (ctx) => InkWell(
+          borderRadius: BorderRadius.circular(c.raioCartao),
+          onTap: ativo
+              ? () => _abrirMenu<T>(ctx, [
+                  for (final (v, texto) in itens)
+                    _item<T>(
+                      v,
+                      texto,
+                      marcado: v == valor,
+                      aoTocar: () => aoMudar!(v),
+                    ),
+                ])
+              : null,
+          child: InputDecorator(
+            isEmpty: false,
+            isFocused: false,
+            decoration: InputDecoration(
+              labelText: rotulo,
+              enabled: ativo,
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: (h - 20) / 2,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    atual.isEmpty ? '' : atual.first,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(Icons.arrow_drop_down, size: 20, color: c.textoSuave),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _somaMes(String mes, int delta) {
+  final p = mes.split('-');
+  final i = int.parse(p[0]) * 12 + int.parse(p[1]) - 1 + delta;
+  return '${(i ~/ 12).toString().padLeft(4, '0')}-'
+      '${(i % 12 + 1).toString().padLeft(2, '0')}';
+}
+
+/// ◂ mês ▸: as setas andam um mês (`AAAA-MM`); o centro abre a grade.
+class SeletorMes extends StatelessWidget {
+  const SeletorMes({
+    super.key,
+    required this.mes,
+    required this.maximo,
+    required this.aoMudar,
+    required this.aoAbrir,
+  });
+
+  final String mes;
+  final String maximo;
+  final ValueChanged<String> aoMudar;
+  final VoidCallback aoAbrir;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = _altura(context);
+    final noMaximo = mes.compareTo(maximo) >= 0;
+    return SizedBox(
+      height: h,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          BotaoIcone(
+            icone: Icons.chevron_left,
+            tooltip: 'Mês anterior',
+            onPressed: () => aoMudar(_somaMes(mes, -1)),
+          ),
+          TextButton(
+            style: _estilo(context),
+            onPressed: aoAbrir,
+            child: Text(
+              fmtMes(mes),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          BotaoIcone(
+            icone: Icons.chevron_right,
+            tooltip: 'Próximo mês',
+            onPressed: noMaximo ? null : () => aoMudar(_somaMes(mes, 1)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Etiqueta chapada: fundo da [cor] a 18%, texto na [cor], sem borda.
+class Selo extends StatelessWidget {
+  const Selo({
+    super.key,
+    required this.texto,
+    required this.cor,
+    this.icone,
+    this.ponto = false,
+  });
+
+  final String texto;
+  final Color cor;
+  final IconData? icone;
+  final bool ponto;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: cor.withValues(alpha: .18),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (ponto) ...[_Ponto(cor), const SizedBox(width: 6)],
+          if (icone != null) ...[
+            Icon(icone, size: 14, color: cor),
+            const SizedBox(width: 4),
+          ],
+          Flexible(
+            child: Text(
+              texto,
+              style: TextStyle(
+                color: cor,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Legenda não clicável: ponto colorido e texto suave.
+class LegendaPonto extends StatelessWidget {
+  const LegendaPonto({super.key, required this.texto, required this.cor});
+
+  final String texto;
+  final Color cor;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _Ponto(cor),
+      const SizedBox(width: 6),
+      Text(
+        texto,
+        style: TextStyle(color: CoresApp.de(context).textoSuave, fontSize: 12),
+      ),
+    ],
+  );
+}
+
+class _Ponto extends StatelessWidget {
+  const _Ponto(this.cor);
+
+  final Color cor;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(color: cor, shape: BoxShape.circle),
+    child: const SizedBox.square(dimension: 8),
+  );
+}

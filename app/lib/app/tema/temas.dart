@@ -364,6 +364,26 @@ ThemeData _montar(
       shape: formaSemBorda,
       behavior: SnackBarBehavior.floating,
     ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (e) => e.contains(WidgetState.selected)
+              ? c.chipAtivoFundo
+              : Colors.transparent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (e) => e.contains(WidgetState.selected) ? c.chipAtivoTexto : c.texto,
+        ),
+        side: WidgetStateProperty.resolveWith(
+          (e) => BorderSide(
+            color: e.contains(WidgetState.selected)
+                ? (c.chipAtivoBorda ?? c.bordaCampo)
+                : c.bordaCampo,
+          ),
+        ),
+        textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 13)),
+      ),
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: estiloBotao.copyWith(
         backgroundColor: WidgetStatePropertyAll(c.destaque),
