@@ -175,6 +175,12 @@ void main() {
     final campo = find.byKey(const Key('campo-ticker'));
     final mais = find.byTooltip('Adicionar');
     expect(mais, findsOneWidget);
+    expect(
+      t
+          .widget<BotaoIcone>(find.widgetWithIcon(BotaoIcone, Icons.add))
+          .principal,
+      isTrue,
+    );
     expect(t.getSize(campo).height, 48);
     expect(t.getSize(mais), const Size(48, 48));
     expect(t.getCenter(campo).dy, t.getCenter(mais).dy);

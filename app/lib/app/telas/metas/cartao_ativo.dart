@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../../../nucleo/nucleo.dart';
 import '../../servicos/api.dart';
-import '../../componentes/cartao.dart' hide Selo, Pilula;
+import '../../componentes/cartao.dart' hide Pilula;
 import '../../componentes/controles.dart'
     show BotaoPrincipal, BotaoSecundario, SeletorCaixa, Segmentado, Selo;
 import '../../componentes/sinal.dart';
@@ -1104,7 +1104,8 @@ class _BotoesCompra extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, caixa) {
-      if (caixa.maxWidth >= 680) {
+      // o limite cresce com o texto ampliado (rótulos mais largos)
+      if (caixa.maxWidth >= MediaQuery.textScalerOf(context).scale(680)) {
         return Row(
           mainAxisAlignment: MainAxisAlignment.end,
           spacing: 8,

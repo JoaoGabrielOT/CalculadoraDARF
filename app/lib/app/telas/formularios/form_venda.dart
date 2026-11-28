@@ -778,10 +778,8 @@ class _FormVendaState extends State<FormVenda>
     valor: _modo,
     expandir: true,
     compacto: !widget.dialogo,
-    // durante a gravação, tocar não muda o modo
-    aoMudar: (m) {
-      if (!salvando) _mudouModo(m);
-    },
+    // durante a gravação aparece desabilitado e não muda o modo
+    aoMudar: salvando ? null : _mudouModo,
   );
 
   /// Automático com quantidade acima do disponível: a mensagem do núcleo.

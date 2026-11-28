@@ -296,6 +296,28 @@ void main() {
     });
   }
 
+  testWidgets('360 px: título de ~200 caracteres não esconde o selo Nova', (
+    t,
+  ) async {
+    final longo = ('Título enorme da notícia ' * 8).trim();
+    expect(longo.length, greaterThan(190));
+    final s = _servicos(
+      itens: [_n('a1', titulo: longo)],
+      detalhes: {},
+      novas: {'a1'},
+    );
+    await _montar(t, servicos: s, tamanho: const Size(360, 800));
+    final titulo = find.textContaining('Título enorme');
+    expect(t.renderObject<RenderParagraph>(titulo).didExceedMaxLines, isTrue);
+    // cortado com reticências, o selo continua desenhado dentro do título
+    final selo = find.widgetWithText(Selo, 'Nova');
+    expect(selo.hitTestable(), findsOneWidget);
+    final caixa = t.getRect(titulo);
+    final r = t.getRect(selo);
+    expect(r.top, greaterThanOrEqualTo(caixa.top - .5));
+    expect(r.bottom, lessThanOrEqualTo(caixa.bottom + .5));
+  });
+
   testWidgets('celular: Segmentado e SeletorCaixa com a mesma largura', (
     t,
   ) async {

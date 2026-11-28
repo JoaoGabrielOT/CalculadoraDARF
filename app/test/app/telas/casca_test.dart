@@ -202,6 +202,12 @@ void main() {
         matching: find.byType(IconButton),
       );
       expect(t.widget<IconButton>(avatar).onPressed, isNull);
+      // a cor fixa do avatar não apaga sozinha: esmaece como os outros
+      final opaco = find.ancestor(
+        of: find.byType(CircleAvatar),
+        matching: find.byType(Opacity),
+      );
+      expect(t.widget<Opacity>(opaco).opacity, .38);
     });
 
     testWidgets('sem conta, Conectar Google é o botão secundário', (t) async {
@@ -368,6 +374,67 @@ void main() {
       expect(t.widget<BotaoLeve>(_seletorPc).onPressed, isNotNull);
     });
 
+    testWidgets('desabilitado com amigo aberto perde a cor aviso', (t) async {
+      final s = _AmigoTravavel()
+        ..estadoConta = const EstadoConta(email: 'eu@gmail.com');
+      await montarApp(t, servicos: s);
+      await t.pumpAndSettle();
+      await _estado(t).trocarVisao('ana@exemplo.com');
+      await t.pumpAndSettle();
+      Color? cor() => t
+          .renderObject<RenderParagraph>(
+            find.descendant(
+              of: _seletorPc,
+              matching: find.text('ana@exemplo.com'),
+            ),
+          )
+          .text
+          .style
+          ?.color;
+      final c = CoresApp.de(t.element(_seletorPc));
+      expect(cor(), c.aviso);
+      final lento = Completer<void>();
+      s.trava = lento.future;
+      unawaited(_estado(t).atualizarAmigo());
+      // o Material do botão anima a troca da cor do texto
+      await t.pump();
+      await t.pump(const Duration(seconds: 1));
+      expect(_estado(t).carregandoAmigo, isTrue);
+      expect(cor(), c.texto.withValues(alpha: .38));
+      lento.complete();
+      await t.pumpAndSettle();
+      expect(cor(), c.aviso);
+    });
+
+    testWidgets('o menu relê a lista: amigo novo aparece, removido some', (
+      t,
+    ) async {
+      final s = comAmigos();
+      await montarApp(t, servicos: s);
+      await t.pumpAndSettle();
+      s.listaAmigos = [Amigo(email: 'bia@exemplo.com', desde: '2026-10-02')];
+      await t.tap(_seletorPc);
+      await t.pumpAndSettle();
+      expect(_noMenu('bia@exemplo.com'), findsOneWidget);
+      expect(_noMenu('ana@exemplo.com'), findsNothing);
+    });
+
+    testWidgets('escolher o amigo já aberto não recarrega', (t) async {
+      final s = comAmigos();
+      await montarApp(t, servicos: s);
+      await t.pumpAndSettle();
+      await _estado(t).trocarVisao('ana@exemplo.com');
+      await t.pumpAndSettle();
+      int carregas() =>
+          s.chamadas.where((c) => c.startsWith('carregarAmigo')).length;
+      final antes = carregas();
+      await t.tap(_seletorPc);
+      await t.pumpAndSettle();
+      await t.tap(_noMenu('ana@exemplo.com'));
+      await t.pumpAndSettle();
+      expect(carregas(), antes);
+    });
+
     testWidgets('sem a lista de amigos sobram Meus dados e o aberto', (
       t,
     ) async {
@@ -405,6 +472,35 @@ void main() {
         await t.tap(_noMenu('ana@exemplo.com'));
         await t.pumpAndSettle();
         expect(_estado(t).amigo, 'ana@exemplo.com');
+      });
+
+      testWidgets('em Notícias, escolher o amigo leva à Apuração dele', (
+        t,
+      ) async {
+        final s = comAmigos();
+        await montarApp(t, servicos: s, tamanho: _pequeno);
+        await t.pumpAndSettle();
+        _estado(t).irPara(Aba.noticias);
+        await t.pumpAndSettle();
+        await t.tap(noAppBar(find.byTooltip('Meus dados')));
+        await t.pumpAndSettle();
+        await t.tap(_noMenu('ana@exemplo.com'));
+        await t.pumpAndSettle();
+        expect(_estado(t).aba, Aba.apuracao);
+        expect(_estado(t).amigo, 'ana@exemplo.com');
+        expect(find.byType(TelaApuracao), findsOneWidget);
+      });
+
+      testWidgets('Voltar aos meus é o botão leve do kit', (t) async {
+        final s = comAmigos();
+        await montarApp(t, servicos: s, tamanho: _pequeno);
+        await t.pumpAndSettle();
+        await _estado(t).trocarVisao('ana@exemplo.com');
+        await t.pumpAndSettle();
+        expect(
+          find.widgetWithText(BotaoLeve, 'Voltar aos meus'),
+          findsOneWidget,
+        );
       });
 
       testWidgets('faixa do amigo com Atualizar e Voltar aos meus', (t) async {
@@ -814,6 +910,17 @@ class _AmigoLento extends ServicosFalsos {
   @override
   Future<ResumoAmigo> carregarAmigo(String email) async {
     await liberar.future;
+    return super.carregarAmigo(email);
+  }
+}
+
+/// `carregarAmigo` espera a [trava], quando houver.
+class _AmigoTravavel extends ServicosFalsos {
+  Future<void>? trava;
+
+  @override
+  Future<ResumoAmigo> carregarAmigo(String email) async {
+    await trava;
     return super.carregarAmigo(email);
   }
 }

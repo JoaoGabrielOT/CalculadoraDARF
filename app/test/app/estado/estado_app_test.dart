@@ -199,6 +199,17 @@ void main() {
       expect(avisos, greaterThan(0));
     });
 
+    test('atualizarAmigo: um só aviso de fim de carga, já com a versão nova '
+        '(uma recarga só)', () async {
+      final (e, _, _) = await _criar();
+      await e.trocarVisao('bia@gmail.com');
+      final versao = e.versaoDados;
+      final avisos = <(bool, int)>[];
+      e.addListener(() => avisos.add((e.carregandoAmigo, e.versaoDados)));
+      await e.atualizarAmigo();
+      expect(avisos, [(true, versao), (false, versao + 1)]);
+    });
+
     test(
       'atualizarAmigo com falha no carregamento não avança versaoDados',
       () async {

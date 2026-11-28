@@ -876,6 +876,15 @@ void main() {
       await t.pump();
       expect(salvar(t), isNull);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      // Automático/Manual aparecem desabilitados enquanto grava
+      expect(
+        t
+            .widget<Segmentado<ModoVenda>>(
+              find.byKey(const ValueKey('modo-venda')),
+            )
+            .aoMudar,
+        isNull,
+      );
       await t.tap(find.text('Salvar'), warnIfMissed: false);
       await t.pump();
       expect(chamadasDe(s, 'registrarVendaQtd'), 1);

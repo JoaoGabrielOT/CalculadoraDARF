@@ -397,15 +397,11 @@ class _AdicionarState extends State<_Adicionar> {
         spacing: 8,
         children: [
           Expanded(child: campo),
-          IconButton.filled(
-            onPressed: () => unawaited(_enviar()),
-            icon: const Icon(Icons.add),
+          BotaoIcone(
+            icone: Icons.add,
             tooltip: 'Adicionar',
-            style: IconButton.styleFrom(
-              fixedSize: Size.square(altura),
-              minimumSize: Size.square(altura),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+            principal: true,
+            onPressed: () => unawaited(_enviar()),
           ),
         ],
       );

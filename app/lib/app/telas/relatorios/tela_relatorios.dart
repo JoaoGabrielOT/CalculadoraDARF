@@ -445,6 +445,8 @@ class _ChipsPeriodo extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Segmentado<int?>(
     key: const Key('periodo-relatorios'),
+    // compacto também no PC: na coluna da lista, com o ✓ os rótulos quebram
+    // em duas linhas
     compacto: true,
     opcoes: const [
       (7, '7 dias'),

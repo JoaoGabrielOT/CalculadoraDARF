@@ -75,7 +75,7 @@ void main() {
         // o botão volta a habilitar depois do erro
         final b = t.widget(find.byKey(const Key('amigos-adicionar')));
         expect(
-          b is IconButton ? b.onPressed : (b as BotaoPrincipal).onPressed,
+          b is BotaoIcone ? b.onPressed : (b as BotaoPrincipal).onPressed,
           isNotNull,
         );
       });
@@ -113,7 +113,13 @@ void main() {
         // celular: só o "+" roxo, para o campo ter largura
         expect(
           t.widget(adicionar),
-          tamanho == _pc ? isA<BotaoPrincipal>() : isA<IconButton>(),
+          tamanho == _pc
+              ? isA<BotaoPrincipal>()
+              : isA<BotaoIcone>().having(
+                  (b) => b.principal,
+                  'principal',
+                  isTrue,
+                ),
         );
         expect(t.getSize(adicionar).height, altura);
         expect(t.getSize(campoEmail).height, altura);

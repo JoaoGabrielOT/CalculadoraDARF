@@ -846,7 +846,7 @@ void main() {
       expect(t.getCenter(ordem).dy, moreOrLessEquals(t.getCenter(busca).dy));
       expect(t.getTopRight(ordem).dx, lessThanOrEqualTo(360 - 16 + 0.5));
       expect(find.byTooltip('Tipo'), findsWidgets);
-      expect(find.byTooltip('Ordenar'), findsWidgets);
+      expect(find.byTooltip(RegExp(r'^Ordenar: ')), findsWidgets);
       expect(_ponto('chip-lotes-tipo'), findsNothing);
       expect(_ponto('chip-lotes-ordem'), findsNothing);
 

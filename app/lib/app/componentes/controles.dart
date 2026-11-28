@@ -1,7 +1,6 @@
 // Kit de controles: botões, escolha única, busca, menus, seletor de mês e
 // selos. Altura de 40 px no PC e 48 px no celular; cores só pelos tokens de
-// `CoresApp`. Os nomes `Selo` daqui e de cartao.dart coexistem até as telas
-// migrarem (não importar os dois no mesmo arquivo).
+// `CoresApp`.
 
 import 'package:flutter/material.dart';
 
@@ -68,6 +67,7 @@ class BotaoSecundario extends StatelessWidget {
 }
 
 /// Botão só de ícone: o tooltip serve também de rótulo para o leitor de tela.
+/// [principal] pinta o fundo de destaque (o "+" do celular).
 class BotaoIcone extends StatelessWidget {
   const BotaoIcone({
     super.key,
@@ -76,6 +76,7 @@ class BotaoIcone extends StatelessWidget {
     this.onPressed,
     this.destrutivo = false,
     this.marcado = false,
+    this.principal = false,
   });
 
   final IconData icone;
@@ -85,26 +86,35 @@ class BotaoIcone extends StatelessWidget {
 
   /// Ponto no canto, para um filtro ativo.
   final bool marcado;
+  final bool principal;
 
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     final h = _altura(context);
-    final botao = IconButton(
-      onPressed: onPressed,
-      // desabilitado, fica com a cor apagada do tema, como os outros
-      icon: Icon(
-        icone,
-        size: 20,
-        color: destrutivo && onPressed != null ? c.queda : null,
-      ),
-      style: ButtonStyle(
-        fixedSize: WidgetStatePropertyAll(Size.square(h)),
-        minimumSize: WidgetStatePropertyAll(Size.square(h)),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.standard,
-      ),
+    final estilo = ButtonStyle(
+      fixedSize: WidgetStatePropertyAll(Size.square(h)),
+      minimumSize: WidgetStatePropertyAll(Size.square(h)),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.standard,
     );
+    // o preenchido usa o primário do tema (o destaque) e o ícone de 24 px
+    final botao = principal
+        ? IconButton.filled(
+            onPressed: onPressed,
+            icon: Icon(icone),
+            style: estilo,
+          )
+        : IconButton(
+            onPressed: onPressed,
+            // desabilitado, fica com a cor apagada do tema, como os outros
+            icon: Icon(
+              icone,
+              size: 20,
+              color: destrutivo && onPressed != null ? c.queda : null,
+            ),
+            style: estilo,
+          );
     // O tooltip do Material só vira `tooltip` semântico, não rótulo: o
     // rótulo explícito faz o leitor de tela falar o nome do botão.
     // O rótulo se funde (MergeSemantics) ao nó do IconButton, que mantém as
@@ -167,7 +177,12 @@ class BotaoLeve extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextButton.icon(
     style: _estilo(context).copyWith(
-      foregroundColor: cor == null ? null : WidgetStatePropertyAll(cor),
+      // desabilitado, a cor própria sai e fica a apagada do tema
+      foregroundColor: cor == null
+          ? null
+          : WidgetStateProperty.resolveWith(
+              (e) => e.contains(WidgetState.disabled) ? null : cor,
+            ),
     ),
     onPressed: onPressed,
     icon: Icon(icone, size: 18),
@@ -179,7 +194,7 @@ class BotaoLeve extends StatelessWidget {
 }
 
 /// Escolha única entre poucas opções, lado a lado. [compacto] tira o ✓ e
-/// aperta a margem (cabe mais opções em 360 px).
+/// aperta a margem (cabe mais opções em 360 px); [aoMudar] nulo desabilita.
 class Segmentado<T> extends StatelessWidget {
   const Segmentado({
     super.key,
@@ -193,7 +208,7 @@ class Segmentado<T> extends StatelessWidget {
 
   final List<(T, String)> opcoes;
   final T valor;
-  final ValueChanged<T> aoMudar;
+  final ValueChanged<T>? aoMudar;
   final bool compacto;
 
   /// Ocupa a largura toda do pai, com as opções repartidas.
@@ -228,7 +243,9 @@ class Segmentado<T> extends StatelessWidget {
       // com ela mesma, como o BotaoSegmentado: há escolhas que valem mesmo
       // iguais ao padrão; o valor continua vindo de fora
       emptySelectionAllowed: true,
-      onSelectionChanged: (s) => aoMudar(s.isEmpty ? valor : s.first),
+      onSelectionChanged: aoMudar == null
+          ? null
+          : (s) => aoMudar!(s.isEmpty ? valor : s.first),
     ),
   );
 }
@@ -241,12 +258,14 @@ class CampoBusca extends StatelessWidget {
     required this.dica,
     this.aoMudar,
     this.largura,
+    this.textInputAction,
   });
 
   final TextEditingController controller;
   final String dica;
   final ValueChanged<String>? aoMudar;
   final double? largura;
+  final TextInputAction? textInputAction;
 
   @override
   Widget build(BuildContext context) {
@@ -261,6 +280,7 @@ class CampoBusca extends StatelessWidget {
         builder: (context, _) => TextField(
           controller: controller,
           onChanged: aoMudar,
+          textInputAction: textInputAction,
           textAlignVertical: TextAlignVertical.center,
           decoration: InputDecoration(
             hintText: dica,
@@ -411,7 +431,8 @@ class BotaoOrdenar<T> extends StatelessWidget {
     return _GatilhoMenu<T>(
       icone: Icons.swap_vert,
       rotulo: '$nome$seta',
-      tooltip: 'Ordenar',
+      // só o ícone: o tooltip diz por qual campo está ordenado
+      tooltip: soIcone ? 'Ordenar: $nome' : 'Ordenar',
       soIcone: soIcone,
       ativo: ativo,
       entradas: () => [

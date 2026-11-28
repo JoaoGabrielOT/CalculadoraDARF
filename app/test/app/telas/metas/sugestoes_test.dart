@@ -493,6 +493,31 @@ void main() {
       });
     }
 
+    for (final (escala, linha) in [(1.0, true), (1.5, false)]) {
+      testWidgets('800 px com texto ${escala}x: '
+          '${linha ? 'uma linha' : 'um por linha'}', (t) async {
+        t.platformDispatcher.textScaleFactorTestValue = escala;
+        addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+        final s = ServicosFalsos()
+          ..visaoSugestoes = _visao([_ativo('PETR4', topo: 12.5)]);
+        await _abrir(t, s, tamanho: const Size(800, 1200));
+        await _expandir(t, 'PETR4');
+        final meta = find.widgetWithText(
+          BotaoPrincipal,
+          'Criar meta de alvo e stop',
+        );
+        final fixo = find.widgetWithText(BotaoSecundario, 'Criar stop fixo');
+        await t.ensureVisible(meta);
+        await t.pumpAndSettle();
+        expect(
+          t.getCenter(fixo).dy == t.getCenter(meta).dy,
+          linha,
+          reason: 'limiar de 680 px escalado pelo texto',
+        );
+        expect(t.takeException(), isNull);
+      });
+    }
+
     testWidgets('sem oportunidade fica desativado; com oportunidade usa o '
         'alvo e o stop do cenário, depois da confirmação', (t) async {
       final bom = _ativo('PETR4', topo: 12.5);

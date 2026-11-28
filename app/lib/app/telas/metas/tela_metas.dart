@@ -207,7 +207,7 @@ class _SeletorPagina extends StatelessWidget {
         opcoes: const [(0, 'Sugestões'), (1, 'Calculadora'), (2, 'Metas')],
         valor: aba.index,
         expandir: true,
-        compacto: true,
+        compacto: !expandido(context),
         aoMudar: aba.animateTo,
       ),
     );

@@ -1,9 +1,8 @@
-import 'dart:ui' show SemanticsAction;
-
 import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../apoio/montar_componente.dart';
@@ -55,6 +54,15 @@ void main() {
         ),
         [find.byType(OutlinedButton)],
       ),
+      'BotaoIcone principal': (
+        () => BotaoIcone(
+          icone: Icons.add,
+          tooltip: 'Adicionar',
+          principal: true,
+          onPressed: () {},
+        ),
+        [find.byType(IconButton)],
+      ),
       'SeletorCaixa': (
         () => SizedBox(
           width: 200,
@@ -81,7 +89,9 @@ void main() {
               tamanho: tamanho,
             );
             for (final f in e.value.$2) {
-              for (final el in f.evaluate()) {
+              final encontrados = f.evaluate();
+              expect(encontrados, isNotEmpty, reason: '$f');
+              for (final el in encontrados) {
                 expect(t.getSize(find.byWidget(el.widget)).height, h);
               }
             }
@@ -653,5 +663,146 @@ void main() {
     );
     expect(find.text('Alta'), findsOneWidget);
     expect(find.text('Compra'), findsOneWidget);
+  });
+
+  // a cor do texto pintado: o Text herda o DefaultTextStyle do botão
+  Color? corPintada(WidgetTester t, String texto) =>
+      t.renderObject<RenderParagraph>(find.text(texto)).text.style?.color;
+
+  for (final tema in _temas) {
+    testWidgets('BotaoSecundario e BotaoLeve desabilitados ficam apagados '
+        '(${tema.chave})', (t) async {
+      await montarComponente(
+        t,
+        Column(
+          children: [
+            BotaoSecundario(
+              icone: Icons.remove,
+              rotulo: 'S1',
+              onPressed: () {},
+            ),
+            const BotaoSecundario(icone: Icons.remove, rotulo: 'S0'),
+            BotaoLeve(icone: Icons.edit, rotulo: 'L1', onPressed: () {}),
+            const BotaoLeve(icone: Icons.edit, rotulo: 'L0'),
+            BotaoLeve(
+              icone: Icons.group,
+              rotulo: 'C1',
+              cor: Colors.orange,
+              onPressed: () {},
+            ),
+            const BotaoLeve(
+              icone: Icons.group,
+              rotulo: 'C0',
+              cor: Colors.orange,
+            ),
+          ],
+        ),
+        tema: tema,
+      );
+      final c = CoresApp.de(t.element(find.text('S1')));
+      final apagado = c.texto.withValues(alpha: .38);
+      expect(corPintada(t, 'S1'), isNot(corPintada(t, 'S0')));
+      expect(corPintada(t, 'S0'), apagado);
+      expect(corPintada(t, 'L1'), isNot(corPintada(t, 'L0')));
+      expect(corPintada(t, 'L0'), apagado);
+      // a cor própria vale só habilitado
+      expect(corPintada(t, 'C1'), Colors.orange);
+      expect(corPintada(t, 'C0'), apagado);
+      // borda do contorno a 38% quando desabilitado
+      final temaApp = Theme.of(t.element(find.text('S0')));
+      final lado = temaApp.outlinedButtonTheme.style!.side!;
+      expect(
+        lado.resolve({WidgetState.disabled})!.color,
+        c.bordaCampo.withValues(alpha: .38),
+      );
+      expect(lado.resolve({})!.color, c.bordaCampo);
+    });
+
+    testWidgets('BotaoIcone principal tem fundo destaque (${tema.chave})', (
+      t,
+    ) async {
+      await montarComponente(
+        t,
+        BotaoIcone(
+          key: const ValueKey('mais'),
+          icone: Icons.add,
+          tooltip: 'Adicionar',
+          principal: true,
+          onPressed: () {},
+        ),
+        tema: tema,
+      );
+      final c = CoresApp.de(t.element(find.byType(BotaoIcone)));
+      final fundo = t
+          .widget<Material>(
+            find
+                .descendant(
+                  of: find.byType(IconButton),
+                  matching: find.byType(Material),
+                )
+                .first,
+          )
+          .color;
+      expect(fundo, c.destaque);
+      expect(find.byTooltip('Adicionar'), findsOneWidget);
+      expect(
+        t.getSemantics(find.byType(IconButton)),
+        matchesSemantics(
+          label: 'Adicionar',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          hasTapAction: true,
+          isFocusable: true,
+          hasFocusAction: true,
+        ),
+      );
+    });
+  }
+
+  testWidgets('Segmentado sem aoMudar fica desabilitado', (t) async {
+    await montarComponente(
+      t,
+      const Segmentado<int>(
+        opcoes: [(1, 'Um'), (2, 'Dois')],
+        valor: 1,
+        aoMudar: null,
+      ),
+    );
+    final seg = t.widget<SegmentedButton<int>>(
+      find.byType(SegmentedButton<int>),
+    );
+    expect(seg.onSelectionChanged, isNull);
+  });
+
+  testWidgets('CampoBusca repassa a ação do teclado', (t) async {
+    await montarComponente(
+      t,
+      SizedBox(
+        width: 240,
+        child: CampoBusca(
+          controller: TextEditingController(),
+          dica: 'Buscar',
+          textInputAction: TextInputAction.search,
+        ),
+      ),
+    );
+    expect(
+      t.widget<TextField>(find.byType(TextField)).textInputAction,
+      TextInputAction.search,
+    );
+  });
+
+  testWidgets('Ordenar só ícone: o tooltip diz o campo', (t) async {
+    await montarComponente(
+      t,
+      BotaoOrdenar<String>(
+        campos: const [('a', 'Alfa'), ('b', 'Beta')],
+        campo: 'b',
+        aoCampo: (_) {},
+        soIcone: true,
+      ),
+    );
+    expect(find.byTooltip('Ordenar: Beta'), findsOneWidget);
   });
 }

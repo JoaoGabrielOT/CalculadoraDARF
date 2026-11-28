@@ -914,6 +914,18 @@ void main() {
       expect(find.byKey(const Key('chip-carteira')), findsNothing);
       expect(find.byKey(const Key('filtros-ativos')), findsOneWidget);
     });
+    testWidgets('busca com a ação de buscar no teclado', (t) async {
+      await _montar(t, tamanho: const Size(360, 20000));
+      final campo = find.descendant(
+        of: find.byKey(const Key('filtro-busca')),
+        matching: find.byType(TextField),
+      );
+      expect(
+        t.widget<TextField>(campo).textInputAction,
+        TextInputAction.search,
+      );
+    });
+
     testWidgets('trocar de relatório reinicia o filtro', (t) async {
       await _montar(t, tamanho: const Size(1366, 20000));
       final campo = find.byKey(const Key('filtro-busca'));

@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/cartao.dart';
 import '../../componentes/controles.dart';
 import '../../componentes/carregando.dart';
 import '../../servicos/api.dart';

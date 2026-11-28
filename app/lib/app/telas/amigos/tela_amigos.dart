@@ -12,7 +12,7 @@ import 'package:provider/provider.dart';
 
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/cartao.dart';
 import '../../componentes/controles.dart';
 import '../../componentes/carregando.dart';
 import '../../componentes/dialogos.dart';
@@ -400,18 +400,14 @@ class _CorpoState extends State<_Corpo> {
                 rotulo: 'Adicionar',
               )
             else
-              IconButton.filled(
+              BotaoIcone(
                 key: const ValueKey('amigos-adicionar'),
+                icone: Icons.add,
                 tooltip: 'Adicionar',
-                icon: const Icon(Icons.add),
+                principal: true,
                 onPressed: controle.ocupado
                     ? null
                     : () => unawaited(_adicionar(controle)),
-                style: IconButton.styleFrom(
-                  fixedSize: const Size.square(48),
-                  minimumSize: const Size.square(48),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
               ),
           ],
         ),

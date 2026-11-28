@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../../nucleo/relatorios/filtros_relatorio.dart';
 import '../../../nucleo/relatorios/relatorio.dart';
-import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/cartao.dart';
 import '../../componentes/controles.dart';
 import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
@@ -167,6 +167,7 @@ class _EstadoBarra extends State<BarraFiltrosRelatorio> {
       key: const Key('filtro-busca'),
       controller: _campo,
       dica: 'Buscar ativo',
+      textInputAction: TextInputAction.search,
       aoMudar: (s) => widget.aoMudar(_f.copiar(texto: s)),
     );
     return Cartao(

@@ -414,15 +414,30 @@ ThemeData _montar(
         elevation: const WidgetStatePropertyAll(0),
       ),
     ),
+    // desabilitados, texto e borda a 38%, como o FilledButton acima
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: estiloBotao.copyWith(
-        foregroundColor: WidgetStatePropertyAll(c.texto),
-        side: WidgetStatePropertyAll(BorderSide(color: c.bordaCampo)),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (e) => e.contains(WidgetState.disabled)
+              ? c.texto.withValues(alpha: .38)
+              : c.texto,
+        ),
+        side: WidgetStateProperty.resolveWith(
+          (e) => BorderSide(
+            color: e.contains(WidgetState.disabled)
+                ? c.bordaCampo.withValues(alpha: .38)
+                : c.bordaCampo,
+          ),
+        ),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: estiloBotao.copyWith(
-        foregroundColor: WidgetStatePropertyAll(c.navAtivo),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (e) => e.contains(WidgetState.disabled)
+              ? c.texto.withValues(alpha: .38)
+              : c.navAtivo,
+        ),
       ),
     ),
   );

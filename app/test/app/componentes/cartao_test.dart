@@ -110,28 +110,19 @@ void main() {
     expect(escolhido, 'f');
   });
 
-  testWidgets('Cartao, Selo, Pilula e Kpi mostram seus textos', (t) async {
+  testWidgets('Cartao, Pilula e Kpi mostram seus textos', (t) async {
     await montarComponente(
       t,
       const Cartao(
         child: Column(
           children: [
             Kpi(titulo: 'Imposto', valor: 'R\$ 10,00', sub: 'no mês'),
-            Selo(texto: '+1,2%', alta: true),
-            Selo(texto: '-1,2%', alta: false),
             Pilula(texto: 'Isento'),
           ],
         ),
       ),
     );
-    for (final s in [
-      'Imposto',
-      'R\$ 10,00',
-      'no mês',
-      '+1,2%',
-      '-1,2%',
-      'Isento',
-    ]) {
+    for (final s in ['Imposto', 'R\$ 10,00', 'no mês', 'Isento']) {
       expect(find.text(s), findsOneWidget);
     }
   });

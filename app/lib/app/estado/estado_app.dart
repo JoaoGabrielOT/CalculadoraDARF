@@ -399,8 +399,13 @@ class EstadoApp extends ChangeNotifier {
   }
 
   /// Baixa os dados de [email] e os abre; devolve se deu certo (falso no
-  /// erro e no pedido superado).
-  Future<bool> _abrirAmigo(String email, int geracao) async {
+  /// erro e no pedido superado). [avancarVersao] avança `versaoDados` antes
+  /// do aviso final, para as telas recarregarem uma vez só.
+  Future<bool> _abrirAmigo(
+    String email,
+    int geracao, {
+    bool avancarVersao = false,
+  }) async {
     carregandoAmigo = true;
     _pedido = email;
     notifyListeners();
@@ -411,6 +416,7 @@ class EstadoApp extends ChangeNotifier {
       amigo = email;
       mes = resumo.mesInicial;
       aberto = true;
+      if (avancarVersao) versaoDados++;
     } catch (e) {
       if (geracao != _geracaoVisao) return false;
       if (!_superado(e)) avisar('Não foi possível carregar', textoErro(e));
@@ -427,9 +433,7 @@ class EstadoApp extends ChangeNotifier {
   Future<void> atualizarAmigo() async {
     final email = amigo;
     if (email == null) return;
-    if (!await _abrirAmigo(email, ++_geracaoVisao)) return;
-    versaoDados++;
-    notifyListeners();
+    await _abrirAmigo(email, ++_geracaoVisao, avancarVersao: true);
   }
 
   bool _superado(Object e) => e is PedidoSuperado;

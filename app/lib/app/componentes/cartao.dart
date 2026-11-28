@@ -34,26 +34,6 @@ class Cartao extends StatelessWidget {
   }
 }
 
-/// Variação em destaque: [alta] true = alta, false = queda, null = neutro.
-/// O sentido vai também no texto (o chamador inclui o sinal ou a seta).
-class Selo extends StatelessWidget {
-  const Selo({super.key, required this.texto, this.alta});
-
-  final String texto;
-  final bool? alta;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
-    final (fundo, cor) = switch (alta) {
-      true => (c.seloAltaFundo, c.alta),
-      false => (c.seloQuedaFundo, c.queda),
-      null => (_fundoChip(c), c.textoSuave),
-    };
-    return _Rotulo(texto: texto, fundo: fundo, cor: cor);
-  }
-}
-
 /// Rótulo arredondado de uma informação (por exemplo, "Isento").
 class Pilula extends StatelessWidget {
   const Pilula({super.key, required this.texto, this.fundo, this.cor});

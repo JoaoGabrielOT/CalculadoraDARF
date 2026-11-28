@@ -1,4 +1,4 @@
-import 'package:calculadoradarf/app/componentes/cartao.dart' hide Selo;
+import 'package:calculadoradarf/app/componentes/cartao.dart';
 import 'package:calculadoradarf/app/componentes/controles.dart' show Selo;
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';

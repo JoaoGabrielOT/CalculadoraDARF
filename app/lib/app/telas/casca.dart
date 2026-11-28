@@ -465,13 +465,17 @@ class _Conta extends StatelessWidget {
         minimumSize: WidgetStatePropertyAll(Size.square(40)),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      icon: CircleAvatar(
-        radius: 17,
-        backgroundColor: cores.destaque,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        child: Text(
-          email.isEmpty ? '?' : email.characters.first.toUpperCase(),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+      // as cores fixas do avatar não apagam sozinhas: esmaece no login
+      icon: Opacity(
+        opacity: login ? .38 : 1,
+        child: CircleAvatar(
+          radius: 17,
+          backgroundColor: cores.destaque,
+          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+          child: Text(
+            email.isEmpty ? '?' : email.characters.first.toUpperCase(),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
         ),
       ),
     );
@@ -506,9 +510,10 @@ class _FaixaAmigo extends StatelessWidget {
               ),
             ),
             _BotaoAtualizarAmigo(estado),
-            TextButton(
+            BotaoLeve(
+              icone: Icons.arrow_back,
+              rotulo: 'Voltar aos meus',
               onPressed: () => unawaited(estado.trocarVisao(null)),
-              child: const Text('Voltar aos meus'),
             ),
           ],
         ),

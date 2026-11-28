@@ -115,6 +115,8 @@ class _FormSaldoState extends State<FormSaldo>
           ],
           valor: _modo,
           expandir: true,
+          // compacto também no PC: na largura do diálogo, com o ✓ "Definir
+          // saldo" quebra em duas linhas
           compacto: true,
           aoMudar: _trocar,
         ),

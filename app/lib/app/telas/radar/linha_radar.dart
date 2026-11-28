@@ -6,9 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
 import '../../componentes/controles.dart'
-    show BotaoIcone, BotaoPrincipal, BotaoSecundario;
+    show BotaoIcone, BotaoPrincipal, BotaoSecundario, Selo;
 import '../../componentes/grafico_linha.dart';
 import '../../componentes/logo_ativo.dart';
 import '../../servicos/api.dart';
@@ -546,10 +545,7 @@ class CartaoRadar extends StatelessWidget {
                         ),
                       ),
                       if (v != null)
-                        Selo(
-                          texto: x.dia,
-                          alta: v > 0 ? true : (v < 0 ? false : null),
-                        ),
+                        Selo(texto: x.dia, cor: corVariacao(context, v)),
                     ],
                   ),
                   if (comAlca) const _Alca(),

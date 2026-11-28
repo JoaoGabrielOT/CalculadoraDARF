@@ -12,6 +12,7 @@ import '../estado/estado_app.dart';
 import '../servicos/api.dart';
 import '../telas/amigos/tela_amigos.dart';
 import '../tema/cores_app.dart';
+import '../tema/layout.dart';
 import 'controles.dart';
 
 const rotuloMeusDados = 'Meus dados';
@@ -58,8 +59,12 @@ class _SeletorDadosState extends State<SeletorDados> {
     }
   }
 
-  void _abrirMenu(EstadoApp estado) {
+  Future<void> _abrirMenu(EstadoApp estado) async {
+    // a lista pode ter mudado em Amigos: relê antes de montar o menu
+    await _carregar();
+    if (!mounted) return;
     final aberto = estado.amigo;
+    final compacto = !expandido(context);
     final emails = aberto == null || _emails.contains(aberto)
         ? _emails
         : [..._emails, aberto];
@@ -76,7 +81,11 @@ class _SeletorDadosState extends State<SeletorDados> {
             e,
             e,
             marcado: e == aberto,
-            aoTocar: () => unawaited(estado.trocarVisao(e)),
+            // o mesmo caminho do "Ver" de Amigos: no celular, das abas sem
+            // dados de amigo vai à Apuração
+            aoTocar: e == aberto
+                ? () {}
+                : () => unawaited(verAmigo(estado, e, compacto: compacto)),
           ),
         const PopupMenuDivider(),
         itemMenu<String?>(
@@ -94,7 +103,9 @@ class _SeletorDadosState extends State<SeletorDados> {
     final estado = context.watch<EstadoApp>();
     final aberto = estado.amigo;
     final rotulo = aberto ?? rotuloMeusDados;
-    final abrir = estado.carregandoAmigo ? null : () => _abrirMenu(estado);
+    final abrir = estado.carregandoAmigo
+        ? null
+        : () => unawaited(_abrirMenu(estado));
     if (widget.soIcone) {
       return BotaoIcone(
         icone: Icons.group,

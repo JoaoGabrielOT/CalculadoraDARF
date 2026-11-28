@@ -4,8 +4,10 @@ import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/telas/caixa/controle_caixa.dart';
 import 'package:calculadoradarf/app/telas/caixa/tela_caixa.dart';
+import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -182,6 +184,13 @@ void main() {
       _habilitado(find.widgetWithText(BotaoLeve, 'Informar saldo'), t),
       isTrue,
     );
+    // os dois apagados do mesmo jeito: o contornado não parece clicável
+    Color? cor(String r) =>
+        t.renderObject<RenderParagraph>(find.text(r)).text.style?.color;
+    final c = CoresApp.de(t.element(find.text('Retirada')));
+    expect(cor('Retirada'), c.texto.withValues(alpha: .38));
+    expect(cor('Aporte'), cor('Retirada'));
+    final retiradaApagada = cor('Retirada');
 
     s.visaoCaixa = _visao();
     s.eventosFalsos.add(const EventoDadosMudaram());
@@ -195,6 +204,7 @@ void main() {
       _habilitado(find.widgetWithText(BotaoSecundario, 'Retirada'), t),
       isTrue,
     );
+    expect(cor('Retirada'), isNot(retiradaApagada));
   });
 
   testWidgets('PC: Aporte é a ação principal, na ponta direita da linha', (

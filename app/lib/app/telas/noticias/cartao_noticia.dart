@@ -12,7 +12,7 @@ import 'package:provider/provider.dart';
 
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/cartao.dart';
 import '../../componentes/controles.dart' show Selo;
 import '../../componentes/logo_ativo.dart';
 import '../../tema/cores_app.dart';
@@ -288,7 +288,8 @@ class _SeloNova extends StatelessWidget {
   }
 }
 
-/// O título e, logo depois dele, o selo "Nova".
+/// O título e, logo depois dele, o selo "Nova". Com limite de linhas, se o
+/// título cortar, o selo vai antes dele (no fim, sumiria nas reticências).
 class _TituloComSelo extends StatelessWidget {
   const _TituloComSelo(
     this.titulo, {
@@ -304,24 +305,81 @@ class _TituloComSelo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // o selo vai no fim do texto, na última linha do título
+    final limite = maxLinhas;
+    if (!nova || limite == null) return _texto(seloAntes: false);
+    return LayoutBuilder(
+      builder: (context, caixa) =>
+          _texto(seloAntes: _seloCortado(context, caixa.maxWidth, limite)),
+    );
+  }
+
+  Widget _texto({required bool seloAntes}) {
+    const selo = [
+      WidgetSpan(alignment: PlaceholderAlignment.middle, child: _SeloNova()),
+    ];
+    const espaco = [WidgetSpan(child: SizedBox(width: 8))];
     return Text.rich(
       TextSpan(
-        text: titulo,
         children: [
-          if (nova) ...[
-            const WidgetSpan(child: SizedBox(width: 8)),
-            const WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: _SeloNova(),
-            ),
-          ],
+          if (nova && seloAntes) ...[...selo, ...espaco],
+          TextSpan(text: titulo),
+          // o selo vai no fim do texto, na última linha do título
+          if (nova && !seloAntes) ...[...espaco, ...selo],
         ],
       ),
       maxLines: maxLinhas,
       overflow: maxLinhas == null ? TextOverflow.clip : TextOverflow.ellipsis,
       style: estilo,
     );
+  }
+
+  /// Mede o título com o selo no fim (o selo com o tamanho do texto "Nova"
+  /// mais a margem do [Selo]) e diz se passa de [limite] linhas.
+  bool _seloCortado(BuildContext context, double largura, int limite) {
+    final padrao = DefaultTextStyle.of(context).style;
+    final escala = MediaQuery.textScalerOf(context);
+    final direcao = Directionality.of(context);
+    final rotulo = TextPainter(
+      text: TextSpan(
+        text: 'Nova',
+        style: padrao.merge(
+          const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      ),
+      textScaler: escala,
+      textDirection: direcao,
+      maxLines: 1,
+    )..layout();
+    final selo = Size(rotulo.width + 16, rotulo.height + 6);
+    rotulo.dispose();
+    final medida = TextPainter(
+      text: TextSpan(
+        text: titulo,
+        style: padrao.merge(estilo),
+        children: const [
+          WidgetSpan(child: SizedBox()),
+          WidgetSpan(alignment: PlaceholderAlignment.middle, child: SizedBox()),
+        ],
+      ),
+      textScaler: escala,
+      textDirection: direcao,
+      maxLines: limite,
+    );
+    medida
+      ..setPlaceholderDimensions([
+        const PlaceholderDimensions(
+          size: Size(8, 0),
+          alignment: PlaceholderAlignment.bottom,
+        ),
+        PlaceholderDimensions(
+          size: selo,
+          alignment: PlaceholderAlignment.middle,
+        ),
+      ])
+      ..layout(maxWidth: largura);
+    final cortado = medida.didExceedMaxLines;
+    medida.dispose();
+    return cortado;
   }
 }
 

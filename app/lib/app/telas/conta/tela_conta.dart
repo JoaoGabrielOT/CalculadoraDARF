@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../../versao.dart';
-import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/cartao.dart';
 import '../../componentes/controles.dart';
 import '../../componentes/dialogos.dart';
 import '../../estado/estado_app.dart';
