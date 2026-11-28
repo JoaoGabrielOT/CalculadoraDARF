@@ -1104,7 +1104,7 @@ class _BotoesCompra extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, caixa) {
-      if (caixa.maxWidth >= 560) {
+      if (caixa.maxWidth >= 680) {
         return Row(
           mainAxisAlignment: MainAxisAlignment.end,
           spacing: 8,

@@ -460,6 +460,7 @@ void main() {
     for (final (nome, tamanho) in [
       ('PC', _pc),
       ('celular 360', const Size(360, 900)),
+      ('janela 600', const Size(600, 900)),
     ]) {
       testWidgets('$nome: Criar meta é o principal; os stops são secundários '
           'com ícone, um por linha', (t) async {

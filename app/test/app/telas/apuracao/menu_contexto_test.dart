@@ -1,6 +1,8 @@
 // Menu do botão direito da Apuração no PC: itens por tipo de linha, o que
 // some sem permissão de gravar e a ação de cada item.
 
+import 'package:calculadoradarf/app/componentes/controles.dart'
+    show BotaoPrincipal;
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
@@ -381,7 +383,7 @@ void main() {
         expect(find.byKey(const ValueKey('abas-PETR4')), findsOneWidget);
         if (compras) {
           expect(
-            find.widgetWithText(FilledButton, 'Criar meta de alvo e stop'),
+            find.widgetWithText(BotaoPrincipal, 'Criar meta de alvo e stop'),
             findsOneWidget,
           );
         }
