@@ -30,6 +30,7 @@ class ServicosLocais implements ServicosApp {
     NoticiasLocal Function(void Function(EventoServico))? noticias,
     AtualizadorLocal Function(void Function(EventoServico))? atualizador,
     RelatoriosLocal Function()? relatorios,
+    FonteCompartilhamento? compartilhamento,
     this._fazerBackup,
     this._esperaSyncMigracao = const Duration(seconds: 10),
   }) {
@@ -43,6 +44,7 @@ class ServicosLocais implements ServicosApp {
       abrirUrl: abrirUrl,
       emitir: _emitir,
       atrasoAgendamento: atrasoAgendamento,
+      compartilhamento: compartilhamento,
     );
     _apuracao = ApuracaoLocal(
       _repo,
@@ -395,6 +397,10 @@ class ServicosLocais implements ServicosApp {
       _mercado.grafico(ticker, periodo);
 
   @override
+  Future<Diarias> barrasDiarias(String ticker, {String? desde}) =>
+      _mercado.barrasDiarias(ticker, desde: desde);
+
+  @override
   Future<Map<String, double?>> precosCarteira(Set<String> tickers) =>
       _mercado.precosCarteira(tickers);
 
@@ -512,5 +518,21 @@ class ServicosLocais implements ServicosApp {
   Future<Relatorio> abrirRelatorio(String nome) => _relatorios.abrir(nome);
 
   @override
+  Future<void> marcarRelatoriosAvisados() => _relatorios.marcarAvisados();
+
+  @override
   Future<void> entrarDeNovoGoogle() => _conta.reconectar();
+
+  // --- pasta de relatórios compartilhada com os amigos
+
+  @override
+  Future<EstadoCompartilhamento> estadoCompartilhamento() =>
+      _conta.estadoCompartilhamento();
+
+  @override
+  Future<ResultadoCompartilhamento> compartilharRelatorios() =>
+      _conta.compartilharRelatorios();
+
+  @override
+  Future<void> permitirCompartilhamento() => _conta.permitirCompartilhamento();
 }

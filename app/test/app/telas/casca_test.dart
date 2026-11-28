@@ -8,6 +8,7 @@ import 'package:calculadoradarf/app/telas/caixa/tela_caixa.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
 import 'package:calculadoradarf/app/telas/conta/tela_conta.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
+import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:calculadoradarf/app/telas/noticias/tela_noticias.dart';
 import 'package:calculadoradarf/app/telas/radar/tela_radar.dart';
 import 'package:calculadoradarf/app/telas/relatorios/tela_relatorios.dart';
@@ -332,6 +333,44 @@ void main() {
     await t.pumpAndSettle();
     expect(
       find.descendant(of: find.byType(NavigationBar), matching: find.text('4')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('selo de relatório novo conta e some na aba Relatórios', (
+    t,
+  ) async {
+    final s = ServicosFalsos()
+      ..estadoConta = const EstadoConta(email: 'a@b.com')
+      ..visaoRelatorios = VisaoRelatorios(
+        itens: const [],
+        hoje: '2026-11-26',
+        novos: const [
+          ResumoRelatorio(
+            nome: 'relatorio-abertura-2026-11-26.json',
+            data: '2026-11-26',
+          ),
+          ResumoRelatorio(
+            nome: 'relatorio-abertura-2026-11-25.json',
+            data: '2026-11-25',
+          ),
+        ],
+      );
+    await montarApp(
+      t,
+      servicos: s,
+      tamanho: _pequeno,
+      conferirRelatorios: true,
+    );
+    await t.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('2')),
+      findsOneWidget,
+    );
+    await t.tap(_naBarra('Relatórios'));
+    await t.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byType(NavigationBar), matching: find.text('2')),
       findsNothing,
     );
   });

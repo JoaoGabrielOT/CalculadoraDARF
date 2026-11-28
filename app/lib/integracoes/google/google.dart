@@ -12,6 +12,7 @@ typedef FazerLogin = Future<String> Function(
   AbrirUrl abrirUrl, {
   Future<void>? cancelar,
   String? mesmaConta,
+  List<String> escoposExtras,
 });
 
 /// O que o sincronizador precisa da conta Google (a fachada [Google] e os
@@ -24,10 +25,12 @@ abstract interface class ContaGoogle {
 
   /// [mesmaConta] ("entrar de novo" com a sessão aberta): outra conta é
   /// recusada com [OutraConta], sem trocar o token nem a sessão.
+  /// [escoposExtras] vão ao Google junto de `escoposGoogle`.
   Future<String> login(
     AbrirUrl abrirUrl, {
     Future<void>? cancelar,
     String? mesmaConta,
+    List<String> escoposExtras = const [],
   });
   void sair();
   Future<String?> buscarPlanilha([String dono = 'me']);
@@ -76,6 +79,7 @@ class Google implements ContaGoogle {
     AbrirUrl abrirUrl, {
     Future<void>? cancelar,
     String? mesmaConta,
+    List<String> escoposExtras = const [],
   }) async {
     final fazerLogin = this.fazerLogin;
     if (fazerLogin != null) {
@@ -83,6 +87,7 @@ class Google implements ContaGoogle {
         abrirUrl,
         cancelar: cancelar,
         mesmaConta: mesmaConta,
+        escoposExtras: escoposExtras,
       );
     }
     final cliente = this.cliente;
@@ -96,6 +101,7 @@ class Google implements ContaGoogle {
       abrirUrl,
       cancelar: cancelar,
       mesmaConta: mesmaConta,
+      escoposExtras: escoposExtras,
     );
   }
 

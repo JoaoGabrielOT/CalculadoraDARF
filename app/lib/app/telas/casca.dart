@@ -255,8 +255,8 @@ IconData _iconeSync(StatusSync s) => switch (s) {
   StatusSync.erro => Icons.error_outline,
 };
 
-/// Ícone da aba; Notícias leva o selo de não lidas (some dentro da própria
-/// aba, android/main.py:1944).
+/// Ícone da aba; Notícias leva o selo de não lidas e Relatórios o de
+/// relatórios novos (somem dentro da própria aba, android/main.py:1944).
 class _IconeAba extends StatelessWidget {
   const _IconeAba(this.aba, this.estado);
 
@@ -266,10 +266,15 @@ class _IconeAba extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icone = Icon(aba.icone);
-    if (aba != Aba.noticias) return icone;
+    final n = switch (aba) {
+      Aba.noticias => estado.naoLidas,
+      Aba.relatorios => estado.relatoriosNovos.length,
+      _ => 0,
+    };
+    if (aba != Aba.noticias && aba != Aba.relatorios) return icone;
     return Badge(
-      isLabelVisible: estado.naoLidas > 0 && estado.aba != Aba.noticias,
-      label: Text('${estado.naoLidas}'),
+      isLabelVisible: n > 0 && estado.aba != aba,
+      label: Text('$n'),
       child: icone,
     );
   }

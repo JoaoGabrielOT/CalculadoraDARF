@@ -209,9 +209,13 @@ class SessaoGoogle {
     if (r.statusCode >= 400) {
       final erro = _erroDoCorpo(r);
       if (r.statusCode == 403 && _faltaEscopo(erro)) {
-        throw EscopoInsuficiente(_mensagem(r, erro), r.statusCode);
+        throw EscopoInsuficiente(
+          _mensagem(r, erro),
+          r.statusCode,
+          _motivo(erro),
+        );
       }
-      throw ErroGoogle(_mensagem(r, erro), r.statusCode);
+      throw ErroGoogle(_mensagem(r, erro), r.statusCode, _motivo(erro));
     }
     if (r.bodyBytes.isEmpty) return <String, Object?>{};
     try {
@@ -242,6 +246,19 @@ class SessaoGoogle {
     return erro != null &&
         (tem(erro['errors'], 'insufficientPermissions') ||
             tem(erro['details'], 'ACCESS_TOKEN_SCOPE_INSUFFICIENT'));
+  }
+
+  /// O primeiro `reason` de `errors[]` (v3) ou de `details[]`.
+  String? _motivo(Map<String, Object?>? erro) {
+    for (final chave in ['errors', 'details']) {
+      final lista = erro?[chave];
+      if (lista is! List) continue;
+      for (final i in lista) {
+        final motivo = i is Map ? i['reason'] : null;
+        if (motivo is String && motivo.isNotEmpty) return motivo;
+      }
+    }
+    return null;
   }
 
   String _mensagem(pkg.Response r, Map<String, Object?>? erro) {

@@ -39,6 +39,7 @@ class ContaLocal {
     required this._abrirUrl,
     required this._emitir,
     Duration atrasoAgendamento = const Duration(milliseconds: 1500),
+    this._compartilhamento,
   }) {
     _sync = Sincronizador(
       conta: _conta,
@@ -56,6 +57,9 @@ class ContaLocal {
   final AbrirUrl _abrirUrl;
   final void Function(EventoServico) _emitir;
   late final Sincronizador _sync;
+
+  /// Pasta de relatórios no Drive; sem ela (testes) ninguém é dono.
+  final FonteCompartilhamento? _compartilhamento;
 
   AmigoCarregado? _amigo;
 
@@ -128,7 +132,8 @@ class ContaLocal {
 
   /// Login de novo mesmo com a sessão aberta (o token sem o escopo dos
   /// Relatórios): não sai da conta; cancelado, a conta continua.
-  Future<void> reconectar() async {
+  /// [escoposExtras] vão ao Google junto dos escopos padrão.
+  Future<void> reconectar({List<String> escoposExtras = const []}) async {
     if (_sync.ocupado) return;
     if (!_conta.temCredencial) {
       _emitir(
@@ -141,7 +146,11 @@ class ContaLocal {
       return;
     }
     try {
-      await _sync.conectar(_abrirUrl, mesmaConta: _conta.email);
+      await _sync.conectar(
+        _abrirUrl,
+        mesmaConta: _conta.email,
+        escoposExtras: escoposExtras,
+      );
     } finally {
       _reconciliar();
     }
@@ -176,6 +185,7 @@ class ContaLocal {
   Future<void> sair() async {
     final tinhaAmigo = _amigo != null;
     limparAmigo();
+    _naoDono = null;
     _sync.sair();
     if (tinhaAmigo) _emitir(const EventoDadosMudaram());
     _reconciliar();
@@ -357,4 +367,93 @@ class ContaLocal {
   }
 
   Future<void> esquecerAmigo() async => limparAmigo();
+
+  // --- pasta de relatórios compartilhada com os amigos
+
+  /// Validade do "não dono" em memória: a pasta raramente muda de dono.
+  static const _validadeNaoDono = 6 * 3600;
+
+  /// Conta que não é dona da pasta e até quando isso vale (segundos de
+  /// `ambiente.agora()`). Só resposta definitiva entra; apagado no Sair e
+  /// depois do "Permitir".
+  ({String email, double ate})? _naoDono;
+
+  /// `compartilharRelatorios` em andamento e o que espera por ele.
+  Future<ResultadoCompartilhamento>? _rodada;
+  Future<ResultadoCompartilhamento>? _naFila;
+
+  bool _naoDonoEmCache(String email) {
+    final c = _naoDono;
+    return c != null && c.email == email && ambiente.agora() < c.ate;
+  }
+
+  void _guardarNaoDono(String email) =>
+      _naoDono = (email: email, ate: ambiente.agora() + _validadeNaoDono);
+
+  /// Sem conta, sem a fonte ou com qualquer falha: não dono (nada aparece).
+  Future<EstadoCompartilhamento> estadoCompartilhamento() async {
+    final fonte = _compartilhamento;
+    final email = _conta.email;
+    if (fonte == null || email == null || _naoDonoEmCache(email)) {
+      return EstadoCompartilhamento.naoDono;
+    }
+    final EstadoCompartilhamento estado;
+    try {
+      estado = await fonte.estado();
+    } on ErroGoogle {
+      // falha passageira: não conferido, fora do cache
+      return EstadoCompartilhamento.naoDono;
+    }
+    if (estado == EstadoCompartilhamento.naoDono) _guardarNaoDono(email);
+    return estado;
+  }
+
+  /// Dá acesso de leitor aos amigos atuais que ainda não o têm. Uma rodada
+  /// por vez: quem chega durante uma rodada espera a próxima, dividida com
+  /// os outros que chegarem antes de ela começar.
+  Future<ResultadoCompartilhamento> compartilharRelatorios() {
+    final naFila = _naFila;
+    if (naFila != null) return naFila;
+    final antes = _rodada;
+    late final Future<ResultadoCompartilhamento> f;
+    f = () async {
+      if (antes != null) {
+        await antes.then((_) {}, onError: (_) {});
+        _naFila = null;
+      }
+      try {
+        return await _compartilharRelatorios();
+      } finally {
+        if (identical(_rodada, f)) _rodada = null;
+      }
+    }();
+    if (antes != null) _naFila = f;
+    return _rodada = f;
+  }
+
+  Future<ResultadoCompartilhamento> _compartilharRelatorios() async {
+    final fonte = _compartilhamento;
+    final email = _conta.email;
+    if (fonte == null || email == null || _naoDonoEmCache(email)) {
+      return const ResultadoCompartilhamento();
+    }
+    final emails = [for (final a in lerConfigParaGravar(_repo).amigos) a.email];
+    final r = await fonte.compartilharCom(emails);
+    if (r.estado == EstadoCompartilhamento.naoDono) _guardarNaoDono(email);
+    return r;
+  }
+
+  /// "Permitir" da tela de Amigos: só para a dona da pasta sem o escopo
+  /// `drive`; entra de novo com a mesma conta pedindo também esse escopo.
+  Future<void> permitirCompartilhamento() async {
+    if (_conta.email == null) return;
+    if (await estadoCompartilhamento() != EstadoCompartilhamento.semEscopo) {
+      return;
+    }
+    try {
+      await reconectar(escoposExtras: const [escopoDrive]);
+    } finally {
+      _naoDono = null;
+    }
+  }
 }

@@ -43,24 +43,28 @@ String desafioPkce(String verificador) => base64Url
 }
 
 /// google_sync.py:197-200; [dica] (`login_hint`) é a conta atual no "entrar
-/// de novo".
+/// de novo". [escoposExtras] (o "Permitir" da tela de Amigos) vão depois de
+/// [escoposGoogle]. `include_granted_scopes` vai sempre: o "entrar de novo"
+/// da dona da pasta não tira o `drive` do token.
 Uri urlAutorizacao(
   ClienteOAuth cliente, {
   required String redirect,
   required String desafio,
   required String estado,
   String? dica,
+  List<String> escoposExtras = const [],
 }) => Uri.parse(cliente.authUri).replace(
   queryParameters: {
     'client_id': cliente.clientId,
     'redirect_uri': redirect,
     'response_type': 'code',
-    'scope': escoposGoogle.join(' '),
+    'scope': [...escoposGoogle, ...escoposExtras].join(' '),
     'access_type': 'offline',
     'prompt': 'consent',
     'code_challenge': desafio,
     'code_challenge_method': 'S256',
     'state': estado,
+    'include_granted_scopes': 'true',
     'login_hint': ?dica,
   },
 );
@@ -72,7 +76,7 @@ String? _valor(Map<String, List<String>> q, String chave) =>
 /// google_sync.py:148-244: login com PKCE e servidor loopback; devolve o
 /// e-mail da conta e deixa o `token.json` gravado. Com [mesmaConta] ("entrar
 /// de novo"), outra conta lança [OutraConta] antes de gravar o token ou trocar
-/// a sessão.
+/// a sessão. [escoposExtras] vão ao Google junto de [escoposGoogle].
 Future<String> loginNavegador(
   SessaoGoogle sessao,
   ClienteOAuth cliente,
@@ -82,6 +86,7 @@ Future<String> loginNavegador(
   Esperar? esperar,
   Future<void>? cancelar,
   String? mesmaConta,
+  List<String> escoposExtras = const [],
 }) async {
   final dormir = esperar ?? Future<void>.delayed;
   final pkce = gerarPkce();
@@ -134,6 +139,7 @@ Future<String> loginNavegador(
         desafio: pkce.desafio,
         estado: estado,
         dica: mesmaConta,
+        escoposExtras: escoposExtras,
       ),
     );
     try {
@@ -209,7 +215,8 @@ Future<String> loginNavegador(
     tokenUri: cliente.tokenUri,
     clientId: cliente.clientId,
     clientSecret: cliente.clientSecret,
-    scopes: escoposDaResposta(tok['scope']) ?? List.of(escoposGoogle),
+    scopes:
+        escoposDaResposta(tok['scope']) ?? [...escoposGoogle, ...escoposExtras],
     expiry: DateTime.fromMicrosecondsSinceEpoch(
       arredondar((ambiente.agora() + segundos - 60) * 1000000, 0).toInt(),
       isUtc: true,

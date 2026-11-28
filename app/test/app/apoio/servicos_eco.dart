@@ -339,6 +339,17 @@ class ServicosEco implements ServicosApp {
   );
 
   @override
+  Future<Diarias> barrasDiarias(String ticker, {String? desde}) async =>
+      Diarias(
+        barras: [
+          BarraDiaria(data: desde ?? '2026-10-01', alta: 3, baixa: 1, fech: 2),
+        ],
+        hoje: '2026-10-02',
+        preco: 2,
+        fonte: 'eco:$ticker',
+      );
+
+  @override
   Future<Map<String, double?>> precosCarteira(Set<String> tickers) async => {
     for (final t in tickers) t: t.length.toDouble(),
     'nulo': null,
@@ -507,6 +518,13 @@ class ServicosEco implements ServicosApp {
     atual: _relatorio('2026-11-26', 'eco atualizado'),
     ehHoje: true,
     situacao: SituacaoRelatorios.semConexao,
+    novos: const [
+      ResumoRelatorio(
+        nome: 'relatorio-abertura-2026-11-26.json',
+        data: '2026-11-26',
+        geradoEm: '2026-11-26T08:05:00-03:00',
+      ),
+    ],
   );
 
   @override
@@ -514,5 +532,23 @@ class ServicosEco implements ServicosApp {
       _relatorio('2026-11-26', nome);
 
   @override
+  Future<void> marcarRelatoriosAvisados() async {}
+
+  @override
   Future<void> entrarDeNovoGoogle() async {}
+
+  @override
+  Future<EstadoCompartilhamento> estadoCompartilhamento() async =>
+      EstadoCompartilhamento.semEscopo;
+
+  @override
+  Future<ResultadoCompartilhamento> compartilharRelatorios() async =>
+      const ResultadoCompartilhamento(
+        compartilhados: 2,
+        recusados: ['sem@conta.com'],
+        erro: 'eco',
+      );
+
+  @override
+  Future<void> permitirCompartilhamento() async {}
 }

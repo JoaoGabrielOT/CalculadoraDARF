@@ -62,8 +62,59 @@ void main() {
     });
   });
 
+  test('URL de início com o extra drive ("Permitir")', () {
+    final url = urlInicioLogin(
+      api,
+      Uri.parse('https://calculadora-darf.onrender.com/#/'),
+      _nonce,
+      dica: 'ana@gmail.com',
+      extra: 'drive',
+    );
+    expect(url.queryParameters, {
+      'volta': 'https://calculadora-darf.onrender.com',
+      'n': _nonce,
+      'hint': 'ana@gmail.com',
+      'extra': 'drive',
+    });
+  });
+
   group('criarLoginWeb', () {
     final origem = Uri.parse('https://calculadora-darf.onrender.com/#/');
+
+    test(
+      'escopo drive extra vai como extra=drive, com a mesma conta',
+      () async {
+        final a = ArmazenamentoMemoria();
+        final idas = <Uri>[];
+        final login = criarLoginWeb(
+          api: api,
+          origem: origem,
+          nonces: GuardaNonceMemoria(),
+          armazenamento: a,
+          irPara: (url) async => idas.add(url),
+        );
+        unawaited(
+          login(
+            (_) async {},
+            mesmaConta: 'ana@gmail.com',
+            escoposExtras: const [escopoDrive],
+          ),
+        );
+        await pumpEventQueue();
+        expect(idas.single.queryParameters['extra'], 'drive');
+        expect(idas.single.queryParameters['hint'], 'ana@gmail.com');
+        expect(consumirMesmaContaWeb(a), 'ana@gmail.com');
+
+        // sem extras (ou com outro escopo) não vai extra
+        unawaited(login((_) async {}));
+        unawaited(
+          login((_) async {}, escoposExtras: const ['https://exemplo/outro']),
+        );
+        await pumpEventQueue();
+        expect(idas[1].queryParameters.containsKey('extra'), isFalse);
+        expect(idas[2].queryParameters.containsKey('extra'), isFalse);
+      },
+    );
 
     test('mesmaConta: hint na ida e a conta guardada para a volta', () async {
       final a = ArmazenamentoMemoria();

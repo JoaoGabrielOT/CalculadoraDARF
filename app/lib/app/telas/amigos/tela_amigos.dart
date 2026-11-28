@@ -2,14 +2,17 @@
 // amigo (calculadora_darf.py:2922-2932, 3721-3839; android/main.py:2112-2187).
 // Diálogo de 480 px no PC e tela cheia no celular. A validação do e-mail e a
 // conta do compartilhamento ficam no serviço; aqui só se lê o campo e se
-// mostra o resultado.
+// mostra o resultado. A conta dona da pasta de relatórios também a
+// compartilha com os amigos (o "Permitir" pede o escopo `drive`).
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
+import '../../componentes/cartao.dart';
 import '../../componentes/carregando.dart';
 import '../../componentes/dialogos.dart';
 import '../../estado/estado_app.dart';
@@ -26,6 +29,9 @@ const textoSemPlanilha =
 const textoExplicacao =
     'Ao adicionar um amigo, sua planilha é compartilhada com ele somente '
     'para leitura. Para ver os dados dele, ele também precisa adicionar você.';
+const textoPermitirCompartilhamento =
+    'Para compartilhar a pasta de relatórios automaticamente com seus amigos, '
+    'entre de novo com o Google e permita o acesso ao Drive.';
 
 /// Abre os amigos. Sem conta ou sem planilha só avisa (py:2922-2928); "Ver"
 /// fecha a janela e troca a visão (py:2929-2932), sem mudar de aba no PC.
@@ -81,6 +87,7 @@ class ControleAmigos extends ChangeNotifier {
     _versao = _estado.versaoDados;
     _estado.addListener(_aoMudarEstado);
     unawaited(recarregar());
+    unawaited(_reconciliar());
   }
 
   final ServicosApp _servicos;
@@ -98,6 +105,16 @@ class ControleAmigos extends ChangeNotifier {
   bool ocupado = false;
   String status = '';
   _Tom _tom = _Tom.neutro;
+
+  /// Só a conta dona da pasta de relatórios sai de `naoDono`.
+  EstadoCompartilhamento compartilhamento = EstadoCompartilhamento.naoDono;
+
+  /// O que aconteceu no último compartilhamento da pasta; vazio, nada.
+  String statusRelatorios = '';
+  _Tom _tomRelatorios = _Tom.neutro;
+
+  /// "Permitir" em andamento.
+  bool permitindo = false;
 
   @override
   void notifyListeners() {
@@ -136,6 +153,79 @@ class ControleAmigos extends ChangeNotifier {
     _tom = tom;
   }
 
+  /// Ao abrir e depois do "Permitir": confere o dono e compartilha a pasta
+  /// com os amigos que faltam; falhas ficam em silêncio.
+  Future<void> _reconciliar() async {
+    try {
+      compartilhamento = await _servicos.estadoCompartilhamento();
+      notifyListeners();
+      if (compartilhamento != EstadoCompartilhamento.pronto) return;
+      _mostrarRelatorios(
+        await _servicos.compartilharRelatorios(),
+        adicao: false,
+      );
+    } catch (_) {
+      // sem internet ou sem conta: nada a dizer
+    }
+    notifyListeners();
+  }
+
+  /// Só a adição avisa uma falha geral (rede, 403); e-mails recusados
+  /// aparecem sempre; sem escopo, só o aviso "Permitir".
+  void _mostrarRelatorios(ResultadoCompartilhamento r, {required bool adicao}) {
+    if (r.semEscopo) compartilhamento = EstadoCompartilhamento.semEscopo;
+    final erro = adicao && !r.semEscopo ? r.erro : null;
+    statusRelatorios = [
+      if (r.compartilhados > 0)
+        'Pasta de relatórios compartilhada com ${r.compartilhados} amigo(s)',
+      if (r.recusados.isNotEmpty)
+        'A pasta de relatórios não foi compartilhada com '
+            '${r.recusados.join(', ')}: e-mail sem conta Google.',
+      if (erro != null)
+        'Amigo adicionado, mas a pasta de relatórios não foi compartilhada: '
+            '$erro',
+    ].join('\n');
+    _tomRelatorios = r.recusados.isNotEmpty || erro != null
+        ? _Tom.erro
+        : _Tom.ok;
+  }
+
+  /// Depois de salvar o amigo; a falha não desfaz a adição.
+  Future<void> _compartilharAposAdicionar() async {
+    try {
+      _mostrarRelatorios(
+        await _servicos.compartilharRelatorios(),
+        adicao: true,
+      );
+    } catch (e) {
+      // só a dona conferida (com o escopo) vê a falha
+      if (compartilhamento != EstadoCompartilhamento.pronto) return;
+      _mostrarRelatorios(
+        ResultadoCompartilhamento(erro: textoErro(e)),
+        adicao: true,
+      );
+    }
+  }
+
+  /// Entra de novo com a mesma conta pedindo o escopo `drive` e compartilha.
+  Future<void> permitir() async {
+    if (permitindo) return;
+    permitindo = true;
+    notifyListeners();
+    try {
+      await _servicos.permitirCompartilhamento();
+    } catch (e) {
+      if (e is! PedidoSuperado) {
+        _estado.avisar('Login não concluído', textoErro(e));
+      }
+      return;
+    } finally {
+      permitindo = false;
+      notifyListeners();
+    }
+    await _reconciliar();
+  }
+
   /// Devolve true quando compartilhou (o campo é limpo).
   Future<bool> adicionar(String digitado) async {
     if (ocupado) return false;
@@ -148,6 +238,7 @@ class ControleAmigos extends ChangeNotifier {
       _dizer('Planilha compartilhada com $email.', _Tom.ok);
       ocupado = false;
       await recarregar();
+      await _compartilharAposAdicionar();
       return true;
     } catch (e) {
       _dizer(textoErro(e), _Tom.erro);
@@ -254,6 +345,11 @@ class _CorpoState extends State<_Corpo> {
       _Tom.ok => cores.alta,
       _Tom.erro => cores.queda,
     };
+    final Color corRelatorios = switch (controle._tomRelatorios) {
+      _Tom.neutro => cores.textoSuave,
+      _Tom.ok => cores.alta,
+      _Tom.erro => cores.queda,
+    };
     final lista = _Lista(controle: controle, embutido: widget.embutido);
     return Column(
       mainAxisSize: widget.dialogo || widget.embutido
@@ -299,6 +395,18 @@ class _CorpoState extends State<_Corpo> {
           style: TextStyle(color: corStatus),
         ),
         const SizedBox(height: 8),
+        if (controle.compartilhamento == EstadoCompartilhamento.semEscopo) ...[
+          _AvisoPermitir(controle: controle),
+          const SizedBox(height: 8),
+        ],
+        if (controle.statusRelatorios.isNotEmpty) ...[
+          Text(
+            controle.statusRelatorios,
+            key: const ValueKey('amigos-relatorios-status'),
+            style: TextStyle(color: corRelatorios),
+          ),
+          const SizedBox(height: 8),
+        ],
         if (widget.dialogo)
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 280),
@@ -319,6 +427,40 @@ class _CorpoState extends State<_Corpo> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Só para a conta dona da pasta de relatórios sem o escopo `drive`.
+class _AvisoPermitir extends StatelessWidget {
+  const _AvisoPermitir({required this.controle});
+
+  final ControleAmigos controle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Cartao(
+      key: const ValueKey('amigos-aviso-permitir'),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+      child: Semantics(
+        liveRegion: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(textoPermitirCompartilhamento),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                key: const ValueKey('amigos-permitir'),
+                onPressed: controle.permitindo
+                    ? null
+                    : () => unawaited(controle.permitir()),
+                child: const Text('Permitir'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -9,6 +9,7 @@ import '../../nucleo/armazenamento.dart';
 import '../../nucleo/compat/numeros.dart';
 import '../../nucleo/erros.dart';
 import '../http/cliente.dart';
+import 'constantes.dart';
 import 'erros.dart';
 import 'google.dart';
 import 'guarda_nonce.dart';
@@ -38,11 +39,22 @@ void gravarPacoteWeb(Armazenamento a, String pacote) => gravarToken(
 );
 
 /// `$api/auth/inicio?volta=<origem>&n=<nonce>`, com `&hint=<dica>` (a conta
-/// atual) no "entrar de novo".
-Uri urlInicioLogin(Uri api, Uri origem, String nonce, {String? dica}) =>
-    Uri.parse('$api/auth/inicio').replace(
-      queryParameters: {'volta': origem.origin, 'n': nonce, 'hint': ?dica},
-    );
+/// atual) no "entrar de novo" e `&extra=drive` no "Permitir" da tela de
+/// Amigos.
+Uri urlInicioLogin(
+  Uri api,
+  Uri origem,
+  String nonce, {
+  String? dica,
+  String? extra,
+}) => Uri.parse('$api/auth/inicio').replace(
+  queryParameters: {
+    'volta': origem.origin,
+    'n': nonce,
+    'hint': ?dica,
+    'extra': ?extra,
+  },
+);
 
 /// Conta do "entrar de novo", guardada na ida ao login e conferida na volta
 /// (`gravarPacoteDaMesmaConta`).
@@ -87,24 +99,42 @@ String _gerarNonce() {
 /// Login da Web: guarda um nonce e sai da página rumo ao servidor. O futuro só
 /// termina com erro; o resultado chega na volta, por [lerRetornoLogin]. Com
 /// `mesmaConta` a conta vai como `hint` e fica em [armazenamento] para a volta.
+/// O servidor só conhece o extra `drive` ([escopoDrive]); outros escopos
+/// extras não vão.
 FazerLogin criarLoginWeb({
   required Uri api,
   required Uri origem,
   required Future<void> Function(Uri url) irPara,
   required GuardaNonce nonces,
   Armazenamento? armazenamento,
-}) => (_, {Future<void>? cancelar, String? mesmaConta}) async {
-  final n = _gerarNonce();
-  try {
-    nonces.guardar(n);
-    if (armazenamento != null) guardarMesmaContaWeb(armazenamento, mesmaConta);
-    await irPara(urlInicioLogin(api, origem, n, dica: mesmaConta));
-  } catch (_) {
-    throw ErroGoogle(_msgLogin);
-  }
-  await (cancelar ?? Completer<void>().future);
-  throw ErroGoogle(_msgCancelado);
-};
+}) =>
+    (
+      _, {
+      Future<void>? cancelar,
+      String? mesmaConta,
+      List<String> escoposExtras = const [],
+    }) async {
+      final n = _gerarNonce();
+      try {
+        nonces.guardar(n);
+        if (armazenamento != null) {
+          guardarMesmaContaWeb(armazenamento, mesmaConta);
+        }
+        await irPara(
+          urlInicioLogin(
+            api,
+            origem,
+            n,
+            dica: mesmaConta,
+            extra: escoposExtras.contains(escopoDrive) ? 'drive' : null,
+          ),
+        );
+      } catch (_) {
+        throw ErroGoogle(_msgLogin);
+      }
+      await (cancelar ?? Completer<void>().future);
+      throw ErroGoogle(_msgCancelado);
+    };
 
 /// Renova o token pelo servidor: `POST $api/auth/token` com o pacote.
 RenovarToken criarRenovadorWeb(ClienteHttp http, Uri api) => (atual) async {

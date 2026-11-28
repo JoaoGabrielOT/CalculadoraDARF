@@ -134,6 +134,7 @@ class AppCalculadora extends StatelessWidget {
     required this.plataforma,
     this.estado,
     this.verificarAtualizacaoAutomatica = kReleaseMode,
+    this.conferirRelatoriosAoIniciar = true,
   });
 
   final ServicosApp servicos;
@@ -142,6 +143,7 @@ class AppCalculadora extends StatelessWidget {
 
   /// Repassado ao estado que o app cria (sem [estado]).
   final bool verificarAtualizacaoAutomatica;
+  final bool conferirRelatoriosAoIniciar;
 
   @override
   Widget build(BuildContext context) {
@@ -161,6 +163,7 @@ class AppCalculadora extends StatelessWidget {
               servicos,
               plataforma,
               verificarAtualizacaoAutomatica: verificarAtualizacaoAutomatica,
+              conferirRelatoriosAoIniciar: conferirRelatoriosAoIniciar,
             )..iniciar(),
           ),
       ],

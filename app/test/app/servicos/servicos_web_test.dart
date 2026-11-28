@@ -55,6 +55,17 @@ void main() {
         200,
       );
     }
+    if (r.url.path == '/drive/v3/files/$pastaRelatorios') {
+      return http.Response(
+        jsonEncode({
+          'capabilities': {'canShare': true},
+          'owners': [
+            {'emailAddress': 'eu@x.com'},
+          ],
+        }),
+        200,
+      );
+    }
     if (r.url.path == '/drive/v3/about') {
       return http.Response(
         jsonEncode({
@@ -340,6 +351,41 @@ void main() {
     expect(consumirMesmaContaWeb(a), 'eu@x.com');
     await s.cancelarLogin();
     expect((await s.conta()).email, 'eu@x.com');
+  });
+
+  test('dono da pasta sem o escopo drive: semEscopo pelo Drive', () async {
+    tokenValido();
+    await s.iniciar();
+    await (s as ServicosReais).tickSync();
+    expect(await s.estadoCompartilhamento(), EstadoCompartilhamento.semEscopo);
+    expect(
+      pedidos.where((r) => r.url.path == '/drive/v3/files/$pastaRelatorios'),
+      hasLength(1),
+    );
+  });
+
+  test('permitir leva extra=drive e a conta atual para a volta', () async {
+    tokenValido();
+    await s.iniciar();
+    await (s as ServicosReais).tickSync();
+    unawaited(s.permitirCompartilhamento());
+    await pumpEventQueue();
+
+    expect(idas.single.queryParameters['extra'], 'drive');
+    expect(idas.single.queryParameters['hint'], 'eu@x.com');
+    expect(consumirMesmaContaWeb(a), 'eu@x.com');
+    await s.cancelarLogin();
+    expect((await s.conta()).email, 'eu@x.com');
+  });
+
+  test('entrar de novo (Relatórios) não leva extra', () async {
+    tokenValido();
+    await s.iniciar();
+    await (s as ServicosReais).tickSync();
+    unawaited(s.entrarDeNovoGoogle());
+    await pumpEventQueue();
+    expect(idas.single.queryParameters.containsKey('extra'), isFalse);
+    await s.cancelarLogin();
   });
 
   test('sair apaga o cache dos relatórios', () async {

@@ -30,10 +30,42 @@ class ResumoRelatorio {
     required this.nome,
     required this.data,
     this.termometro,
+    this.geradoEm,
   });
   final String nome;
   final String data;
   final Termometro? termometro;
+
+  /// `geradoEm` do JSON, quando já foi baixado.
+  final String? geradoEm;
+}
+
+/// `HH:MM` de Brasília a partir do `geradoEm` (ISO 8601); com fuso, converte;
+/// sem fuso, vale a hora escrita. Ilegível ou ausente: null.
+String? horaDeGeracao(String? geradoEm) {
+  final d = geradoEm == null ? null : DateTime.tryParse(geradoEm);
+  if (d == null) return null;
+  final b = geradoEm!.contains(RegExp(r'(Z|[+-]\d\d:?\d\d)$'))
+      ? d.toUtc().subtract(const Duration(hours: 3))
+      : d;
+  String dois(int n) => n.toString().padLeft(2, '0');
+  return '${dois(b.hour)}:${dois(b.minute)}';
+}
+
+/// Os itens de [ordenados] (de [ordenarRelatorios]) mais novos que [avisado]
+/// (nome de arquivo; vazio = nenhum avisado ainda), do mais recente ao mais
+/// antigo.
+List<ResumoRelatorio> maisNovosQue(
+  List<ResumoRelatorio> ordenados,
+  String avisado,
+) {
+  final data = dataDoNome(avisado) ?? '';
+  return [
+    for (final r in ordenados)
+      if (compararTexto(r.data, data) > 0 ||
+          (r.data == data && compararTexto(r.nome, avisado) > 0))
+        r,
+  ];
 }
 
 /// Data decrescente; empate por nome decrescente.

@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../nucleo/extremos.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/dialogos.dart';
 import '../../componentes/seletor_mes.dart';
@@ -16,6 +17,55 @@ import '../../regras/filtros.dart';
 import '../../regras/textos.dart';
 import '../../servicos/api.dart';
 import '../formularios/abrir_formulario.dart';
+
+/// Barras diárias de um ticker, a partir de [desde]. Sem [barras] e com
+/// [pendente], ainda carregando; com [barras] e [pendente], refazendo (as
+/// antigas continuam à vista). [erro]: a última busca falhou.
+class BarrasAtivo {
+  const BarrasAtivo(
+    this.desde, {
+    this.barras,
+    this.erro = false,
+    this.pendente = false,
+    this.buscadoEm = 0,
+    this.hoje = '',
+  });
+
+  final String desde;
+  final List<BarraDiaria>? barras;
+  final bool erro;
+  final bool pendente;
+
+  /// `ambiente.agora()` da busca que trouxe as [barras] e o "hoje" dela.
+  final double buscadoEm;
+  final String hoje;
+}
+
+/// Melhor e pior resultado possível (ou maior lucro e maior perda até agora)
+/// de uma venda ou de um lote: carregando, indisponível ou com valores.
+/// [desde]/[ate] é o período usado; [variaPeriodo] quando as compras de um
+/// grupo de vendas começam em datas diferentes.
+class AnaliseExtremos {
+  const AnaliseExtremos({
+    this.carregando = false,
+    this.melhor,
+    this.pior,
+    this.extremos,
+    this.desde,
+    this.ate,
+    this.variaPeriodo = false,
+  });
+
+  final bool carregando;
+  final double? melhor;
+  final double? pior;
+  final Extremos? extremos;
+  final String? desde;
+  final String? ate;
+  final bool variaPeriodo;
+
+  bool get indisponivel => !carregando && melhor == null;
+}
 
 /// O que a seção "Ativos comprados" mostra: a posição no fim do mês
 /// escolhido (só leitura) ou os lotes do mês aberto (com as ações de hoje).
@@ -30,6 +80,7 @@ class ControleApuracao extends ChangeNotifier {
     // cotações da carteira a cada 60 s, só com a Apuração à vista e meus
     // dados (calculadora_darf.py:2578-2585)
     _timer = Timer.periodic(intervaloCotacoes, (_) {
+      if (_estado.aba == Aba.apuracao) _pedirBarras();
       if (_estado.aba == Aba.apuracao && _estado.amigo == null) {
         unawaited(_buscarPrecos());
         unawaited(_buscarCotacoes());
@@ -89,6 +140,9 @@ class ControleApuracao extends ChangeNotifier {
 
   /// Erro ao ler o mês aberto quando a carteira atual vem de outro mês.
   String? erroCarteira;
+
+  /// Barras diárias por ticker, para os extremos das vendas e dos lotes.
+  final Map<String, BarrasAtivo> barras = {};
 
   FiltroLotes filtroLotes = FiltroLotes();
   FiltroVendas filtroVendas = FiltroVendas();
@@ -216,6 +270,7 @@ class ControleApuracao extends ChangeNotifier {
   void _definirVisao(VisaoMes nova) {
     visao = nova;
     _podarSelecao();
+    _pedirBarras();
   }
 
   /// A seleção só vale para o que está à vista: some se a linha deixou de
@@ -246,6 +301,7 @@ class ControleApuracao extends ChangeNotifier {
   /// delas, ou o mês aberto e os preços dos lotes.
   void _atualizarModo({bool recarregarCarteira = false}) {
     if (_descartado || visao == null) return;
+    _pedirBarras();
     // as posições também alimentam os indicadores do detalhamento
     unawaited(_carregarPosicoes());
     if (modoLista != ModoLista.posicao) {
@@ -352,7 +408,230 @@ class ControleApuracao extends ChangeNotifier {
     }
     _podarSelecao();
     notifyListeners();
+    _pedirBarras();
     unawaited(_buscarPrecos());
+  }
+
+  /// Quanto tempo as barras valem antes de uma nova busca (s).
+  static const validadeBarras = 15 * 60;
+
+  /// Primeiro dia de uma venda: não dá para vender antes de comprar.
+  String _inicioDaParte(VisaoMes v, Lote lote) {
+    final mes = '${v.mes}-01';
+    return lote.dataCompra.compareTo(mes) > 0 ? lote.dataCompra : mes;
+  }
+
+  /// Menor data de que cada ticker precisa: o início de cada venda do mês na
+  /// tela e a compra de cada lote com saldo na lista de compras.
+  Map<String, String> _barrasNecessarias() {
+    final v = visao;
+    final precisa = <String, String>{};
+    void pedir(String ticker, String desde) {
+      final atual = precisa[ticker];
+      if (atual == null || desde.compareTo(atual) < 0) {
+        precisa[ticker] = desde;
+      }
+    }
+
+    if (v != null) {
+      final lotes = _lotesDaVisao(v);
+      for (final o in v.apuracao.ops) {
+        final lote = lotes[o.loteId];
+        pedir(o.ticker, lote == null ? '${v.mes}-01' : _inicioDaParte(v, lote));
+      }
+    }
+    if (modoLista == ModoLista.carteira) {
+      for (final l in visaoLotes?.dados.lotes ?? const <Lote>[]) {
+        if (restante(l) > 0) pedir(l.ticker, l.dataCompra);
+      }
+    }
+    return precisa;
+  }
+
+  /// Busca, uma vez por ticker, as barras diárias dos extremos. Refaz se
+  /// precisar de data mais antiga, se deu erro, se passaram 15 min ou se o
+  /// dia mudou; enquanto refaz, as barras antigas continuam à vista. Erro
+  /// vira "Indisponível".
+  void _pedirBarras() {
+    if (_descartado) return;
+    final agora = ambiente.agora();
+    final hoje = ambiente.hoje();
+    var mudou = false;
+    _barrasNecessarias().forEach((ticker, desde) {
+      final atual = barras[ticker];
+      var inicio = desde;
+      if (atual != null) {
+        final cobre = atual.desde.compareTo(desde) <= 0;
+        if (atual.pendente) {
+          if (cobre) return;
+        } else {
+          final vencida =
+              atual.erro ||
+              atual.hoje != hoje ||
+              agora - atual.buscadoEm >= validadeBarras;
+          if (cobre && !vencida) return;
+        }
+        if (cobre) inicio = atual.desde;
+      }
+      // as barras antigas só servem se cobrem o período novo
+      final servem = atual != null && atual.desde.compareTo(inicio) <= 0;
+      final pedido = BarrasAtivo(
+        inicio,
+        barras: servem ? atual.barras : null,
+        pendente: true,
+        buscadoEm: servem ? atual.buscadoEm : 0,
+        hoje: servem ? atual.hoje : '',
+      );
+      barras[ticker] = pedido;
+      mudou = true;
+      unawaited(_buscarBarras(ticker, pedido));
+    });
+    if (mudou) {
+      _versaoBarras++;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _buscarBarras(String ticker, BarrasAtivo pedido) async {
+    BarrasAtivo resposta;
+    try {
+      final r = await _servicos.barrasDiarias(ticker, desde: pedido.desde);
+      resposta = BarrasAtivo(
+        pedido.desde,
+        barras: r.barras,
+        buscadoEm: ambiente.agora(),
+        hoje: ambiente.hoje(),
+      );
+    } catch (_) {
+      // a falha mantém as barras antigas, se houver, e pede nova tentativa
+      resposta = BarrasAtivo(
+        pedido.desde,
+        barras: pedido.barras,
+        erro: true,
+        buscadoEm: pedido.buscadoEm,
+        hoje: pedido.hoje,
+      );
+    }
+    // um pedido mais novo (data mais antiga) já tomou o lugar deste
+    if (_descartado || !identical(barras[ticker], pedido)) return;
+    barras[ticker] = resposta;
+    _versaoBarras++;
+    notifyListeners();
+  }
+
+  int _versaoBarras = 0;
+  VisaoMes? _lotesDe;
+  Map<String, Lote> _lotesPorId = {};
+
+  Map<String, Lote> _lotesDaVisao(VisaoMes v) {
+    if (!identical(_lotesDe, v)) {
+      _lotesDe = v;
+      _lotesPorId = {for (final l in v.dados.lotes) l.id: l};
+    }
+    return _lotesPorId;
+  }
+
+  // análises por id, válidas enquanto a visão, as barras e o dia não mudam
+  final _memoVendas = <String, AnaliseExtremos>{};
+  final _memoLotes = <String, AnaliseExtremos>{};
+  VisaoMes? _memoVisao;
+  VisaoMes? _memoVisaoLotes;
+  int _memoVersao = -1;
+  String _memoHoje = '';
+
+  void _validarMemo() {
+    final hoje = ambiente.hoje();
+    if (identical(_memoVisao, visao) &&
+        identical(_memoVisaoLotes, visaoLotes) &&
+        _memoVersao == _versaoBarras &&
+        _memoHoje == hoje) {
+      return;
+    }
+    _memoVendas.clear();
+    _memoLotes.clear();
+    _memoVisao = visao;
+    _memoVisaoLotes = visaoLotes;
+    _memoVersao = _versaoBarras;
+    _memoHoje = hoje;
+  }
+
+  /// Barras do ticker, ou se ainda esperam por elas.
+  ({List<BarraDiaria>? lista, bool carregando}) _barrasDe(String ticker) {
+    final b = barras[ticker];
+    if (b == null) return (lista: null, carregando: true);
+    if (b.barras != null) return (lista: b.barras, carregando: false);
+    return (lista: null, carregando: !b.erro);
+  }
+
+  /// Melhor e pior resultado possível de uma venda (ou do grupo, somando as
+  /// vendas dele) pela máxima e pela mínima do período: de max(início do mês,
+  /// compra do lote) até o fim do mês, ou até hoje no mês atual.
+  AnaliseExtremos analiseVenda(GrupoVenda g) {
+    final v = visao;
+    if (v == null) return const AnaliseExtremos();
+    _validarMemo();
+    return _memoVendas[g.op.vendaId] ??= _calcularVenda(v, g);
+  }
+
+  AnaliseExtremos _calcularVenda(VisaoMes v, GrupoVenda g) {
+    final b = _barrasDe(g.op.ticker);
+    final lista = b.lista;
+    if (lista == null) return AnaliseExtremos(carregando: b.carregando);
+    final lotes = _lotesDaVisao(v);
+    final ate = dataCorteDoMes(v.mes, ambiente.hoje());
+    var melhor = 0.0;
+    var pior = 0.0;
+    String? primeiro;
+    Extremos? primeiros;
+    var varia = false;
+    for (final p in g.partes) {
+      final lote = lotes[p.loteId];
+      if (lote == null) return const AnaliseExtremos();
+      final inicio = _inicioDaParte(v, lote);
+      final e = extremosDe(lista, inicio, ate);
+      if (e == null) return const AnaliseExtremos();
+      melhor += resultadoHipotetico(lote, p.qtd, e.maximo);
+      pior += resultadoHipotetico(lote, p.qtd, e.minimo);
+      if (primeiro == null) {
+        primeiro = inicio;
+        primeiros = e;
+      } else if (inicio != primeiro) {
+        varia = true;
+      }
+    }
+    return AnaliseExtremos(
+      melhor: melhor,
+      pior: pior,
+      extremos: varia ? null : primeiros,
+      desde: primeiro,
+      ate: ate,
+      variaPeriodo: varia,
+    );
+  }
+
+  /// Maior lucro e maior perda possíveis de vender o saldo do lote, da
+  /// compra até hoje; sem saldo não há análise (nulo).
+  AnaliseExtremos? analiseLote(Lote l) {
+    if (restante(l) <= 0) return null;
+    _validarMemo();
+    return _memoLotes[l.id] ??= _calcularLote(l);
+  }
+
+  AnaliseExtremos _calcularLote(Lote l) {
+    final b = _barrasDe(l.ticker);
+    final lista = b.lista;
+    if (lista == null) return AnaliseExtremos(carregando: b.carregando);
+    final ate = ambiente.hoje();
+    final e = extremosDe(lista, l.dataCompra, ate);
+    if (e == null) return const AnaliseExtremos();
+    final saldo = restante(l);
+    return AnaliseExtremos(
+      melhor: resultadoHipotetico(l, saldo, e.maximo),
+      pior: resultadoHipotetico(l, saldo, e.minimo),
+      extremos: e,
+      desde: l.dataCompra,
+      ate: ate,
+    );
   }
 
   /// Cotações das compras em aberto, sem bloquear a tela: cada ticker mostra

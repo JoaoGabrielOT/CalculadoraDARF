@@ -184,7 +184,7 @@ class CasaEspecialista extends StatelessWidget {
               runSpacing: 4,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                if (voto != null) _seloVoto(voto),
+                if (voto != null) seloVoto(voto),
                 if (i.casa case final casa?)
                   Text(
                     casa,
@@ -230,7 +230,8 @@ class CasaEspecialista extends StatelessWidget {
   }
 }
 
-Widget _seloVoto(Consenso v) => switch (v) {
+/// Selo da classificação de uma casa.
+Widget seloVoto(Consenso v) => switch (v) {
   Consenso.compra => const SeloLeitura(Leitura.positiva, texto: 'Compra'),
   Consenso.venda => const SeloLeitura(Leitura.negativa, texto: 'Venda'),
   Consenso.neutra => const SeloLeitura(Leitura.neutra, texto: 'Manter'),

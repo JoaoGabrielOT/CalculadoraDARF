@@ -175,6 +175,9 @@ class MercadoLocal {
   Future<Grafico> grafico(String ticker, String periodo) =>
       yahoo.grafico(ticker, periodo);
 
+  Future<Diarias> barrasDiarias(String ticker, {String? desde}) =>
+      yahoo.barrasDiarias(ticker, desde: desde);
+
   Future<(double, String)> precoVenda(String ticker, String dia) =>
       yahoo.precoVenda(ticker, dia);
 

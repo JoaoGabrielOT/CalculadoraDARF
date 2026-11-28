@@ -1,6 +1,7 @@
 export 'atualizador/atualizador.dart';
 export 'cache_binario.dart';
 export 'executor.dart';
+export 'google/compartilhamento.dart';
 export 'google/constantes.dart';
 export 'google/credenciais.dart';
 export 'google/credenciais_asset.dart';

@@ -86,6 +86,7 @@ ServicosApp criarServicosWeb({
       conta: google,
       limiteConteudo: 5,
     ),
+    compartilhamento: DriveCompartilhamento(sessao),
     cliente: c,
   );
   if (timers) {

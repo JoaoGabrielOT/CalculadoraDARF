@@ -399,33 +399,35 @@ void main() {
     }
   });
 
-  test('hoje sem conteúdo por falta de rede: o mais recente em cache', () async {
-    final f = FonteFalsa(
-      arquivos: [_arq('2026-11-24'), _arq('2026-11-25')],
-      conteudos: {
-        'id-2026-11-24': _doDia('2026-11-24'),
-        'id-2026-11-25': _doDia('2026-11-25'),
-        'id-2026-11-26': Offline('sem rede'),
-      },
-    );
-    final disco = ArmazenamentoMemoria();
-    await _local(f, disco).atualizar();
-    f.arquivos.add(_arq('2026-11-26'));
-    final v = await _local(f, disco).atualizar();
-    expect(v.situacao, SituacaoRelatorios.semConexao);
-    expect(v.itens.first.data, '2026-11-26');
-    expect(v.ehHoje, isFalse);
-    expect(v.atual?.data, '2026-11-25');
-    expect(v.nomeAtual, _nome('2026-11-25'));
-    // a listagem também falha: o mesmo, pelo índice
-    f.erroListar = Offline('x');
-    final c = await _local(f, disco).atualizar();
-    expect((c.atual?.data, c.nomeAtual, c.ehHoje), (
-      '2026-11-25',
-      _nome('2026-11-25'),
-      false,
-    ));
-  });
+  test(
+    'hoje sem conteúdo por falta de rede: o mais recente em cache',
+    () async {
+      final f = FonteFalsa(
+        arquivos: [_arq('2026-11-24'), _arq('2026-11-25')],
+        conteudos: {
+          'id-2026-11-24': _doDia('2026-11-24'),
+          'id-2026-11-25': _doDia('2026-11-25'),
+          'id-2026-11-26': Offline('sem rede'),
+        },
+      );
+      final disco = ArmazenamentoMemoria();
+      await _local(f, disco).atualizar();
+      f.arquivos.add(_arq('2026-11-26'));
+      final v = await _local(f, disco).atualizar();
+      expect(v.situacao, SituacaoRelatorios.semConexao);
+      expect(v.itens.first.data, '2026-11-26');
+      expect(v.ehHoje, isFalse);
+      expect(v.atual?.data, '2026-11-25');
+      expect(v.nomeAtual, _nome('2026-11-25'));
+      // a listagem também falha: o mesmo, pelo índice
+      f.erroListar = Offline('x');
+      final c = await _local(f, disco).atualizar();
+      expect(
+        (c.atual?.data, c.nomeAtual, c.ehHoje),
+        ('2026-11-25', _nome('2026-11-25'), false),
+      );
+    },
+  );
 
   test('nome repetido: vale o modifiedTime mais novo', () async {
     final f = FonteFalsa(
@@ -931,5 +933,132 @@ void main() {
       expect(v.atual!.ativos.length, n, reason: '$n');
       expect(v.itens.single.termometro!.total, n);
     }
+  });
+
+  group('aviso de relatório novo', () {
+    FonteFalsa pasta(List<String> datas) => FonteFalsa(
+      arquivos: [for (final d in datas) _arq(d)],
+      conteudos: {for (final d in datas) 'id-$d': _doDia(d)},
+    );
+
+    test('primeira listagem só grava o mais novo, sem aviso', () async {
+      final f = pasta(['2026-11-24', '2026-11-25']);
+      final disco = ArmazenamentoMemoria();
+      final v = await _local(f, disco).atualizar();
+      expect(v.novos, isEmpty);
+      expect((await _local(f, disco).emCache()).novos, isEmpty);
+      expect((await _local(f, disco).atualizar()).novos, isEmpty);
+    });
+
+    test('relatório mais novo aparece como novo, com a hora gerada', () async {
+      final f = pasta(['2026-11-25']);
+      final disco = ArmazenamentoMemoria();
+      await _local(f, disco).atualizar();
+      f
+        ..arquivos = [_arq('2026-11-25'), _arq('2026-11-26')]
+        ..conteudos['id-2026-11-26'] = _doDia('2026-11-26');
+      final v = await _local(f, disco).atualizar();
+      expect(v.novos.map((r) => r.data), ['2026-11-26']);
+      expect(v.novos.single.geradoEm, '2026-11-26T15:40:00-03:00');
+      // o cache também mostra, até avisar
+      expect((await _local(f, disco).emCache()).novos, hasLength(1));
+    });
+
+    test('dois novos: os dois, o mais recente primeiro', () async {
+      final f = pasta(['2026-11-24']);
+      final disco = ArmazenamentoMemoria();
+      await _local(f, disco).atualizar();
+      f
+        ..arquivos = [
+          _arq('2026-11-24'),
+          _arq('2026-11-25'),
+          _arq('2026-11-26'),
+        ]
+        ..conteudos['id-2026-11-25'] = _doDia('2026-11-25')
+        ..conteudos['id-2026-11-26'] = _doDia('2026-11-26');
+      final v = await _local(f, disco).atualizar();
+      expect(v.novos.map((r) => r.data), ['2026-11-26', '2026-11-25']);
+    });
+
+    test('marcar como avisado zera e não volta ao recriar', () async {
+      final f = pasta(['2026-11-25']);
+      final disco = ArmazenamentoMemoria();
+      await _local(f, disco).atualizar();
+      f
+        ..arquivos = [_arq('2026-11-25'), _arq('2026-11-26')]
+        ..conteudos['id-2026-11-26'] = _doDia('2026-11-26');
+      final local = _local(f, disco);
+      expect((await local.atualizar()).novos, hasLength(1));
+      await local.marcarAvisados();
+      expect((await local.emCache()).novos, isEmpty);
+      final outro = _local(f, disco);
+      expect((await outro.emCache()).novos, isEmpty);
+      expect((await outro.atualizar()).novos, isEmpty);
+    });
+
+    test('pasta vazia na primeira vez: o que chega depois não avisa', () async {
+      final f = pasta([]);
+      final disco = ArmazenamentoMemoria();
+      await _local(f, disco).atualizar();
+      final datas = [
+        for (var d = 1; d <= 40; d++) '2026-10-${d.toString().padLeft(2, '0')}',
+      ];
+      f
+        ..arquivos = [for (final d in datas) _arq(d)]
+        ..conteudos.addAll({for (final d in datas) 'id-$d': _doDia(d)});
+      final v = await _local(f, disco).atualizar();
+      expect(v.novos, isEmpty);
+      // e o seguinte já é novo
+      f
+        ..arquivos = [...f.arquivos, _arq('2026-11-26')]
+        ..conteudos['id-2026-11-26'] = _doDia('2026-11-26');
+      expect((await _local(f, disco).atualizar()).novos.map((r) => r.data), [
+        '2026-11-26',
+      ]);
+    });
+
+    test(
+      'limpar zera o avisado: a primeira listagem de novo não avisa',
+      () async {
+        final f = pasta(['2026-11-25']);
+        final disco = ArmazenamentoMemoria();
+        final local = _local(f, disco);
+        await local.atualizar();
+        f
+          ..arquivos = [_arq('2026-11-25'), _arq('2026-11-26')]
+          ..conteudos['id-2026-11-26'] = _doDia('2026-11-26');
+        expect((await local.atualizar()).novos, hasLength(1));
+        await local.limpar();
+        expect((await local.atualizar()).novos, isEmpty);
+      },
+    );
+
+    test('novoLogin não avisa nada', () async {
+      final f = pasta(['2026-11-25'])..escopos = _escoposAntigos;
+      final v = await _local(f, ArmazenamentoMemoria()).atualizar();
+      expect(v.situacao, SituacaoRelatorios.novoLogin);
+      expect(v.novos, isEmpty);
+    });
+
+    test('sem conexão mantém os novos do cache e não grava avisado', () async {
+      final f = pasta(['2026-11-25']);
+      final disco = ArmazenamentoMemoria();
+      await _local(f, disco).atualizar();
+      f
+        ..arquivos = [_arq('2026-11-25'), _arq('2026-11-26')]
+        ..conteudos['id-2026-11-26'] = _doDia('2026-11-26');
+      await _local(f, disco).atualizar();
+      f.erroListar = Offline();
+      final v = await _local(f, disco).atualizar();
+      expect(v.situacao, SituacaoRelatorios.semConexao);
+      expect(v.novos.map((r) => r.data), ['2026-11-26']);
+    });
+
+    test('sem conexão na primeira vez não avisa nada', () async {
+      final f = pasta(['2026-11-25'])..erroListar = Offline();
+      final v = await _local(f, ArmazenamentoMemoria()).atualizar();
+      expect(v.situacao, SituacaoRelatorios.semConexao);
+      expect(v.novos, isEmpty);
+    });
   });
 }

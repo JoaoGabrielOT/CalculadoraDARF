@@ -25,6 +25,10 @@ Future<void> montarApp(
   TemaVisual tema = TemaVisual.claro,
   Widget? tela,
   bool verificarAtualizacao = false,
+
+  /// Os testes não listam a pasta de relatórios ao iniciar, para não somar
+  /// chamadas; os do aviso de relatório novo ligam.
+  bool conferirRelatorios = false,
 }) async {
   t.view.physicalSize = tamanho;
   t.view.devicePixelRatio = 1.0;
@@ -42,6 +46,7 @@ Future<void> montarApp(
         servicos: s,
         plataforma: p,
         verificarAtualizacaoAutomatica: verificarAtualizacao,
+        conferirRelatoriosAoIniciar: conferirRelatorios,
       ),
     );
   } else {
@@ -56,6 +61,7 @@ Future<void> montarApp(
               s,
               p,
               verificarAtualizacaoAutomatica: verificarAtualizacao,
+              conferirRelatoriosAoIniciar: conferirRelatorios,
             )..iniciar(),
           ),
         ],

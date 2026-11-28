@@ -132,6 +132,8 @@ void main() {
     expect((cot as CotacaoErro).mensagem, 'eco:Petro');
     final g = await s.grafico('PETR4', '5D');
     expect((g.ticker, g.periodo, g.pontos.single), ('PETR4', '5D', (1, 2.5)));
+    final bd = await s.barrasDiarias('PETR4', desde: '2026-09-01');
+    expect((bd.barras.single.data, bd.fonte), ('2026-09-01', 'eco:PETR4'));
     expect(await s.precosCarteira({'ABC', 'DEFG'}), {
       'ABC': 3.0,
       'DEFG': 4.0,
@@ -197,10 +199,19 @@ void main() {
     expect(novos.ehHoje, isTrue);
     expect(novos.atual!.titulo, 'eco atualizado');
     expect(novos.itens.first.termometro!.de(Leitura.positiva), 2);
+    expect(novos.novos.single.geradoEm, '2026-11-26T08:05:00-03:00');
+    await s.marcarRelatoriosAvisados();
     final aberto = await s.abrirRelatorio('relatorio-abertura-2026-11-26.json');
     expect(aberto.titulo, 'relatorio-abertura-2026-11-26.json');
     expect(aberto.data, '2026-11-26');
     await s.entrarDeNovoGoogle();
+
+    expect(await s.estadoCompartilhamento(), EstadoCompartilhamento.semEscopo);
+    final compartilhado = await s.compartilharRelatorios();
+    expect(compartilhado.compartilhados, 2);
+    expect(compartilhado.recusados, ['sem@conta.com']);
+    expect(compartilhado.erro, 'eco');
+    await s.permitirCompartilhamento();
   });
 
   test('ErroValidacao volta com o mesmo tipo e mensagem', () async {

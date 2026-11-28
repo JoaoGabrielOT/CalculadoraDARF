@@ -82,6 +82,7 @@ test('inicio válido -> 302 para o Google com PKCE e cookie', async () => {
   );
   assert.equal(p.get('access_type'), 'offline');
   assert.equal(p.get('prompt'), 'consent');
+  assert.equal(p.get('include_granted_scopes'), 'true');
   assert.equal(p.get('code_challenge_method'), 'S256');
   assert.equal(p.has('client_secret'), false);
   assert.equal(r.headers.get('location').includes('segredo-falso'), false);
@@ -128,6 +129,39 @@ test('inicio com hint inválido segue o login sem login_hint', async () => {
     assert.equal(r.status, 302, hint);
     assert.equal(new URL(r.headers.get('location')).searchParams.has('login_hint'), false, hint);
     assert.match(r.headers.get('set-cookie'), /^__Host-darf_oauth=v1\./);
+  }
+});
+
+test('inicio com extra=drive pede também o escopo drive com include_granted_scopes', async () => {
+  const { GET } = criarInicio(dep());
+  const hint = encodeURIComponent('ana@gmail.com');
+  const r = await GET(
+    pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}&hint=${hint}&extra=drive`, { origem: null }),
+  );
+  assert.equal(r.status, 302);
+  const p = new URL(r.headers.get('location')).searchParams;
+  assert.equal(
+    p.get('scope'),
+    'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive',
+  );
+  assert.equal(p.get('include_granted_scopes'), 'true');
+  assert.equal(p.get('login_hint'), 'ana@gmail.com');
+});
+
+test('inicio sem extra ou com extra diferente de drive mantém os escopos padrão', async () => {
+  const { GET } = criarInicio(dep());
+  for (const extra of [null, '', 'Drive', 'drive.file', 'drive ', 'https://www.googleapis.com/auth/drive', 'gmail']) {
+    const consulta = extra === null ? '' : `&extra=${encodeURIComponent(extra)}`;
+    const r = await GET(pedido(`/api/auth/inicio?volta=${ORIGEM}&n=${NONCE}${consulta}`, { origem: null }));
+    assert.equal(r.status, 302, String(extra));
+    const p = new URL(r.headers.get('location')).searchParams;
+    assert.equal(
+      p.get('scope'),
+      'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly',
+      String(extra),
+    );
+    // sempre: o "entrar de novo" do dono não tira o drive do token
+    assert.equal(p.get('include_granted_scopes'), 'true', String(extra));
   }
 });
 

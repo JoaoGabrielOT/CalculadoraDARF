@@ -49,6 +49,7 @@ class _Entrada {
     required this.modificado,
     this.invalido = false,
     this.termometro,
+    this.geradoEm,
   });
 
   String id;
@@ -59,12 +60,16 @@ class _Entrada {
   bool invalido;
   Termometro? termometro;
 
+  /// `geradoEm` do relatório baixado (para a hora do aviso de novo).
+  String? geradoEm;
+
   Map<String, Object?> paraJson() {
     final t = termometro;
     return {
       'id': id,
       'modificado': modificado,
       'invalido': invalido,
+      'geradoEm': geradoEm,
       'termometro': t == null
           ? null
           : {for (final l in Leitura.values) l.name: t.de(l)},
@@ -79,6 +84,7 @@ class _Entrada {
       id: id,
       modificado: modificado,
       invalido: j['invalido'] == true,
+      geradoEm: j['geradoEm'] is String ? j['geradoEm'] as String : null,
       termometro: t is Map
           ? Termometro.deJson(t.cast<String, Object?>())
           : null,
@@ -87,9 +93,14 @@ class _Entrada {
 }
 
 class _Indice {
-  _Indice({this.aberto});
+  _Indice({this.aberto, this.avisado});
 
   final arquivos = <String, _Entrada>{};
+
+  /// Nome do último relatório já avisado (aberto ou dispensado); vazio ou
+  /// null = ainda não listou nenhum relatório (a primeira listagem com itens
+  /// grava o mais novo sem avisar).
+  String? avisado;
 
   /// Último relatório aberto pelo usuário: o limite não apaga o conteúdo dele.
   String? aberto;
@@ -101,6 +112,7 @@ class _Indice {
         key: value.paraJson(),
     },
     'aberto': aberto,
+    'avisado': avisado,
   });
 }
 
@@ -175,6 +187,15 @@ class RelatoriosLocal {
     return _emCurso = pedido;
   }
 
+  /// Abrir ou dispensar o aviso: o mais recente da lista vira o avisado.
+  Future<void> marcarAvisados() => _naFila(() async {
+    final indice = _lerIndice();
+    final itens = _itens(indice);
+    if (itens.isEmpty) return;
+    indice.avisado = itens.first.nome;
+    _gravarIndice(indice);
+  });
+
   /// Conteúdo do cache; sem cache baixa e guarda. Arquivo inválido é marcado
   /// e vira `ErroValidacao(textoRelatorioInvalido)`.
   Future<Relatorio> abrir(String nome) => _naFila(() => _abrir(nome));
@@ -247,6 +268,7 @@ class RelatoriosLocal {
     final antigo = _lerIndice();
     final novo = _Indice(
       aberto: pasta.containsKey(antigo.aberto) ? antigo.aberto : null,
+      avisado: antigo.avisado,
     );
     // modifiedTime novo: a entrada antiga (e o conteúdo dela) fica até o
     // download novo dar certo.
@@ -264,6 +286,10 @@ class RelatoriosLocal {
     }
 
     final ordenados = _itens(novo);
+    // primeira listagem: o que já existe não é novo
+    if (novo.avisado == null || novo.avisado!.isEmpty) {
+      novo.avisado = ordenados.firstOrNull?.nome ?? '';
+    }
     final hoje = _hoje;
     // Só o escolhido é decodificado; se estiver ilegível, é apagado aqui e
     // baixado no laço.
@@ -351,6 +377,7 @@ class RelatoriosLocal {
           nome: nome,
           data: dataDoNome(nome)!,
           termometro: e.termometro,
+          geradoEm: e.geradoEm,
         ),
   ]);
 
@@ -383,6 +410,10 @@ class RelatoriosLocal {
       nomeAtual: atual == null ? null : escolhido?.nome,
       ehHoje: ehHoje,
       situacao: situacao,
+      novos: switch (indice.avisado) {
+        final avisado? => maisNovosQue(itens, avisado),
+        null => const [],
+      },
     );
   }
 
@@ -401,6 +432,7 @@ class RelatoriosLocal {
       );
     }
     e.termometro = r.termometro;
+    e.geradoEm = r.geradoEm;
     if (_gravar(_caminho(nome), jsonEncode(m))) {
       _naMemoria.remove(nome);
     } else {
@@ -433,7 +465,11 @@ class RelatoriosLocal {
     }
     if (j is! Map) return _Indice();
     final aberto = j['aberto'], arquivos = j['arquivos'];
-    final indice = _Indice(aberto: aberto is String ? aberto : null);
+    final avisado = j['avisado'];
+    final indice = _Indice(
+      aberto: aberto is String ? aberto : null,
+      avisado: avisado is String ? avisado : null,
+    );
     if (arquivos is Map) {
       for (final MapEntry(:key, :value) in arquivos.entries) {
         final e = _Entrada.deJson(value);

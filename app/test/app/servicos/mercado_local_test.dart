@@ -303,6 +303,23 @@ void main() {
   });
 
   group('cotações', () {
+    test('barrasDiarias devolve as barras do Yahoo e usa o cache', () async {
+      pregoes['PETR4'] = 5;
+      final d = await servicos.barrasDiarias('PETR4');
+      expect(d.barras, hasLength(5));
+      expect(d.barras.first.fech, 10.0);
+      expect(d.preco, 10.5);
+      final pedidos = falso.pedidos.length;
+      final de = await servicos.barrasDiarias('PETR4');
+      expect(de.barras, hasLength(5));
+      expect(falso.pedidos, hasLength(pedidos));
+    });
+
+    test('barrasDiarias: ticker sem dados lança SemDados', () async {
+      status['XXXX3'] = 404;
+      await expectLater(servicos.barrasDiarias('XXXX3'), throwsException);
+    });
+
     test(
       'nome vindo do Yahoo preenche o item sem nome e agenda sync',
       () async {

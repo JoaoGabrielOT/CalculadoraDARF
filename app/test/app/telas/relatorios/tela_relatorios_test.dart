@@ -97,6 +97,29 @@ class _ServicosCacheLento extends ServicosFalsos {
   }
 }
 
+/// `atualizarRelatorios` demora e responde com os novos de quando foi
+/// pedida; `marcarRelatoriosAvisados` é real (zera os novos dali em diante).
+class _ServicosAviso extends ServicosFalsos {
+  final porta = Completer<void>();
+
+  @override
+  Future<VisaoRelatorios> atualizarRelatorios() async {
+    final antes = await relatorios();
+    await porta.future;
+    return antes;
+  }
+
+  @override
+  Future<void> marcarRelatoriosAvisados() async {
+    visaoRelatorios = VisaoRelatorios(
+      itens: visaoRelatorios.itens,
+      hoje: visaoRelatorios.hoje,
+      atual: visaoRelatorios.atual,
+      ehHoje: visaoRelatorios.ehHoje,
+    );
+  }
+}
+
 class _Cena {
   _Cena(this.servicos, this.plataforma);
 
@@ -748,5 +771,265 @@ void main() {
       t.getTopLeft(find.byKey(const Key('relatorios-atualizar'))).dy,
       greaterThanOrEqualTo(t.getBottomLeft(titulo).dy),
     );
+  });
+
+  group('filtros', () {
+    testWidgets('período filtra a lista dos anteriores (PC)', (t) async {
+      final s = _servicos(
+        _visao(
+          hoje: '2026-11-26',
+          itens: _itens(['2026-11-26', '2026-11-19', '2026-08-01']),
+        ),
+      );
+      await _montar(t, servicos: s);
+      expect(_item('2026-08-01'), findsOneWidget);
+      await t.tap(find.byKey(const Key('periodo-7')));
+      await t.pumpAndSettle();
+      expect(_item('2026-11-26'), findsOneWidget);
+      expect(_item('2026-11-19'), findsOneWidget);
+      expect(_item('2026-08-01'), findsNothing);
+      await t.tap(find.byKey(const Key('periodo-90')));
+      await t.pumpAndSettle();
+      expect(_item('2026-08-01'), findsNothing);
+      expect(_item('2026-11-19'), findsOneWidget);
+      await t.tap(find.byKey(const Key('periodo-todos')));
+      await t.pumpAndSettle();
+      expect(_item('2026-08-01'), findsOneWidget);
+    });
+
+    testWidgets('período sem relatórios: mensagem', (t) async {
+      final s = _servicos(
+        _visao(hoje: '2026-11-26', itens: _itens(['2026-08-01'])),
+      );
+      await _montar(t, servicos: s);
+      await t.tap(find.byKey(const Key('periodo-7')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('periodo-vazio')), findsOneWidget);
+    });
+
+    testWidgets('celular: chips na folha, sem overflow', (t) async {
+      final s = _servicos(
+        _visao(
+          hoje: '2026-11-26',
+          itens: _itens(['2026-11-26', '2026-11-19', '2026-08-01']),
+        ),
+      );
+      await _montar(t, servicos: s, tamanho: _celular);
+      await t.tap(find.text('Anteriores'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('periodo-30')));
+      await t.pumpAndSettle();
+      expect(_item('2026-11-19'), findsOneWidget);
+      expect(_item('2026-08-01'), findsNothing);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('carteira: posições com qtd > 0 do mês atual', (t) async {
+      final s = _servicos();
+      s.posicoesFn = (mes, amigo) async => VisaoPosicoes(
+        dataCorte: '2026-11-26',
+        corrente: true,
+        posicoes: [
+          PosicaoAtivo(
+            ticker: 'PETR4',
+            tipo: 'ACAO',
+            qtd: 10,
+            custoGerencial: 100,
+            compras: const [],
+          ),
+          PosicaoAtivo(
+            ticker: 'VALE3',
+            tipo: 'ACAO',
+            qtd: 0,
+            custoGerencial: 0,
+            compras: const [],
+          ),
+        ],
+      );
+      await _montar(t, servicos: s, tamanho: const Size(360, 20000));
+      await t.tap(find.byKey(const Key('filtros-alternar')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('chip-carteira')), findsOneWidget);
+      await t.tap(find.byKey(const Key('chip-carteira')));
+      await t.pumpAndSettle();
+      expect(find.text('1 de 22 ativos'), findsOneWidget);
+    });
+
+    testWidgets('falha ao carregar posições: chip oculto', (t) async {
+      final s = _servicos();
+      s.posicoesFn = (mes, amigo) async => throw StateError('falhou');
+      await _montar(t, servicos: s, tamanho: const Size(360, 20000));
+      expect(find.byKey(const Key('chip-carteira')), findsNothing);
+      expect(find.byKey(const Key('filtros-ativos')), findsOneWidget);
+    });
+    testWidgets('trocar de relatório reinicia o filtro', (t) async {
+      await _montar(t, tamanho: const Size(1366, 20000));
+      final campo = find.byKey(const Key('filtro-busca'));
+      await t.enterText(campo, 'petr4');
+      await t.pumpAndSettle();
+      expect(find.text('1 de 22 ativos'), findsOneWidget);
+      await t.tap(_item('2026-11-25'));
+      await t.pumpAndSettle();
+      expect(find.text('22 de 22 ativos'), findsOneWidget);
+      expect(t.widget<TextField>(campo).controller!.text, isEmpty);
+    });
+
+    testWidgets('trocar de conta zera a carteira e ignora resposta velha', (
+      t,
+    ) async {
+      final s = _servicos();
+      final velha = Completer<VisaoPosicoes>();
+      var chamadas = 0;
+      VisaoPosicoes com(String ticker) => VisaoPosicoes(
+        dataCorte: '2026-11-26',
+        corrente: true,
+        posicoes: [
+          PosicaoAtivo(
+            ticker: ticker,
+            tipo: 'ACAO',
+            qtd: 1,
+            custoGerencial: 1,
+            compras: const [],
+          ),
+        ],
+      );
+      s.posicoesFn = (mes, amigo) {
+        chamadas++;
+        // 1: criação; 2: entrada na aba (fica pendente); 3: troca de conta
+        if (chamadas == 2) return velha.future;
+        return Future.value(com(chamadas == 1 ? 'PETR4' : 'VALE3'));
+      };
+      await _montar(t, servicos: s, tamanho: const Size(360, 20000));
+      await _conta(t, s, 'outra@exemplo.com');
+      expect(chamadas, 3);
+      velha.complete(com('PETR4'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('filtros-alternar')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('chip-carteira')));
+      await t.pumpAndSettle();
+      expect(find.text('1 de 22 ativos'), findsOneWidget);
+      expect(find.byKey(const Key('cartao-VALE3')), findsOneWidget);
+      expect(find.byKey(const Key('cartao-PETR4')), findsNothing);
+    });
+  });
+
+  group('aviso de relatório novo', () {
+    ServicosFalsos comNovos(List<String> datas, {String? gerado}) {
+      final s = _servicos();
+      s.visaoRelatorios = VisaoRelatorios(
+        itens: _itens(),
+        hoje: '2026-11-26',
+        atual: Relatorio.deJson(fixtureRelatorio()),
+        ehHoje: true,
+        novos: [
+          for (final d in datas)
+            ResumoRelatorio(
+              nome: _nome(d),
+              data: d,
+              termometro: _termo,
+              geradoEm: gerado,
+            ),
+        ],
+      );
+      return s;
+    }
+
+    final faixa = find.byKey(const Key('faixa-novo-relatorio'));
+    final abrir = find.byKey(const Key('abrir-novo-relatorio'));
+    final dispensar = find.byKey(const Key('dispensar-novo-relatorio'));
+
+    testWidgets('sem novos: sem faixa', (t) async {
+      await _montar(t);
+      expect(faixa, findsNothing);
+    });
+
+    testWidgets('faixa com a data por extenso, a hora e os botões', (t) async {
+      await _montar(
+        t,
+        servicos: comNovos(['2026-11-25'], gerado: '2026-11-25T08:05:00-03:00'),
+        tamanho: _celular,
+      );
+      expect(
+        find.text(
+          'Novo relatório de abertura: Quarta-feira, 25 de novembro de 2026, '
+          'gerado às 08:05',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Abrir'), findsOneWidget);
+      expect(find.text('Dispensar'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('sem hora no índice: a faixa fica sem hora', (t) async {
+      await _montar(t, servicos: comNovos(['2026-11-25']));
+      expect(
+        find.text(
+          'Novo relatório de abertura: Quarta-feira, 25 de novembro de 2026',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('dois novos: cita o mais recente e o selo conta dois', (
+      t,
+    ) async {
+      await _montar(t, servicos: comNovos(['2026-11-26', '2026-11-25']));
+      expect(
+        find.textContaining(
+          'Novo relatório de abertura: Quinta-feira, 26 de novembro de 2026',
+        ),
+        findsOneWidget,
+      );
+      expect(_estado(t).relatoriosNovos, hasLength(2));
+    });
+
+    testWidgets('Abrir abre o relatório e zera o aviso', (t) async {
+      final s = comNovos(['2026-11-25']);
+      await _montar(t, servicos: s);
+      await t.tap(abrir);
+      await t.pumpAndSettle();
+      expect(_contar(s, 'abrirRelatorio(${_nome('2026-11-25')})'), 1);
+      expect(_contar(s, 'marcarRelatoriosAvisados()'), 1);
+      expect(faixa, findsNothing);
+      expect(_estado(t).relatoriosNovos, isEmpty);
+      expect(find.text('Relatório do dia 25'), findsWidgets);
+    });
+
+    testWidgets('Abrir com falha não marca como avisado', (t) async {
+      final s = comNovos(['2026-11-25'])
+        ..erros['abrirRelatorio'] = ErroValidacao('falhou');
+      await _montar(t, servicos: s);
+      await t.tap(abrir);
+      await t.pumpAndSettle();
+      expect(_contar(s, 'marcarRelatoriosAvisados()'), 0);
+      expect(faixa, findsOneWidget);
+    });
+
+    testWidgets('listagem em voo não traz a faixa de volta', (t) async {
+      final s = _ServicosAviso()
+        ..visaoRelatorios = comNovos(['2026-11-25']).visaoRelatorios
+        ..relatoriosAbertos = _servicos().relatoriosAbertos;
+      await _montar(t, servicos: s);
+      expect(faixa, findsOneWidget);
+      await t.tap(dispensar);
+      await t.pumpAndSettle();
+      expect(faixa, findsNothing);
+      s.porta.complete();
+      await t.pumpAndSettle();
+      expect(faixa, findsNothing);
+      expect(_estado(t).relatoriosNovos, isEmpty);
+    });
+
+    testWidgets('Dispensar zera o aviso sem abrir nada', (t) async {
+      final s = comNovos(['2026-11-25']);
+      await _montar(t, servicos: s);
+      await t.tap(dispensar);
+      await t.pumpAndSettle();
+      expect(_contar(s, 'marcarRelatoriosAvisados()'), 1);
+      expect(_contar(s, 'abrirRelatorio(${_nome('2026-11-25')})'), 0);
+      expect(faixa, findsNothing);
+    });
   });
 }

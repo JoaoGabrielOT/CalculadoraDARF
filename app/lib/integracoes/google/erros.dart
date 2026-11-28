@@ -2,9 +2,12 @@ import '../../nucleo/erros.dart';
 
 /// google_sync.py:48-63.
 class ErroGoogle extends ErroNucleo {
-  ErroGoogle([super.mensagem = '', this.status = 0]);
+  ErroGoogle([super.mensagem = '', this.status = 0, this.motivo]);
 
   final int status;
+
+  /// `reason` do corpo do erro do Google (`errors[]` ou `details[]`).
+  final String? motivo;
 }
 
 class SemCredencial extends ErroGoogle {
@@ -21,7 +24,7 @@ class Offline extends ErroGoogle {
 
 /// 403 porque o token não tem o escopo que o pedido exige.
 class EscopoInsuficiente extends ErroGoogle {
-  EscopoInsuficiente([super.mensagem, super.status]);
+  EscopoInsuficiente([super.mensagem, super.status, super.motivo]);
 }
 
 /// "Entrar de novo" que voltou com outra conta Google: recusado sem trocar a

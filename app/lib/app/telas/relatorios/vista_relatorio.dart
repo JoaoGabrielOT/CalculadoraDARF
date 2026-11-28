@@ -6,21 +6,25 @@
 import 'package:flutter/material.dart';
 
 import '../../../nucleo/relatorios/destaques.dart';
+import '../../../nucleo/relatorios/filtros_relatorio.dart';
 import '../../../nucleo/relatorios/guia.dart';
 import '../../../nucleo/relatorios/relatorio.dart';
 import '../../componentes/cartao.dart';
 import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
+import 'barra_filtros_relatorio.dart';
 import 'cartao_ativo.dart';
 import 'especialistas_ativo.dart';
 import 'paleta_relatorio.dart';
+import 'resumo_especialistas.dart';
 
-class VistaRelatorio extends StatelessWidget {
+class VistaRelatorio extends StatefulWidget {
   const VistaRelatorio({
     super.key,
     required this.relatorio,
     required this.aoAbrirLink,
     this.topo = const [],
+    this.carteira,
   });
 
   final Relatorio relatorio;
@@ -29,9 +33,41 @@ class VistaRelatorio extends StatelessWidget {
   /// Mensagens da aba acima do relatório.
   final List<Widget> topo;
 
+  /// Tickers com posição aberta no mês atual; null = não carregou (o filtro
+  /// "Na minha carteira" não aparece).
+  final Set<String>? carteira;
+
+  @override
+  State<VistaRelatorio> createState() => _EstadoVista();
+}
+
+class _EstadoVista extends State<VistaRelatorio> {
+  /// O filtro vive aqui: mudar não recarrega o relatório.
+  FiltroAtivos _filtro = const FiltroAtivos();
+
+  @override
+  void didUpdateWidget(VistaRelatorio antigo) {
+    super.didUpdateWidget(antigo);
+    // Outro relatório (ou o mesmo atualizado): tipo escolhido que sumiu não
+    // pode ficar escondendo tudo sem chip para desmarcar.
+    if (!identical(antigo.relatorio, widget.relatorio) &&
+        _filtro.tipos.isNotEmpty) {
+      final presentes = tiposPresentes(widget.relatorio.ativos).toSet();
+      final tipos = _filtro.tipos.intersection(presentes);
+      if (tipos.length != _filtro.tipos.length) {
+        _filtro = _filtro.copiar(tipos: tipos);
+      }
+    }
+    if (antigo.carteira != null && widget.carteira == null) {
+      _filtro = _filtro.copiar(soCarteira: false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final r = relatorio;
+    final r = widget.relatorio;
+    final topo = widget.topo;
+    final aoAbrirLink = widget.aoAbrirLink;
     final margem = expandido(context) ? 24.0 : 12.0;
     Widget bloco(Widget w) => SliverToBoxAdapter(
       child: Padding(
@@ -47,6 +83,11 @@ class VistaRelatorio extends StatelessWidget {
         if (emDestaque(a)) a,
     ];
     final idDestaques = Set<AtivoRelatorio>.identity()..addAll(destaques);
+    final filtrados = filtrarAtivos(
+      ativos,
+      _filtro,
+      carteira: widget.carteira ?? const {},
+    );
     return CustomScrollView(
       slivers: [
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -80,18 +121,43 @@ class VistaRelatorio extends StatelessWidget {
             ),
           )
         else ...[
-          bloco(_TabelaResumo(ativos, idDestaques)),
-          // Cabeçalho de h; os cartões vêm preguiçosos logo abaixo.
+          // A barra fica fora do `if`: com o resultado vazio ela continua
+          // à vista. O filtro vale para a tabela, os especialistas e os
+          // cartões.
+          bloco(
+            BarraFiltrosRelatorio(
+              filtro: _filtro,
+              aoMudar: (f) => setState(() => _filtro = f),
+              tipos: tiposPresentes(ativos),
+              mostrarCarteira: widget.carteira != null,
+              exibidos: filtrados.length,
+              total: ativos.length,
+            ),
+          ),
+          if (filtrados.isNotEmpty) ...[
+            bloco(_TabelaResumo(filtrados, idDestaques)),
+            bloco(
+              KeyedSubtree(
+                key: const Key('secao-resumo-especialistas'),
+                child: ResumoEspecialistas(filtrados, aoAbrirLink: aoAbrirLink),
+              ),
+            ),
+          ],
+          // Cabeçalho de h; os cartões (preguiçosos) vêm logo abaixo.
           bloco(
             KeyedSubtree(key: const Key('secao-h'), child: _titulo('Ativos')),
           ),
           SliverPadding(
             padding: EdgeInsets.symmetric(horizontal: margem),
             sliver: SliverList.builder(
-              itemCount: ativos.length,
+              itemCount: filtrados.length,
               itemBuilder: (context, i) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: CartaoAtivo(ativos[i], aoAbrirLink: aoAbrirLink),
+                child: CartaoAtivo(
+                  filtrados[i],
+                  key: ObjectKey(filtrados[i]),
+                  aoAbrirLink: aoAbrirLink,
+                ),
               ),
             ),
           ),
@@ -569,6 +635,31 @@ class _TabelaResumo extends StatelessWidget {
           ),
       ],
     );
+    // Celular: linhas empilhadas, sem rolagem lateral.
+    if (!expandido(context)) {
+      return _Secao(
+        key: const Key('secao-g'),
+        titulo: 'Resumo por ativo',
+        child: Cartao(
+          padding: EdgeInsets.zero,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(
+              CoresApp.de(context).raioCartao,
+            ),
+            child: Column(
+              children: [
+                for (final (i, a) in ativos.indexed)
+                  _LinhaResumo(
+                    a,
+                    emDestaque: destaques.contains(a),
+                    primeira: i == 0,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return _Secao(
       key: const Key('secao-g'),
       titulo: 'Resumo por ativo',
@@ -583,6 +674,64 @@ class _TabelaResumo extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: tabela(flex: false),
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Um ativo no celular: ★ e ticker com o selo, o preço e o resumo dos
+/// especialistas. A chave fica na coluna, dentro deste invólucro sem chave.
+class _LinhaResumo extends StatelessWidget {
+  const _LinhaResumo(
+    this.ativo, {
+    required this.emDestaque,
+    required this.primeira,
+  });
+
+  final AtivoRelatorio ativo;
+  final bool emDestaque;
+
+  /// A primeira linha não tem borda em cima.
+  final bool primeira;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final a = ativo;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: emDestaque ? PaletaRelatorio.fundoDestaque(context) : null,
+        border: primeira ? null : Border(top: BorderSide(color: c.linha)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          key: Key('linha-resumo-${a.ticker}'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 2,
+          children: [
+            Row(
+              children: [
+                if (emDestaque) _EstrelaTabela(a.ticker),
+                Expanded(
+                  child: Text(
+                    a.ticker,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                SeloLeitura(a.leitura),
+              ],
+            ),
+            Text(textoPreco(a.preco), style: const TextStyle(fontSize: 13)),
+            Text(
+              a.especialistas.resumo ?? '—',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
         ),
       ),
     );

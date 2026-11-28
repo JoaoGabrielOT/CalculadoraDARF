@@ -612,6 +612,105 @@ void main() {
     });
   });
 
+  group('relatórios novos', () {
+    const novo = ResumoRelatorio(
+      nome: 'relatorio-abertura-2026-11-26.json',
+      data: '2026-11-26',
+    );
+    ServicosFalsos comNovo() => ServicosFalsos()
+      ..estadoConta = const EstadoConta(email: 'a@b.com')
+      ..visaoRelatorios = const VisaoRelatorios(
+        itens: [novo],
+        hoje: '2026-11-26',
+        novos: [novo],
+      );
+
+    test('iniciar lista a pasta e guarda os novos', () async {
+      final (e, _, _) = await _criar(servicos: comNovo());
+      await _soltar();
+      expect(e.relatoriosNovos.map((r) => r.nome), [novo.nome]);
+    });
+
+    test('dispensar marca no serviço e zera', () async {
+      final (e, s, _) = await _criar(servicos: comNovo());
+      await _soltar();
+      await e.dispensarRelatoriosNovos();
+      expect(e.relatoriosNovos, isEmpty);
+      expect(s.chamadas, contains('marcarRelatoriosAvisados()'));
+    });
+
+    test('falha ao marcar mantém o aviso', () async {
+      final s = comNovo()..erros['marcarRelatoriosAvisados'] = Exception('x');
+      final (e, _, _) = await _criar(servicos: s);
+      await _soltar();
+      await e.dispensarRelatoriosNovos();
+      expect(e.relatoriosNovos, hasLength(1));
+    });
+
+    test('trocar de conta zera o aviso na hora, antes da listagem', () async {
+      final s = comNovo();
+      final (e, _, _) = await _criar(servicos: s);
+      await _soltar();
+      final porta = Completer<VisaoRelatorios>();
+      s.atualizarRelatoriosFn = () => porta.future;
+      s.eventosFalsos.add(
+        const EventoConta(EstadoConta(email: 'outra@gmail.com')),
+      );
+      await _soltar();
+      await _soltar();
+      expect(e.relatoriosNovos, isEmpty);
+      porta.complete(
+        const VisaoRelatorios(itens: [novo], hoje: '2026-11-26', novos: [novo]),
+      );
+      await _soltar();
+      expect(e.relatoriosNovos, hasLength(1));
+    });
+
+    test('partida sem login não chama o Drive', () async {
+      final (_, s, _) = await _criar(
+        servicos: comNovo()..estadoConta = const EstadoConta(),
+      );
+      await _soltar();
+      expect(s.chamadas, isNot(contains('atualizarRelatorios()')));
+    });
+
+    test('partida com login lista a pasta', () async {
+      final s = comNovo();
+      final (e, _, _) = await _criar(servicos: s);
+      await _soltar();
+      expect(s.chamadas, contains('atualizarRelatorios()'));
+      expect(e.relatoriosNovos, hasLength(1));
+    });
+
+    testWidgets('iniciar não espera a listagem e arma o timer', (t) async {
+      final s = comNovo()
+        ..atualizarRelatoriosFn = () => Completer<VisaoRelatorios>().future;
+      final e = EstadoApp(
+        s,
+        PlataformaFalsa(),
+        verificarAtualizacaoAutomatica: true,
+      );
+      addTearDown(e.dispose);
+      var terminou = false;
+      unawaited(e.iniciar().then((_) => terminou = true));
+      await t.pump();
+      await t.pump();
+      expect(terminou, isTrue);
+      await t.pump(const Duration(seconds: 3));
+      expect(s.chamadas, contains('verificarAtualizacao()'));
+    });
+
+    test('aviso dispensado não volta com visão velha', () async {
+      final s = comNovo();
+      final (e, _, _) = await _criar(servicos: s);
+      await _soltar();
+      await e.dispensarRelatoriosNovos();
+      // a listagem que estava em voo chega com o novo de antes
+      e.aplicarRelatoriosNovos(const [novo]);
+      expect(e.relatoriosNovos, isEmpty);
+    });
+  });
+
   group('textos', () {
     test('textoStatusSync para os 7 estados', () {
       String t(StatusSync s) => textoStatusSync(EstadoConta(status: s));

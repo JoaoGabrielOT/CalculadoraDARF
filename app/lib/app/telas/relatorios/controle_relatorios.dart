@@ -19,6 +19,7 @@ class ControleRelatorios extends ChangeNotifier {
     _email = _estado.conta.email;
     _estado.addListener(_aoMudarEstado);
     unawaited(_pedirVisao(_servicos.relatorios));
+    unawaited(_carregarCarteira());
     // fora do `build` em que o provedor cria o controle
     if (_naAba) scheduleMicrotask(() => unawaited(atualizar()));
   }
@@ -55,6 +56,39 @@ class ControleRelatorios extends ChangeNotifier {
   /// Falha ao abrir ou atualizar; o que estava na tela continua à vista.
   String? erro;
 
+  /// Tickers com posição aberta (`qtd > 0`) no mês atual; null enquanto não
+  /// carregou ou se falhou (o filtro "Na minha carteira" some).
+  Set<String>? carteira;
+
+  /// Período da lista dos anteriores em dias; null = todos.
+  int? periodoDias;
+
+  void definirPeriodo(int? dias) {
+    if (dias == periodoDias) return;
+    periodoDias = dias;
+    notifyListeners();
+  }
+
+  int _geracaoCarteira = 0;
+
+  Future<void> _carregarCarteira() async {
+    final geracao = ++_geracaoCarteira;
+    Set<String>? nova;
+    try {
+      final v = await _servicos.posicoes(ambiente.hoje().substring(0, 7));
+      nova = {
+        for (final p in v.posicoes)
+          if (p.qtd > 0) p.ticker,
+      };
+    } catch (_) {
+      nova = null;
+    }
+    // resposta de um pedido antigo (ou de outra conta) é descartada
+    if (geracao != _geracaoCarteira) return;
+    carteira = nova;
+    notifyListeners();
+  }
+
   @override
   void notifyListeners() {
     if (!_descartado) super.notifyListeners();
@@ -79,8 +113,13 @@ class ControleRelatorios extends ChangeNotifier {
       _escolhido = null;
       _pedido = null;
       _geracaoAbrir++;
+      // a carteira da conta anterior não vale
+      carteira = null;
     }
-    if (entrou || trocouConta) unawaited(atualizar());
+    if (entrou || trocouConta) {
+      unawaited(_carregarCarteira());
+      unawaited(atualizar());
+    }
   }
 
   /// Lista a pasta de novo (e baixa o que mudou).
@@ -115,6 +154,7 @@ class ControleRelatorios extends ChangeNotifier {
   /// visão.
   void _aplicar(VisaoRelatorios nova) {
     visao = nova;
+    _estado.aplicarRelatoriosNovos(nova.novos);
     final padrao =
         nova.nomeAtual ??
         escolherRelatorio(nova.itens, nova.hoje).escolhido?.nome;
@@ -146,28 +186,45 @@ class ControleRelatorios extends ChangeNotifier {
   /// o escopo da pasta, lista de novo, que mostra o "entrar de novo".
   Future<void> abrir(String nome) => _abrir(nome, escolha: true);
 
-  Future<void> _abrir(String nome, {required bool escolha}) async {
+  /// true quando o relatório foi aberto.
+  Future<bool> _abrir(String nome, {required bool escolha}) async {
     final geracao = ++_geracaoAbrir;
     if (escolha) _pedido = nome;
+    var abriu = false;
     try {
       final r = await _servicos.abrirRelatorio(nome);
-      if (geracao != _geracaoAbrir) return;
+      if (geracao != _geracaoAbrir) return false;
       if (escolha) _escolhido = nome;
       nomeAberto = nome;
       aberto = r;
       erro = null;
+      abriu = true;
     } catch (e) {
-      if (geracao != _geracaoAbrir || e is PedidoSuperado) return;
+      if (geracao != _geracaoAbrir || e is PedidoSuperado) return false;
       if (e is EscopoInsuficiente) {
         unawaited(atualizar());
-        return;
+        return false;
       }
       erro = textoErro(e);
     } finally {
       if (geracao == _geracaoAbrir) _pedido = null;
     }
     notifyListeners();
+    return abriu;
   }
+
+  /// "Abrir" da faixa de relatório novo: abre o mais recente e, se abriu, zera
+  /// o aviso.
+  Future<void> abrirNovo() async {
+    final novo = _estado.relatoriosNovos.firstOrNull;
+    if (novo == null) return;
+    if (await _abrir(novo.nome, escolha: true)) {
+      await _estado.dispensarRelatoriosNovos();
+    }
+  }
+
+  /// "Dispensar" da faixa.
+  Future<void> dispensarNovo() => _estado.dispensarRelatoriosNovos();
 
   /// O item da lista do relatório aberto.
   ResumoRelatorio? get itemAberto {

@@ -12,5 +12,9 @@ const escoposGoogle = [
 /// Escopo que a aba Relatórios exige no token.
 const escopoRelatorios = 'https://www.googleapis.com/auth/drive.readonly';
 
+/// Escopo que só a conta dona da pasta de relatórios pede ("Permitir" na tela
+/// de Amigos), para compartilhá-la com os amigos; fora de [escoposGoogle].
+const escopoDrive = 'https://www.googleapis.com/auth/drive';
+
 const urlSheets = 'https://sheets.googleapis.com/v4/spreadsheets';
 const urlDrive = 'https://www.googleapis.com/drive/v3';

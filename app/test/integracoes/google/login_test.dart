@@ -61,6 +61,7 @@ class _Montagem {
     Esperar? esperar,
     Future<void>? cancelar,
     String? mesmaConta,
+    List<String> escoposExtras = const [],
   }) => loginNavegador(
     sessao,
     _cliente,
@@ -72,6 +73,7 @@ class _Montagem {
     tempoLimite: tempoLimite,
     cancelar: cancelar,
     mesmaConta: mesmaConta,
+    escoposExtras: escoposExtras,
     esperar:
         esperar ??
         (d) async {
@@ -148,6 +150,7 @@ void main() {
       'code_challenge': 'DES',
       'code_challenge_method': 'S256',
       'state': 'EST',
+      'include_granted_scopes': 'true',
     });
     expect(url.queryParameters.keys.toList(), [
       'client_id',
@@ -159,6 +162,7 @@ void main() {
       'code_challenge',
       'code_challenge_method',
       'state',
+      'include_granted_scopes',
     ]);
   });
 
@@ -171,6 +175,40 @@ void main() {
       dica: 'ana@gmail.com',
     );
     expect(url.queryParameters['login_hint'], 'ana@gmail.com');
+  });
+
+  test('URL de autorização com o escopo drive extra ("Permitir")', () {
+    final url = urlAutorizacao(
+      _cliente,
+      redirect: 'http://127.0.0.1:5000/',
+      desafio: 'DES',
+      estado: 'EST',
+      dica: 'ana@gmail.com',
+      escoposExtras: const [escopoDrive],
+    );
+    expect(
+      url.queryParameters['scope'],
+      [...escoposGoogle, escopoDrive].join(' '),
+    );
+    expect(url.queryParameters['include_granted_scopes'], 'true');
+    expect(url.queryParameters['login_hint'], 'ana@gmail.com');
+  });
+
+  test('URL de autorização padrão não pede drive e mantém os escopos já '
+      'concedidos (include_granted_scopes)', () {
+    final url = urlAutorizacao(
+      _cliente,
+      redirect: 'http://127.0.0.1:5000/',
+      desafio: 'DES',
+      estado: 'EST',
+    );
+    expect(url.queryParameters['scope'], isNot(contains('auth/drive ')));
+    expect(
+      url.queryParameters['scope']!.split(' '),
+      isNot(contains(escopoDrive)),
+    );
+    // o "entrar de novo" do dono não tira o `drive` do token
+    expect(url.queryParameters['include_granted_scopes'], 'true');
   });
 
   group('entrar de novo (mesmaConta)', () {
@@ -238,6 +276,55 @@ void main() {
       expect(email, 'ana@gmail.com');
       final salvo = jsonDecode(m.armazenamento.ler('token.json')!) as Map;
       expect(salvo['token'], 'ya29.a');
+    });
+
+    test('pedindo o escopo drive, outra conta também é recusada', () async {
+      final m = _Montagem([
+        aboutDe('ana@gmail.com'),
+        _tokenOk(),
+        aboutDe('bia@gmail.com'),
+      ]);
+      final antes = await sessaoAberta(m);
+
+      await expectLater(
+        m.login(
+          _retornarComCodigo,
+          mesmaConta: 'ana@gmail.com',
+          escoposExtras: const [escopoDrive],
+        ),
+        throwsA(isA<OutraConta>()),
+      );
+      expect(
+        m.urlAberta!.queryParameters['scope']!.split(' '),
+        contains(escopoDrive),
+      );
+      expect(m.armazenamento.ler('token.json'), antes);
+      expect(m.sessao.escopos, isNot(contains(escopoDrive)));
+    });
+
+    test('pedindo o escopo drive, a mesma conta fica com ele', () async {
+      final m = _Montagem([
+        aboutDe('ana@gmail.com'),
+        RespostaFalsa(
+          200,
+          json: {
+            'access_token': 'ya29.a',
+            'refresh_token': '1//r',
+            'expires_in': 3599,
+            'scope': [...escoposGoogle, escopoDrive].join(' '),
+          },
+        ),
+        aboutDe('ana@gmail.com'),
+        aboutDe('ana@gmail.com'),
+      ]);
+      await sessaoAberta(m);
+
+      await m.login(
+        _retornarComCodigo,
+        mesmaConta: 'ana@gmail.com',
+        escoposExtras: const [escopoDrive],
+      );
+      expect(m.sessao.escopos, contains(escopoDrive));
     });
 
     test('login inicial não leva login_hint', () async {

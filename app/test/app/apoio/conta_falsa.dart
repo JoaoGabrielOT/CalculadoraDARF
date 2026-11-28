@@ -23,8 +23,9 @@ class ContaFalsa implements ContaGoogle {
   /// Conta com que o usuário entra no navegador.
   String emailLogin = 'ana@gmail.com';
 
-  /// `mesmaConta` recebido no último login.
+  /// `mesmaConta` e `escoposExtras` recebidos no último login.
   String? mesmaConta;
+  List<String> escoposExtras = const [];
 
   @override
   bool get temCredencial => credencial;
@@ -42,9 +43,11 @@ class ContaFalsa implements ContaGoogle {
     AbrirUrl abrirUrl, {
     Future<void>? cancelar,
     String? mesmaConta,
+    List<String> escoposExtras = const [],
   }) async {
     chamadas.add('login');
     this.mesmaConta = mesmaConta;
+    this.escoposExtras = escoposExtras;
     final segurar = segurarLogin;
     if (segurar != null) {
       await Future.any<void>([

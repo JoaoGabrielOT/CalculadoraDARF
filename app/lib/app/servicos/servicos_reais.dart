@@ -95,6 +95,7 @@ class ServicosReais extends ServicosLocais {
     required super.noticias,
     super.atualizador,
     super.relatorios,
+    super.compartilhamento,
     super.fazerBackup,
     required this.cliente,
   });

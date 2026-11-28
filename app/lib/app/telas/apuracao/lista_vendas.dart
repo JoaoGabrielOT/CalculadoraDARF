@@ -13,6 +13,7 @@ import '../../regras/filtros.dart';
 import '../../tema/cores_app.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
+import 'extremos_vista.dart';
 import 'menu_contexto.dart';
 import 'lista_lotes.dart' show CabecalhoLista, alturaTabela, estiloPerigo;
 
@@ -179,7 +180,7 @@ class _ExpandidoState extends State<_Expandido> {
       0,
       (s, g) => s + 1 + (_abertos.contains(g.op.vendaId) ? g.partes.length : 0),
     );
-    return Cartao(
+    final tabela = Cartao(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,6 +256,31 @@ class _ExpandidoState extends State<_Expandido> {
           ),
         ],
       ),
+    );
+    if (itens.isEmpty) return tabela;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 16,
+      children: [
+        tabela,
+        CartaoExtremos(
+          key: const Key('extremos-vendas'),
+          titulo: 'Melhor e pior resultado possível no mês',
+          prefixoItem: 'extremo-venda',
+          rotuloMelhor: 'Melhor possível',
+          rotuloPior: 'Pior possível',
+          itens: [
+            for (final g in itens)
+              ItemExtremos(
+                id: g.op.vendaId,
+                titulo:
+                    '${g.op.ticker} · ${fmtData(g.op.data)} · '
+                    '${g.op.qtd} un.',
+                analise: controle.analiseVenda(g),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -428,6 +454,11 @@ class _CartaoVendaState extends State<_CartaoVenda> {
                   ],
                 ),
             ],
+          ),
+          BlocoExtremos(
+            analise: controle.analiseVenda(grupo),
+            rotuloMelhor: 'Melhor possível',
+            rotuloPior: 'Pior possível',
           ),
           if (grupo.agrupado)
             TextButton.icon(

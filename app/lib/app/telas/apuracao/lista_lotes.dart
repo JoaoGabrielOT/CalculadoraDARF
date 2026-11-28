@@ -16,6 +16,7 @@ import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import 'barra_filtros.dart';
 import 'controle_apuracao.dart';
+import 'extremos_vista.dart';
 import 'menu_contexto.dart';
 
 /// Altura da tabela: até 8 linhas à vista, na altura real delas (sem faixa
@@ -384,7 +385,7 @@ class _Expandido extends StatelessWidget {
     final vazioTexto = vazio
         ? 'Nenhum ativo neste mês. Clique em  +  Novo ativo  para começar.'
         : 'Nenhum ativo para esse filtro.';
-    return Cartao(
+    final tabela = Cartao(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -460,6 +461,35 @@ class _Expandido extends StatelessWidget {
           ),
         ],
       ),
+    );
+    final abertos = [
+      for (final l in itens)
+        if (restante(l) > 0) l,
+    ];
+    if (abertos.isEmpty) return tabela;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 16,
+      children: [
+        tabela,
+        CartaoExtremos(
+          key: const Key('extremos-lotes'),
+          titulo: 'Maior lucro e maior perda possíveis até agora',
+          prefixoItem: 'extremo-lote',
+          rotuloMelhor: 'Maior lucro possível até agora',
+          rotuloPior: 'Maior perda possível até agora',
+          itens: [
+            for (final l in abertos)
+              ItemExtremos(
+                id: l.id,
+                titulo:
+                    '${l.ticker} · compra ${fmtData(l.dataCompra)} · '
+                    'saldo ${restante(l)}',
+                analise: controle.analiseLote(l)!,
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -626,96 +656,105 @@ class _CartaoLote extends StatelessWidget {
         );
       }
     }
-    return Cartao(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        spacing: 12,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 2,
-              children: [
-                Wrap(
-                  spacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      l.ticker,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Pilula(texto: l.tipo),
-                  ],
-                ),
-                Text(
-                  // espaço inseparável: o preço não quebra entre "R$" e o valor
-                  '${fmtData(l.dataCompra)} · ${l.qtd} × '
-                  '${brl(l.preco).replaceAll(' ', ' ')}',
-                  style: TextStyle(fontSize: 12, color: c.textoSuave),
-                ),
-                atual,
-                Text(
-                  st,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: corStatus,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+    final analise = controle.analiseLote(l);
+    final linha = Row(
+      spacing: 12,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 2,
             children: [
-              Text(
-                brl(l.qtd * l.preco),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    l.ticker,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Pilula(texto: l.tipo),
+                ],
               ),
               Text(
-                'Restante: ${restante(l)}',
+                // espaço inseparável: o preço não quebra entre "R$" e o valor
+                '${fmtData(l.dataCompra)} · ${l.qtd} × '
+                '${brl(l.preco).replaceAll(' ', ' ')}',
                 style: TextStyle(fontSize: 12, color: c.textoSuave),
+              ),
+              atual,
+              Text(
+                st,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: corStatus,
+                ),
               ),
             ],
           ),
-          if (editavel)
-            PopupMenuButton<String>(
-              key: Key('menu-lote-${l.id}'),
-              enabled: !controle.gravando,
-              tooltip: 'Ações de ${l.ticker}',
-              onSelected: (v) => switch (v) {
-                'vender' => controle.registrarVenda(context, lote: l),
-                'editar' => controle.editarLote(context, id: l.id),
-                _ => controle.excluirLote(context, id: l.id),
-              },
-              itemBuilder: (_) => [
-                if (restante(l) > 0)
-                  const PopupMenuItem(
-                    value: 'vender',
-                    child: Text('Registrar venda'),
-                  ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          spacing: 2,
+          children: [
+            Text(
+              brl(l.qtd * l.preco),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              'Restante: ${restante(l)}',
+              style: TextStyle(fontSize: 12, color: c.textoSuave),
+            ),
+          ],
+        ),
+        if (editavel)
+          PopupMenuButton<String>(
+            key: Key('menu-lote-${l.id}'),
+            enabled: !controle.gravando,
+            tooltip: 'Ações de ${l.ticker}',
+            onSelected: (v) => switch (v) {
+              'vender' => controle.registrarVenda(context, lote: l),
+              'editar' => controle.editarLote(context, id: l.id),
+              _ => controle.excluirLote(context, id: l.id),
+            },
+            itemBuilder: (_) => [
+              if (restante(l) > 0)
                 const PopupMenuItem(
-                  value: 'editar',
-                  child: Text('Editar compra'),
+                  value: 'vender',
+                  child: Text('Registrar venda'),
                 ),
-                PopupMenuItem(
-                  value: 'excluir',
-                  child: Text(
-                    'Excluir compra',
-                    style: TextStyle(color: c.queda),
-                  ),
+              const PopupMenuItem(
+                value: 'editar',
+                child: Text('Editar compra'),
+              ),
+              PopupMenuItem(
+                value: 'excluir',
+                child: Text('Excluir compra', style: TextStyle(color: c.queda)),
+              ),
+            ],
+          ),
+      ],
+    );
+    return Cartao(
+      padding: const EdgeInsets.all(14),
+      child: analise == null
+          ? linha
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 8,
+              children: [
+                linha,
+                BlocoExtremos(
+                  analise: analise,
+                  rotuloMelhor: 'Maior lucro possível até agora',
+                  rotuloPior: 'Maior perda possível até agora',
                 ),
               ],
             ),
-        ],
-      ),
     );
   }
 }

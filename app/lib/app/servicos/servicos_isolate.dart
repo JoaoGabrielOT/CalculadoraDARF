@@ -78,6 +78,7 @@ ServicosApp criarServicosLocais(
       fonte: DriveRelatorios(sessao),
       conta: google,
     ),
+    compartilhamento: DriveCompartilhamento(sessao),
     fazerBackup: () => fazerBackup(p.pastaDados, DateTime.now()),
     cliente: c,
   );
@@ -554,6 +555,10 @@ class ServicosIsolate implements ServicosApp {
       _chamar((s) => s.grafico(ticker, periodo));
 
   @override
+  Future<Diarias> barrasDiarias(String ticker, {String? desde}) =>
+      _chamar((s) => s.barrasDiarias(ticker, desde: desde));
+
+  @override
   Future<Map<String, double?>> precosCarteira(Set<String> tickers) =>
       _chamar((s) => s.precosCarteira(tickers));
 
@@ -675,5 +680,23 @@ class ServicosIsolate implements ServicosApp {
       _chamar((s) => s.abrirRelatorio(nome));
 
   @override
+  Future<void> marcarRelatoriosAvisados() =>
+      _chamar((s) => s.marcarRelatoriosAvisados());
+
+  @override
   Future<void> entrarDeNovoGoogle() => _chamar((s) => s.entrarDeNovoGoogle());
+
+  // pasta de relatórios compartilhada com os amigos
+
+  @override
+  Future<EstadoCompartilhamento> estadoCompartilhamento() =>
+      _chamar((s) => s.estadoCompartilhamento());
+
+  @override
+  Future<ResultadoCompartilhamento> compartilharRelatorios() =>
+      _chamar((s) => s.compartilharRelatorios());
+
+  @override
+  Future<void> permitirCompartilhamento() =>
+      _chamar((s) => s.permitirCompartilhamento());
 }

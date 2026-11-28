@@ -7,20 +7,115 @@ import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../integracoes/apoio/cliente_falso.dart';
 import '../apoio/conta_falsa.dart';
 
+/// Drive de verdade sobre um cliente falso, com a sessão de ana aberta;
+/// [pasta] responde o `files.get` da pasta (contado em [gets]).
+Future<DriveCompartilhamento> _driveReal(
+  RespostaFalsa Function() pasta,
+  List<String> gets,
+) async {
+  final falso = ClienteFalso((p) {
+    if (p.url.path.endsWith('/about')) {
+      return RespostaFalsa(
+        200,
+        json: {
+          'user': {'emailAddress': 'ana@gmail.com'},
+        },
+      );
+    }
+    if (p.url.path == '/drive/v3/files/$pastaRelatorios') {
+      gets.add(p.url.path);
+      return pasta();
+    }
+    return RespostaFalsa(200, json: {'permissions': <Object?>[]});
+  });
+  final a = ArmazenamentoMemoria();
+  gravarToken(
+    a,
+    TokenGoogle(
+      token: 'ya29.a',
+      refreshToken: '1//r',
+      clientId: 'c',
+      clientSecret: 's',
+      expiry: DateTime.utc(2100),
+    ),
+  );
+  final sessao = SessaoGoogle(
+    http: ClienteHttp(falso, tempoLimite: const Duration(seconds: 30)),
+    armazenamento: a,
+    executar: executarDireto,
+  );
+  await sessao.carregarToken();
+  return DriveCompartilhamento(sessao);
+}
+
+/// Pasta de relatórios falsa: devolve [estado] (ou lança [falha]) e grava os
+/// e-mails recebidos.
+class _FonteFalsa implements FonteCompartilhamento {
+  EstadoCompartilhamento estadoAtual = EstadoCompartilhamento.pronto;
+  Object? falha;
+  final chamadas = <String>[];
+  final recebidos = <List<String>>[];
+  ResultadoCompartilhamento resultado = const ResultadoCompartilhamento(
+    estado: EstadoCompartilhamento.pronto,
+    compartilhados: 1,
+  );
+
+  /// Quando preenchido, `compartilharCom` só responde depois dele.
+  Future<void>? segurar;
+  int _emVoo = 0;
+  int maxEmVoo = 0;
+
+  @override
+  Future<EstadoCompartilhamento> estado() async {
+    chamadas.add('estado');
+    if (falha != null) throw falha!;
+    return estadoAtual;
+  }
+
+  /// Como a real: confere o dono antes; sem conferir, volta vazio.
+  @override
+  Future<ResultadoCompartilhamento> compartilharCom(List<String> emails) async {
+    chamadas.add('compartilharCom');
+    recebidos.add(emails);
+    if (falha != null) return const ResultadoCompartilhamento();
+    if (estadoAtual != EstadoCompartilhamento.pronto) {
+      return ResultadoCompartilhamento(
+        estado: estadoAtual,
+        semEscopo: estadoAtual == EstadoCompartilhamento.semEscopo,
+      );
+    }
+    _emVoo++;
+    if (_emVoo > maxEmVoo) maxEmVoo = _emVoo;
+    try {
+      await segurar;
+      return resultado;
+    } finally {
+      _emVoo--;
+    }
+  }
+}
+
 class _Cenario {
-  _Cenario({String? email = 'ana@gmail.com'})
-    : conta = ContaFalsa(email: email),
-      repo = Repositorio(ArmazenamentoMemoria()) {
+  _Cenario({
+    String? email = 'ana@gmail.com',
+    this.fonte,
+    FonteCompartilhamento? compartilhamento,
+  }) : conta = ContaFalsa(email: email),
+       repo = Repositorio(ArmazenamentoMemoria()) {
     local = ContaLocal(
       repo: repo,
       conta: conta,
       abrirUrl: (_) async {},
       emitir: eventos.add,
       atrasoAgendamento: const Duration(milliseconds: 20),
+      compartilhamento: compartilhamento ?? fonte,
     );
   }
+
+  final _FonteFalsa? fonte;
 
   final ContaFalsa conta;
   final Repositorio repo;
@@ -690,6 +785,278 @@ void main() {
       await c.local.carregarAmigo('bia@gmail.com');
       await c.local.esquecerAmigo();
       expect(c.local.amigo, isNull);
+    });
+  });
+
+  group('compartilhamento da pasta de relatórios', () {
+    test('sem fonte: não dono e nada a compartilhar', () async {
+      final c = _Cenario();
+      expect(
+        await c.local.estadoCompartilhamento(),
+        EstadoCompartilhamento.naoDono,
+      );
+      final r = await c.local.compartilharRelatorios();
+      expect(r.compartilhados, 0);
+      expect(r.semEscopo, isFalse);
+    });
+
+    test('sem conta: não dono, sem chamar a fonte', () async {
+      final c = _Cenario(email: null, fonte: _FonteFalsa());
+      expect(
+        await c.local.estadoCompartilhamento(),
+        EstadoCompartilhamento.naoDono,
+      );
+      expect((await c.local.compartilharRelatorios()).compartilhados, 0);
+      expect(c.fonte!.chamadas, isEmpty);
+    });
+
+    test('estado vem da fonte', () async {
+      final c = _Cenario(fonte: _FonteFalsa());
+      c.fonte!.estadoAtual = EstadoCompartilhamento.semEscopo;
+      expect(
+        await c.local.estadoCompartilhamento(),
+        EstadoCompartilhamento.semEscopo,
+      );
+    });
+
+    test('estado sem internet: silêncio (não dono)', () async {
+      final c = _Cenario(fonte: _FonteFalsa());
+      c.fonte!.falha = Offline('sem rede');
+      expect(
+        await c.local.estadoCompartilhamento(),
+        EstadoCompartilhamento.naoDono,
+      );
+    });
+
+    test('compartilharRelatorios manda os amigos atuais', () async {
+      final c = _Cenario(fonte: _FonteFalsa())..comPlanilha();
+      await c.local.adicionarAmigo('bia@gmail.com');
+      await c.local.adicionarAmigo('caio@gmail.com');
+      final r = await c.local.compartilharRelatorios();
+      expect(r.compartilhados, 1);
+      expect(c.fonte!.recebidos.single, ['bia@gmail.com', 'caio@gmail.com']);
+    });
+
+    test(
+      'permitir: login da mesma conta pedindo também o escopo drive',
+      () async {
+        final c = _Cenario(fonte: _FonteFalsa())..comPlanilha();
+        c.fonte!.estadoAtual = EstadoCompartilhamento.semEscopo;
+        await c.local.permitirCompartilhamento();
+        expect(c.conta.chamadas, contains('login'));
+        expect(c.conta.mesmaConta, 'ana@gmail.com');
+        expect(c.conta.escoposExtras, [escopoDrive]);
+        expect(c.local.estado().email, 'ana@gmail.com');
+      },
+    );
+
+    test('permitir com outra conta recusa e a conta continua', () async {
+      final c = _Cenario(fonte: _FonteFalsa())..comPlanilha();
+      c.fonte!.estadoAtual = EstadoCompartilhamento.semEscopo;
+      c.conta.emailLogin = 'bia@gmail.com';
+      await c.local.permitirCompartilhamento();
+      expect(c.conta.escoposExtras, [escopoDrive]);
+      expect(c.local.estado().email, 'ana@gmail.com');
+      expect(
+        c.avisos.single.texto,
+        'Entre com a mesma conta (ana@gmail.com). Para trocar de conta, '
+        'use Sair na aba Conta.',
+      );
+    });
+
+    test('permitir sem conta não faz login', () async {
+      final c = _Cenario(email: null, fonte: _FonteFalsa());
+      await c.local.permitirCompartilhamento();
+      expect(c.conta.chamadas, isEmpty);
+    });
+
+    test('reconectar (Relatórios) continua sem o escopo drive', () async {
+      final c = _Cenario(fonte: _FonteFalsa())..comPlanilha();
+      await c.local.reconectar();
+      expect(c.conta.escoposExtras, isEmpty);
+    });
+
+    test('permitir só pede o escopo quando o estado é semEscopo', () async {
+      for (final estado in [
+        EstadoCompartilhamento.pronto,
+        EstadoCompartilhamento.naoDono,
+      ]) {
+        final c = _Cenario(fonte: _FonteFalsa())..comPlanilha();
+        c.fonte!.estadoAtual = estado;
+        await c.local.permitirCompartilhamento();
+        expect(c.conta.chamadas, isNot(contains('login')), reason: '$estado');
+      }
+      final c = _Cenario(fonte: _FonteFalsa())..comPlanilha();
+      c.fonte!.falha = Offline('sem rede');
+      await c.local.permitirCompartilhamento();
+      expect(c.conta.chamadas, isNot(contains('login')));
+    });
+
+    test('não dono abre a tela 3 vezes: um único files.get', () async {
+      final gets = <String>[];
+      final drive = await _driveReal(
+        () => RespostaFalsa(
+          200,
+          json: {
+            'capabilities': {'canShare': false},
+          },
+        ),
+        gets,
+      );
+      final c = _Cenario(compartilhamento: drive);
+      for (var i = 0; i < 3; i++) {
+        expect(
+          await c.local.estadoCompartilhamento(),
+          EstadoCompartilhamento.naoDono,
+        );
+        expect((await c.local.compartilharRelatorios()).erro, isNull);
+      }
+      expect(gets, hasLength(1));
+    });
+
+    test('403 de limite na conferência: fora do cache', () async {
+      final gets = <String>[];
+      final drive = await _driveReal(
+        () => RespostaFalsa(
+          403,
+          json: {
+            'error': {
+              'code': 403,
+              'message': 'Rate Limit Exceeded',
+              'errors': [
+                {'reason': 'userRateLimitExceeded'},
+              ],
+            },
+          },
+        ),
+        gets,
+      );
+      final c = _Cenario(compartilhamento: drive);
+      await c.local.estadoCompartilhamento();
+      expect((await c.local.compartilharRelatorios()).erro, isNull);
+      await c.local.estadoCompartilhamento();
+      expect(gets, hasLength(3));
+    });
+
+    test('403 de permissão na conferência: em cache', () async {
+      final gets = <String>[];
+      final drive = await _driveReal(
+        () => RespostaFalsa(
+          403,
+          json: {
+            'error': {
+              'code': 403,
+              'message': 'Proibido',
+              'errors': [
+                {'reason': 'insufficientFilePermissions'},
+              ],
+            },
+          },
+        ),
+        gets,
+      );
+      final c = _Cenario(compartilhamento: drive);
+      await c.local.estadoCompartilhamento();
+      await c.local.estadoCompartilhamento();
+      expect(gets, hasLength(1));
+    });
+
+    test('não dono com 503: nada aparece e nada fica em cache', () async {
+      final gets = <String>[];
+      final drive = await _driveReal(
+        () => RespostaFalsa(
+          503,
+          json: {
+            'error': {'code': 503, 'message': 'Backend Error'},
+          },
+        ),
+        gets,
+      );
+      final c = _Cenario(compartilhamento: drive);
+      expect(
+        await c.local.estadoCompartilhamento(),
+        EstadoCompartilhamento.naoDono,
+      );
+      final r = await c.local.compartilharRelatorios();
+      expect(r.erro, isNull);
+      expect(r.semEscopo, isFalse);
+      expect(r.recusados, isEmpty);
+      expect(gets, hasLength(2));
+    });
+
+    test('cache de não dono: 6 h, compartilharRelatorios também o consulta, '
+        'Sair e troca de conta apagam', () async {
+      final c = _Cenario(fonte: _FonteFalsa());
+      c.fonte!.estadoAtual = EstadoCompartilhamento.naoDono;
+      await c.local.estadoCompartilhamento();
+      await c.local.compartilharRelatorios();
+      await c.local.estadoCompartilhamento();
+      expect(c.fonte!.chamadas, ['estado']);
+
+      // 6 h depois a conferência volta
+      ambiente = Ambiente.fixo(agora: 1761000000.0 + 6 * 3600 + 1);
+      await c.local.estadoCompartilhamento();
+      expect(c.fonte!.chamadas, ['estado', 'estado']);
+
+      // outra conta não usa o cache da anterior
+      c.conta.email = 'bia@gmail.com';
+      await c.local.estadoCompartilhamento();
+      expect(c.fonte!.chamadas, hasLength(3));
+
+      // Sair apaga
+      await c.local.sair();
+      c.conta.email = 'bia@gmail.com';
+      await c.local.estadoCompartilhamento();
+      expect(c.fonte!.chamadas, hasLength(4));
+    });
+
+    test(
+      'naoDono vindo de compartilharRelatorios também vai ao cache',
+      () async {
+        final c = _Cenario(fonte: _FonteFalsa());
+        c.fonte!.estadoAtual = EstadoCompartilhamento.naoDono;
+        await c.local.compartilharRelatorios();
+        await c.local.compartilharRelatorios();
+        await c.local.estadoCompartilhamento();
+        expect(c.fonte!.chamadas, ['compartilharCom']);
+      },
+    );
+
+    test('permitir apaga o cache de não dono', () async {
+      final c = _Cenario(fonte: _FonteFalsa())..comPlanilha();
+      c.fonte!.estadoAtual = EstadoCompartilhamento.semEscopo;
+      await c.local.permitirCompartilhamento();
+      c.fonte!.chamadas.clear();
+      // a conferência depois do Permitir vai à fonte
+      c.fonte!.estadoAtual = EstadoCompartilhamento.pronto;
+      expect(
+        await c.local.estadoCompartilhamento(),
+        EstadoCompartilhamento.pronto,
+      );
+      expect(c.fonte!.chamadas, ['estado']);
+    });
+
+    test('compartilharRelatorios nunca roda dois ao mesmo tempo', () async {
+      final c = _Cenario(fonte: _FonteFalsa())..comPlanilha();
+      final segurar = Completer<void>();
+      c.fonte!.segurar = segurar.future;
+      final primeiro = c.local.compartilharRelatorios();
+      await _pausa(10);
+      final segundo = c.local.compartilharRelatorios();
+      final terceiro = c.local.compartilharRelatorios();
+      await _pausa(10);
+      expect(
+        c.fonte!.chamadas.where((x) => x == 'compartilharCom'),
+        hasLength(1),
+      );
+      segurar.complete();
+      await Future.wait([primeiro, segundo, terceiro]);
+      expect(c.fonte!.maxEmVoo, 1);
+      // o segundo e o terceiro dividem a mesma rodada, depois do primeiro
+      expect(
+        c.fonte!.chamadas.where((x) => x == 'compartilharCom'),
+        hasLength(2),
+      );
     });
   });
 }

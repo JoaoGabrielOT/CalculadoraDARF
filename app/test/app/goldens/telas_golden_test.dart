@@ -275,6 +275,14 @@ ServicosFalsos _servicos({bool guia = false}) {
   s.imagemNoticiaFn = (url) async =>
       url.contains('n1') ? _pngFoto(40, 90, 160) : _pngFoto(170, 90, 40);
   s.faviconFn = (_) async => _pngLogo(200, 60, 60);
+  // extremos da Apuração: faixa de ±10% em torno da cotação do ticker
+  s.barrasFn = (ticker, desde) => Future.value(
+    barrasAoRedor(
+      s.precos[ticker] ?? 30,
+      desde: desde ?? '2026-09-01',
+      ate: hojeExemplo,
+    ),
+  );
   return s;
 }
 

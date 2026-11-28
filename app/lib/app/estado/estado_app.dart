@@ -24,6 +24,7 @@ class EstadoApp extends ChangeNotifier {
     this._servicos,
     this._plataforma, {
     this.verificarAtualizacaoAutomatica = kReleaseMode,
+    this.conferirRelatoriosAoIniciar = true,
   }) {
     // Assina logo: o proxy só guarda os 256 últimos eventos até a primeira
     // assinatura.
@@ -37,6 +38,10 @@ class EstadoApp extends ChangeNotifier {
   final ServicosApp _servicos;
   final Plataforma _plataforma;
   final bool verificarAtualizacaoAutomatica;
+
+  /// Lista a pasta de relatórios ao iniciar e ao trocar de conta, para o selo
+  /// da aba aparecer sem abri-la.
+  final bool conferirRelatoriosAoIniciar;
   late final StreamSubscription<EventoServico> _assinatura;
 
   Preferencias preferencias = const Preferencias();
@@ -55,6 +60,10 @@ class EstadoApp extends ChangeNotifier {
   bool carregandoAmigo = false;
   String mes = ambiente.hoje().substring(0, 7);
   int naoLidas = 0;
+
+  /// Relatórios novos ainda não abertos nem dispensados (mais recente
+  /// primeiro): o selo da aba Relatórios e a faixa no topo dela.
+  List<ResumoRelatorio> relatoriosNovos = const [];
 
   /// Preenchido quando o `config.json` está ilegível.
   String? erroConfig;
@@ -143,6 +152,10 @@ class EstadoApp extends ChangeNotifier {
       _atualizarMetas(),
       _iniciarNotificacoes(),
     ]);
+    // sem login não há pasta; e a partida não espera o Drive
+    if (conferirRelatoriosAoIniciar && _comSessao(conta)) {
+      unawaited(_conferirRelatoriosNovos());
+    }
     // 3 s depois de abrir, para não competir com a carga inicial (py:1273);
     // descartado no meio do iniciar(), não sobra timer
     if (verificarAtualizacaoAutomatica && !_descartado) {
@@ -252,6 +265,51 @@ class EstadoApp extends ChangeNotifier {
     } catch (_) {
       // o selo corrige no próximo evento de notícias
     }
+  }
+
+  int _geracaoRelatorios = 0;
+
+  /// Lista a pasta de relatórios com a aba fechada, para o selo aparecer.
+  Future<void> _conferirRelatoriosNovos() async {
+    final geracao = ++_geracaoRelatorios;
+    try {
+      final visao = await _servicos.atualizarRelatorios();
+      if (geracao == _geracaoRelatorios) aplicarRelatoriosNovos(visao.novos);
+    } catch (_) {
+      // o controle da aba lista de novo ao abrir
+    }
+  }
+
+  /// Nomes que o usuário já abriu ou dispensou: uma listagem que estava em
+  /// voo não os traz de volta.
+  final _avisados = <String>{};
+
+  /// A visão de relatórios chegou (daqui ou da aba).
+  void aplicarRelatoriosNovos(List<ResumoRelatorio> recebidos) {
+    final novos = [
+      for (final r in recebidos)
+        if (!_avisados.contains(r.nome)) r,
+    ];
+    if (novos.length == relatoriosNovos.length &&
+        novos.indexed.every((p) => p.$2.nome == relatoriosNovos[p.$1].nome)) {
+      return;
+    }
+    relatoriosNovos = novos;
+    notifyListeners();
+  }
+
+  /// Abriu ou dispensou o aviso: os novos viram avisados.
+  Future<void> dispensarRelatoriosNovos() async {
+    final geracao = ++_geracaoRelatorios;
+    final nomes = [for (final r in relatoriosNovos) r.nome];
+    try {
+      await _servicos.marcarRelatoriosAvisados();
+    } catch (_) {
+      return; // o aviso fica; o usuário tenta de novo
+    }
+    if (geracao != _geracaoRelatorios) return;
+    _avisados.addAll(nomes);
+    aplicarRelatoriosNovos(const []);
   }
 
   void avisar(String titulo, String texto) {
@@ -480,7 +538,16 @@ class EstadoApp extends ChangeNotifier {
     switch (e) {
       case EventoConta():
         final caiu = _comSessao(conta) && !_comSessao(e.conta);
+        final outroEmail = conta.email != e.conta.email;
         conta = e.conta;
+        if (outroEmail) {
+          // o aviso da outra conta não vale; o serviço já zerou o avisado
+          relatoriosNovos = const [];
+          _avisados.clear();
+          if (conferirRelatoriosAoIniciar) {
+            unawaited(_conferirRelatoriosNovos());
+          }
+        }
         contaCarregada = true;
         if (caiu && saidaPedida) {
           saidaPedida = false;

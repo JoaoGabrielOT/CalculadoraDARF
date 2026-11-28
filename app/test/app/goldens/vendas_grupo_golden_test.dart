@@ -65,6 +65,9 @@ void main() {
               ],
             ),
           );
+          s.barrasFn = (_, desde) => Future.value(
+            barrasAoRedor(33, desde: desde ?? '2026-10-01', ate: hojeExemplo),
+          );
           final celular = tamanho.key == 'celular';
           await montarApp(
             t,

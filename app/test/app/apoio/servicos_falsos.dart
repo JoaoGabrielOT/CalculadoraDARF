@@ -13,6 +13,56 @@ import 'package:calculadoradarf/nucleo/nucleo.dart';
 
 import 'dados_exemplo.dart';
 
+/// 30 dias de 2026-09-29 a 2026-10-28, fechando de 10,0 a 12,9 (alta de 0,1
+/// ao dia), com `hoje` em 2026-10-28.
+Diarias barrasPadrao({int n = 30, String ate = '2026-10-28'}) {
+  final fim = DateTime.parse('${ate}T00:00:00Z');
+  String dia(DateTime d) => d.toIso8601String().substring(0, 10);
+  return Diarias(
+    barras: [
+      for (var i = 0; i < n; i++)
+        BarraDiaria(
+          data: dia(fim.subtract(Duration(days: n - 1 - i))),
+          alta: 11 + i * .1,
+          baixa: 9 + i * .1,
+          fech: 10 + i * .1,
+        ),
+    ],
+    hoje: ate,
+    preco: 10 + (n - 1) * .1,
+    fonte: 'Yahoo Finance',
+  );
+}
+
+/// Uma barra por dia de [desde] a [ate], com a máxima 4% a 10% acima e a
+/// mínima 4% a 10% abaixo de [preco]: faixa plausível para os goldens.
+Diarias barrasAoRedor(
+  double preco, {
+  required String desde,
+  required String ate,
+}) {
+  final ini = DateTime.parse('${desde}T00:00:00Z');
+  final fim = DateTime.parse('${ate}T00:00:00Z');
+  final n = fim.difference(ini).inDays + 1;
+  return Diarias(
+    barras: [
+      for (var i = 0; i < n; i++)
+        () {
+          final w = ((i * 7) % 10) / 9;
+          return BarraDiaria(
+            data: ini.add(Duration(days: i)).toIso8601String().substring(0, 10),
+            alta: preco * (1.04 + .06 * w),
+            baixa: preco * (.96 - .06 * w),
+            fech: preco,
+          );
+        }(),
+    ],
+    hoje: ate,
+    preco: preco,
+    fonte: 'Yahoo Finance',
+  );
+}
+
 class ServicosFalsos implements ServicosApp {
   /// Nome do método e argumentos, na ordem das chamadas
   /// (por exemplo `registrarCompra(2026-10, PETR4)`).
@@ -678,7 +728,41 @@ class ServicosFalsos implements ServicosApp {
   ], () => relatoriosAbertos[nome] ?? (throw ErroValidacao('sem $nome')));
 
   @override
+  Future<void> marcarRelatoriosAvisados() =>
+      _chamar('marcarRelatoriosAvisados', [], () {});
+
+  @override
   Future<void> entrarDeNovoGoogle() => _chamar('entrarDeNovoGoogle', [], () {});
+
+  // pasta de relatórios compartilhada com os amigos
+  EstadoCompartilhamento estadoCompartilhamentoResp =
+      EstadoCompartilhamento.naoDono;
+
+  /// Respostas de `compartilharRelatorios`, na ordem; esgotadas, nada.
+  final List<ResultadoCompartilhamento> resultadosCompartilhamento = [];
+
+  /// Estado depois de `permitirCompartilhamento`; nulo, não muda.
+  EstadoCompartilhamento? estadoAposPermitir;
+
+  @override
+  Future<EstadoCompartilhamento> estadoCompartilhamento() =>
+      _chamar('estadoCompartilhamento', [], () => estadoCompartilhamentoResp);
+
+  @override
+  Future<ResultadoCompartilhamento> compartilharRelatorios() => _chamar(
+    'compartilharRelatorios',
+    [],
+    () => resultadosCompartilhamento.isEmpty
+        ? const ResultadoCompartilhamento()
+        : resultadosCompartilhamento.removeAt(0),
+  );
+
+  @override
+  Future<void> permitirCompartilhamento() =>
+      _chamar('permitirCompartilhamento', [], () {
+        estadoCompartilhamentoResp =
+            estadoAposPermitir ?? estadoCompartilhamentoResp;
+      });
 
   // radar e cotações
   VisaoRadar visaoRadar = VisaoRadar(
@@ -804,6 +888,21 @@ class ServicosFalsos implements ServicosApp {
             intradiario: true,
           ),
     );
+  }
+
+  /// Barras de `barrasDiarias` por ticker; [barrasFn] tem precedência
+  /// (erro ou espera). Sem nenhuma, devolve [barrasPadrao].
+  Map<String, Diarias> barrasFalsas = {};
+  Future<Diarias> Function(String ticker, String? desde)? barrasFn;
+
+  @override
+  Future<Diarias> barrasDiarias(String ticker, {String? desde}) {
+    chamadas.add('barrasDiarias($ticker, $desde)');
+    final erro = erros['barrasDiarias'];
+    if (erro != null) return Future.error(erro);
+    final fn = barrasFn;
+    if (fn != null) return fn(ticker, desde);
+    return Future.value(barrasFalsas[ticker] ?? barrasPadrao());
   }
 
   // atualizador

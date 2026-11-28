@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
+import '../../../nucleo/relatorios/filtros_relatorio.dart';
 import '../../componentes/cartao.dart';
 import '../../componentes/carregando.dart';
 import '../../estado/estado_app.dart';
@@ -88,7 +89,74 @@ class _Corpo extends StatelessWidget {
               : _Compacto(controle, visao),
       };
     }
-    return Scaffold(backgroundColor: Colors.transparent, body: conteudo);
+    final novo = context.select<EstadoApp, ResumoRelatorio?>(
+      (e) => e.relatoriosNovos.firstOrNull,
+    );
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: novo == null
+          ? conteudo
+          : Column(
+              children: [
+                _FaixaNovoRelatorio(controle, novo),
+                Expanded(child: conteudo),
+              ],
+            ),
+    );
+  }
+}
+
+/// Aviso de relatório novo no topo da aba: "Abrir" mostra o relatório e
+/// "Dispensar" só some; os dois marcam como avisado.
+class _FaixaNovoRelatorio extends StatelessWidget {
+  const _FaixaNovoRelatorio(this.controle, this.novo);
+
+  final ControleRelatorios controle;
+  final ResumoRelatorio novo;
+
+  @override
+  Widget build(BuildContext context) {
+    final margem = expandido(context) ? 24.0 : 12.0;
+    final hora = horaDeGeracao(
+      novo.geradoEm ??
+          (controle.nomeAberto == novo.nome ? controle.aberto?.geradoEm : null),
+    );
+    final texto =
+        'Novo relatório de abertura: ${dataPorExtenso(novo.data)}'
+        '${hora == null ? '' : ', gerado às $hora'}';
+    return Padding(
+      key: const Key('faixa-novo-relatorio'),
+      padding: EdgeInsets.fromLTRB(margem, 12, margem, 0),
+      child: Cartao(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+        child: Semantics(
+          liveRegion: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(texto, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  children: [
+                    TextButton(
+                      key: const Key('dispensar-novo-relatorio'),
+                      onPressed: () => unawaited(controle.dispensarNovo()),
+                      child: const Text('Dispensar'),
+                    ),
+                    FilledButton(
+                      key: const Key('abrir-novo-relatorio'),
+                      onPressed: () => unawaited(controle.abrirNovo()),
+                      child: const Text('Abrir'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -132,9 +200,12 @@ class _Principal extends StatelessWidget {
           : _Mensagem(topo: topo);
     }
     return VistaRelatorio(
+      // outro relatório começa sem filtro
+      key: ValueKey(controle.nomeAberto),
       relatorio: aberto,
       aoAbrirLink: controle.abrirLink,
       topo: topo,
+      carteira: controle.carteira,
     );
   }
 }
@@ -327,22 +398,70 @@ ListView _lista(
   ScrollController? rolagem,
   EdgeInsetsGeometry? padding,
   void Function()? antes,
-}) => ListView.builder(
-  controller: rolagem,
-  padding: padding,
-  itemCount: visao.itens.length,
-  itemBuilder: (_, n) {
-    final i = visao.itens[n];
-    return _ItemRelatorio(
-      i,
-      aberto: i.nome == controle.nomeAberto,
-      aoTocar: () {
-        antes?.call();
-        unawaited(controle.abrir(i.nome));
-      },
+}) {
+  final itens = filtrarPorPeriodo(
+    visao.itens,
+    controle.periodoDias,
+    visao.hoje,
+  );
+  if (itens.isEmpty && controle.periodoDias != null) {
+    return ListView(
+      controller: rolagem,
+      padding: padding,
+      children: const [
+        Padding(
+          key: Key('periodo-vazio'),
+          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Text('Nenhum relatório neste período'),
+        ),
+      ],
     );
-  },
-);
+  }
+  return ListView.builder(
+    controller: rolagem,
+    padding: padding,
+    itemCount: itens.length,
+    itemBuilder: (_, n) {
+      final i = itens[n];
+      return _ItemRelatorio(
+        i,
+        aberto: i.nome == controle.nomeAberto,
+        aoTocar: () {
+          antes?.call();
+          unawaited(controle.abrir(i.nome));
+        },
+      );
+    },
+  );
+}
+
+/// "7 dias", "30 dias", "90 dias" e "Todos" (padrão), pela data do arquivo.
+class _ChipsPeriodo extends StatelessWidget {
+  const _ChipsPeriodo(this.controle);
+
+  final ControleRelatorios controle;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    key: const Key('periodo-relatorios'),
+    spacing: 6,
+    runSpacing: 6,
+    children: [
+      for (final (dias, rotulo) in const [
+        (7, '7 dias'),
+        (30, '30 dias'),
+        (90, '90 dias'),
+        (null, 'Todos'),
+      ])
+        ChipFiltro(
+          key: Key('periodo-${dias ?? 'todos'}'),
+          rotulo: rotulo,
+          selecionado: controle.periodoDias == dias,
+          aoTocar: () => controle.definirPeriodo(dias),
+        ),
+    ],
+  );
+}
 
 const _tituloLista = Text(
   'Relatórios anteriores',
@@ -379,7 +498,11 @@ class _Expandido extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       spacing: 8,
-                      children: [_tituloLista, _BotaoAtualizar(controle)],
+                      children: [
+                        _tituloLista,
+                        _BotaoAtualizar(controle),
+                        _ChipsPeriodo(controle),
+                      ],
                     ),
                   ),
                   Expanded(child: _lista(controle, visao)),
@@ -444,9 +567,13 @@ class _Compacto extends StatelessWidget {
             builder: (_, rolagem) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  child: _tituloLista,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 8,
+                    children: [_tituloLista, _ChipsPeriodo(controle)],
+                  ),
                 ),
                 Expanded(
                   child: _lista(

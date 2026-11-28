@@ -1,5 +1,6 @@
 import 'package:calculadoradarf/app/componentes/cartao.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
+import 'package:calculadoradarf/app/telas/relatorios/cartao_ativo.dart';
 import 'package:calculadoradarf/app/telas/relatorios/paleta_relatorio.dart';
 import 'package:calculadoradarf/app/telas/relatorios/vista_relatorio.dart';
 import 'package:calculadoradarf/nucleo/relatorios/destaques.dart';
@@ -713,7 +714,8 @@ void main() {
         of: find.byKey(Key(k)),
         matching: find.byWidgetPredicate((w) {
           if (w is! DecoratedBox) return false;
-          final b = (w.decoration as BoxDecoration).border;
+          final d = w.decoration;
+          final b = d is BoxDecoration ? d.border : null;
           return b is Border &&
               b.top.width == 2 &&
               b.top.color == PaletaRelatorio.positivaTexto;
@@ -1127,5 +1129,472 @@ void main() {
         expect(find.text(explicacao), findsNothing);
       }
     });
+  });
+
+  group('resumo por ativo no celular e resumo dos especialistas', () {
+    const celularAlto = Size(360, 20000);
+    Relatorio guia() => Relatorio.deJson(fixtureRelatorioGuia());
+    Finder em(String k, String s) =>
+        find.descendant(of: find.byKey(Key(k)), matching: find.text(s));
+    final rolagemHorizontal = find.byWidgetPredicate(
+      (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
+    );
+
+    testWidgets('celular: linhas empilhadas, sem rolagem horizontal', (
+      t,
+    ) async {
+      final r = guia();
+      await montarComponente(t, _vista(r), tamanho: celularAlto);
+      final g = find.byKey(const Key('secao-g'));
+      expect(find.descendant(of: g, matching: rolagemHorizontal), findsNothing);
+      expect(
+        find.descendant(of: g, matching: find.byType(Table)),
+        findsNothing,
+      );
+      final a = r.ativos.firstWhere((a) => a.ticker == 'BPAC11');
+      expect(em('linha-resumo-BPAC11', 'BPAC11'), findsOneWidget);
+      expect(em('linha-resumo-BPAC11', textoPreco(a.preco)), findsOneWidget);
+      expect(
+        em('linha-resumo-BPAC11', a.especialistas.resumo!),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('linha-resumo-BPAC11')),
+          matching: find.byType(SeloLeitura),
+        ),
+        findsOneWidget,
+      );
+      for (final x in r.ativos) {
+        expect(
+          find.byKey(Key('linha-resumo-${x.ticker}')),
+          findsOneWidget,
+          reason: x.ticker,
+        );
+      }
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('celular: destaque ganha estrela na linha', (t) async {
+      await montarComponente(
+        t,
+        _vista(Relatorio.deJson(fixtureRelatorio27())),
+        tamanho: celularAlto,
+      );
+      expect(find.byKey(const Key('estrela-tabela-PRIO3')), findsOneWidget);
+      expect(find.byKey(const Key('estrela-tabela-RENT3')), findsNothing);
+    });
+
+    testWidgets('PC: a tabela continua', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: _pcAlto);
+      final g = find.byKey(const Key('secao-g'));
+      expect(
+        find.descendant(of: g, matching: find.byType(Table)),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('linha-resumo-BPAC11')), findsNothing);
+    });
+
+    testWidgets('bloco abaixo da seção g, com consenso por ativo', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      final sec = find.byKey(const Key('secao-resumo-especialistas'));
+      expect(sec, findsOneWidget);
+      expect(
+        find.descendant(
+          of: sec,
+          matching: find.text('Resumo dos especialistas'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        t.getTopLeft(sec).dy,
+        greaterThan(t.getBottomLeft(find.byKey(const Key('secao-g'))).dy - 1),
+      );
+      expect(
+        t.getTopLeft(sec).dy,
+        lessThan(t.getTopLeft(find.byKey(const Key('secao-h'))).dy),
+      );
+      expect(em('resumo-esp-BPAC11', 'BPAC11'), findsOneWidget);
+      expect(em('resumo-esp-BPAC11', 'Maioria compra'), findsOneWidget);
+      expect(em('resumo-esp-BBDC4', 'Opiniões divididas'), findsOneWidget);
+      expect(em('resumo-esp-T1TW34', 'Sem análise'), findsOneWidget);
+      // Fechado: as casas ainda não aparecem.
+      expect(find.byKey(const Key('resumo-casa-BPAC11-0')), findsNothing);
+    });
+
+    testWidgets('BPAC11 aberto: casa com selo, data e motivo', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      await t.tap(find.byKey(const Key('resumo-esp-BPAC11')));
+      await t.pumpAndSettle();
+      const k = 'resumo-casa-BPAC11-0';
+      expect(em(k, 'Compra'), findsOneWidget);
+      expect(em(k, 'Safra'), findsOneWidget);
+      expect(em(k, '12/11/2026'), findsOneWidget);
+      expect(
+        em(
+          k,
+          'Mantém a visão positiva, embora tenha achado as despesas do '
+          'trimestre um pouco negativas.',
+        ),
+        findsOneWidget,
+      );
+      expect(em('resumo-casa-BPAC11-1', 'Manter'), findsOneWidget);
+      final url = guia().ativos
+          .firstWhere((a) => a.ticker == 'BPAC11')
+          .especialistas
+          .itens[0]
+          .url!;
+      await t.tap(
+        find.descendant(
+          of: find.byKey(const Key(k)),
+          matching: find.byType(LinkRelatorio),
+        ),
+      );
+      expect(_links, [Uri.parse(url)]);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('BBDC4 dividido: selo âmbar e as 2 casas', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      await t.tap(find.byKey(const Key('resumo-esp-BBDC4')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('resumo-casa-BBDC4-0')), findsOneWidget);
+      expect(find.byKey(const Key('resumo-casa-BBDC4-1')), findsOneWidget);
+      expect(find.byKey(const Key('resumo-casa-BBDC4-2')), findsNothing);
+      final selo = find.ancestor(
+        of: em('resumo-esp-BBDC4', 'Opiniões divididas'),
+        matching: find.byType(Pilula),
+      );
+      expect(_coresSelo(t, selo), (
+        PaletaRelatorio.mistaTexto,
+        PaletaRelatorio.mistaFundo,
+      ));
+    });
+
+    testWidgets('T1TW34 sem casas: aviso ao abrir', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      await t.tap(find.byKey(const Key('resumo-esp-T1TW34')));
+      await t.pumpAndSettle();
+      expect(
+        em(
+          'resumo-esp-T1TW34',
+          'Nenhuma análise de especialista disponível para este ativo',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'sem itens, o selo é "Sem análise" mesmo com consenso no JSON',
+      (t) async {
+        await montarComponente(
+          t,
+          _vista(
+            Relatorio.deJson({
+              'ativos': [
+                {
+                  'ticker': 'ZZZ3',
+                  'especialistas': {'consenso': 'compra', 'itens': <Object?>[]},
+                },
+              ],
+            }),
+          ),
+          tamanho: celularAlto,
+        );
+        expect(em('resumo-esp-ZZZ3', 'Sem análise'), findsOneWidget);
+        expect(em('resumo-esp-ZZZ3', 'Maioria compra'), findsNothing);
+      },
+    );
+
+    testWidgets('item sem dado visível não é listado; índice da chave fica', (
+      t,
+    ) async {
+      await montarComponente(
+        t,
+        _vista(
+          Relatorio.deJson({
+            'ativos': [
+              {
+                'ticker': 'ZZZ3',
+                'especialistas': {
+                  'itens': [
+                    <String, Object?>{},
+                    {'url': 'javascript:x'},
+                    {'casa': 'A'},
+                  ],
+                },
+              },
+            ],
+          }),
+        ),
+        tamanho: celularAlto,
+      );
+      await t.tap(find.byKey(const Key('resumo-esp-ZZZ3')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('resumo-casa-ZZZ3-0')), findsNothing);
+      expect(find.byKey(const Key('resumo-casa-ZZZ3-1')), findsNothing);
+      expect(find.byKey(const Key('resumo-casa-ZZZ3-2')), findsOneWidget);
+    });
+
+    testWidgets('fixture de 26/11 (sem classificação) pela regra de texto', (
+      t,
+    ) async {
+      await montarComponente(t, _vista(_fixture()), tamanho: celularAlto);
+      expect(em('resumo-esp-RENT3', 'Maioria compra'), findsOneWidget);
+      await t.tap(find.byKey(const Key('resumo-esp-RENT3')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('resumo-casa-RENT3-0')), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('sem ativos, sem o bloco; ticker repetido não quebra', (
+      t,
+    ) async {
+      await montarComponente(
+        t,
+        _vista(Relatorio.deJson({}, dataDoArquivo: '2026-11-26')),
+        tamanho: celularAlto,
+      );
+      expect(find.byKey(const Key('secao-resumo-especialistas')), findsNothing);
+      final item = {'ticker': 'DUPL3', 'leitura': 'positiva'};
+      await montarComponente(
+        t,
+        _vista(
+          Relatorio.deJson({
+            'ativos': [item, item],
+          }),
+        ),
+        tamanho: celularAlto,
+      );
+      expect(t.takeException(), isNull);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('secao-resumo-especialistas')),
+          matching: find.text('Sem análise'),
+        ),
+        findsNWidgets(2),
+      );
+    });
+
+    for (final tema in [TemaVisual.terminal, TemaVisual.moderno]) {
+      testWidgets('360 px sem overflow, tema ${tema.chave}', (t) async {
+        await montarComponente(
+          t,
+          _vista(guia()),
+          tamanho: celularAlto,
+          tema: tema,
+        );
+        for (final tk in ['BPAC11', 'BBDC4', 'T1TW34']) {
+          await t.tap(find.byKey(Key('resumo-esp-$tk')));
+          await t.pumpAndSettle();
+        }
+        expect(t.takeException(), isNull);
+      });
+    }
+  });
+
+  group('filtros e pesquisa', () {
+    const celularAlto = Size(360, 20000);
+    Relatorio guia() => Relatorio.deJson(fixtureRelatorioGuia());
+    final campo = find.byKey(const Key('filtro-busca'));
+    Finder cartao(String tk) => find.byKey(Key('cartao-$tk'));
+    Finder linha(String tk) => find.byKey(Key('linha-resumo-$tk'));
+    Finder especialista(String tk) => find.byKey(Key('resumo-esp-$tk'));
+
+    /// No celular os chips começam recolhidos atrás do botão "Filtros (N)".
+    Future<void> abrir(WidgetTester t) async {
+      await t.tap(find.byKey(const Key('filtros-alternar')));
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('digitar filtra tabela, especialistas e cartões', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      expect(find.text('23 de 23 ativos'), findsOneWidget);
+      await t.enterText(campo, 'itau');
+      await t.pumpAndSettle();
+      for (final f in [linha, especialista, cartao]) {
+        expect(f('RURA11'), findsOneWidget);
+        expect(f('PETR4'), findsNothing);
+      }
+      // o termômetro continua com todos
+      expect(find.byKey(const Key('selo-termometro-PETR4')), findsOneWidget);
+      expect(find.text('1 de 23 ativos'), findsOneWidget);
+      expect(find.text('Limpar filtros'), findsOneWidget);
+    });
+
+    testWidgets('chips: tipo E leitura; carteira; Limpar filtros', (t) async {
+      await montarComponente(
+        t,
+        VistaRelatorio(
+          relatorio: guia(),
+          aoAbrirLink: _links.add,
+          carteira: const {'PETR4', 'VALE3'},
+        ),
+        tamanho: celularAlto,
+      );
+      await abrir(t);
+      await t.tap(find.byKey(const Key('chip-tipo-bdr')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('chip-leitura-negativa')));
+      await t.pumpAndSettle();
+      expect(cartao('NVDC34'), findsOneWidget);
+      expect(cartao('GOGL34'), findsNothing);
+      expect(find.text('1 de 23 ativos'), findsOneWidget);
+      await t.tap(find.text('Limpar filtros'));
+      await t.pumpAndSettle();
+      expect(find.text('23 de 23 ativos'), findsOneWidget);
+      await t.tap(find.byKey(const Key('chip-carteira')));
+      await t.pumpAndSettle();
+      expect(find.text('2 de 23 ativos'), findsOneWidget);
+      expect(cartao('PETR4'), findsOneWidget);
+      expect(cartao('VALE3'), findsOneWidget);
+      await t.tap(find.byKey(const Key('chip-com-analise')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('chip-sem-analise')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('filtro-vazio')), findsOneWidget);
+    });
+
+    testWidgets('sem posições carregadas o chip da carteira some', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      await abrir(t);
+      expect(find.byKey(const Key('chip-carteira')), findsNothing);
+      expect(find.byKey(const Key('chip-destaque')), findsOneWidget);
+    });
+
+    testWidgets('nada passa: mensagem, sem tabela nem cartões', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      await t.enterText(campo, 'zzzz');
+      await t.pumpAndSettle();
+      expect(find.text('Nenhum ativo com esses filtros'), findsOneWidget);
+      expect(find.byKey(const Key('secao-g')), findsNothing);
+      expect(find.byKey(const Key('secao-resumo-especialistas')), findsNothing);
+      expect(find.byType(CartaoAtivo), findsNothing);
+      expect(find.text('0 de 23 ativos'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('barra entre os destaques e o resumo por ativo', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      double y(String k) => t.getTopLeft(find.byKey(Key(k))).dy;
+      expect(y('secao-destaques'), lessThan(y('filtros-ativos')));
+      expect(y('filtros-ativos'), lessThan(y('secao-g')));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('secao-h')),
+          matching: find.byKey(const Key('filtros-ativos')),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('celular: chips recolhidos, botão com a contagem', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      expect(campo, findsOneWidget);
+      expect(find.text('Filtros (0)'), findsOneWidget);
+      expect(find.byKey(const Key('chip-destaque')), findsNothing);
+      await abrir(t);
+      expect(find.byKey(const Key('chip-destaque')), findsOneWidget);
+      await t.tap(find.byKey(const Key('chip-destaque')));
+      await t.pump();
+      await t.tap(find.byKey(const Key('chip-leitura-mista')));
+      await t.pumpAndSettle();
+      expect(find.text('Filtros (2)'), findsOneWidget);
+      await abrir(t);
+      expect(find.byKey(const Key('chip-destaque')), findsNothing);
+    });
+
+    testWidgets('PC: chips sempre à vista, sem botão', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: _pcAlto);
+      expect(find.byKey(const Key('filtros-alternar')), findsNothing);
+      expect(find.byKey(const Key('chip-destaque')), findsOneWidget);
+    });
+
+    testWidgets('resultado vazio mantém a barra à vista', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      await t.enterText(campo, 'zzzz');
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('filtros-ativos')), findsOneWidget);
+      expect(campo, findsOneWidget);
+    });
+
+    testWidgets('Com análise e Sem análise', (t) async {
+      await montarComponente(t, _vista(guia()), tamanho: celularAlto);
+      await abrir(t);
+      await t.tap(find.byKey(const Key('chip-com-analise')));
+      await t.pumpAndSettle();
+      expect(cartao('T1TW34'), findsNothing);
+      expect(cartao('GOGL34'), findsNothing);
+      expect(cartao('RURA11'), findsNothing);
+      expect(cartao('CSNA3'), findsOneWidget);
+      await t.tap(find.byKey(const Key('chip-sem-analise')));
+      await t.pumpAndSettle();
+      expect(cartao('T1TW34'), findsOneWidget);
+      expect(cartao('GOGL34'), findsOneWidget);
+      expect(cartao('CSNA3'), findsNothing);
+      expect(find.text('3 de 23 ativos'), findsOneWidget);
+    });
+
+    testWidgets('carteira que passa a falhar desliga o filtro', (t) async {
+      final carteira = ValueNotifier<Set<String>?>({'PETR4'});
+      addTearDown(carteira.dispose);
+      await montarComponente(
+        t,
+        ValueListenableBuilder<Set<String>?>(
+          valueListenable: carteira,
+          builder: (_, c, _) => VistaRelatorio(
+            relatorio: guia(),
+            aoAbrirLink: _links.add,
+            carteira: c,
+          ),
+        ),
+        tamanho: celularAlto,
+      );
+      await abrir(t);
+      await t.tap(find.byKey(const Key('chip-carteira')));
+      await t.pumpAndSettle();
+      expect(find.text('1 de 23 ativos'), findsOneWidget);
+      carteira.value = null;
+      await t.pumpAndSettle();
+      expect(find.text('23 de 23 ativos'), findsOneWidget);
+      expect(find.byKey(const Key('chip-carteira')), findsNothing);
+    });
+
+    testWidgets('chip de tipo com texto longo não estoura em 360 px', (
+      t,
+    ) async {
+      final j = fixtureRelatorioGuia();
+      ((j['ativos'] as List).first as Map)['tipoAtivo'] =
+          'um tipo de ativo com um nome muito mas muito longo mesmo';
+      await montarComponente(
+        t,
+        _vista(Relatorio.deJson(j)),
+        tamanho: celularAlto,
+      );
+      await abrir(t);
+      expect(t.takeException(), isNull);
+      expect(find.byType(CartaoAtivo), findsWidgets);
+    });
+
+    for (final tema in [TemaVisual.terminal, TemaVisual.moderno]) {
+      testWidgets('360 px sem overflow, tema ${tema.chave}', (t) async {
+        await montarComponente(
+          t,
+          VistaRelatorio(
+            relatorio: guia(),
+            aoAbrirLink: _links.add,
+            carteira: const {'PETR4'},
+          ),
+          tamanho: celularAlto,
+          tema: tema,
+        );
+        await abrir(t);
+        await t.enterText(campo, 'a');
+        await t.tap(find.byKey(const Key('chip-leitura-mista')));
+        await t.pumpAndSettle();
+        expect(t.takeException(), isNull);
+        expect(find.byType(CartaoAtivo), findsWidgets);
+      });
+    }
   });
 }

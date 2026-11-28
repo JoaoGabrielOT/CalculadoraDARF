@@ -142,7 +142,12 @@ class Sincronizador {
 
   /// [mesmaConta]: login de novo com a sessão aberta (a conta recusa outra).
   /// Se falhar com a conta ainda aberta, o status volta ao de antes.
-  Future<void> conectar(AbrirUrl abrirUrl, {String? mesmaConta}) async {
+  /// [escoposExtras] vão ao Google junto dos escopos padrão.
+  Future<void> conectar(
+    AbrirUrl abrirUrl, {
+    String? mesmaConta,
+    List<String> escoposExtras = const [],
+  }) async {
     if (ocupado) return;
     final geracao = _geracao;
     final antes = _status;
@@ -154,6 +159,7 @@ class Sincronizador {
         abrirUrl,
         cancelar: cancelamento.future,
         mesmaConta: mesmaConta,
+        escoposExtras: escoposExtras,
       );
     } catch (e) {
       if (geracao != _geracao) return;

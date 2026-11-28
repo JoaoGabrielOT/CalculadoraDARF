@@ -70,6 +70,7 @@ abstract interface class ServicosApp {
   Future<void> limparCacheCotacoes();
   Future<CotacaoRadar> cotacao(String ticker, {String nome = ''});
   Future<Grafico> grafico(String ticker, String periodo);
+  Future<Diarias> barrasDiarias(String ticker, {String? desde});
   Future<Map<String, double?>> precosCarteira(Set<String> tickers);
   Future<Map<String, CotacaoAtual?>> cotacoesAtuais(Set<String> tickers);
   Future<(double, String)> precoVenda(String ticker, String dia);
@@ -114,8 +115,21 @@ abstract interface class ServicosApp {
   Future<VisaoRelatorios> atualizarRelatorios();
   Future<Relatorio> abrirRelatorio(String nome);
 
+  /// O aviso de relatório novo foi aberto ou dispensado.
+  Future<void> marcarRelatoriosAvisados();
+
   /// Login de novo com a sessão aberta (escopo novo), sem sair da conta.
   Future<void> entrarDeNovoGoogle();
+
+  // pasta de relatórios compartilhada com os amigos (só a conta dona)
+  /// Sem conta ou com falha: `naoDono` (nada aparece).
+  Future<EstadoCompartilhamento> estadoCompartilhamento();
+
+  /// Dá acesso de leitor, sem e-mail de aviso, aos amigos que ainda não têm.
+  Future<ResultadoCompartilhamento> compartilharRelatorios();
+
+  /// "Permitir": login de novo com a mesma conta pedindo o escopo `drive`.
+  Future<void> permitirCompartilhamento();
 }
 
 /// Preferências por aparelho (`Config.extras`, nunca vão para a planilha).
@@ -485,6 +499,7 @@ class VisaoRelatorios {
     this.nomeAtual,
     this.ehHoje = false,
     this.situacao = SituacaoRelatorios.ok,
+    this.novos = const [],
   });
 
   /// Do mais recente para o mais antigo (`ordenarRelatorios`).
@@ -501,6 +516,10 @@ class VisaoRelatorios {
   final String? nomeAtual;
   final bool ehHoje;
   final SituacaoRelatorios situacao;
+
+  /// Relatórios mais novos que o último avisado (mais recente primeiro); só
+  /// o usuário abrir ou dispensar o aviso os zera.
+  final List<ResumoRelatorio> novos;
 }
 
 class ImagemBytes {

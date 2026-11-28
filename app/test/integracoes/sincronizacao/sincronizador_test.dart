@@ -46,17 +46,20 @@ class ContaGoogleFalsa implements ContaGoogle {
     return email = 'ana@gmail.com';
   }
 
-  /// `mesmaConta` recebido no último login.
+  /// `mesmaConta` e `escoposExtras` recebidos no último login.
   String? mesmaConta;
+  List<String> escoposExtras = const [];
 
   @override
   Future<String> login(
     AbrirUrl abrirUrl, {
     Future<void>? cancelar,
     String? mesmaConta,
+    List<String> escoposExtras = const [],
   }) async {
     chamadas.add('login');
     this.mesmaConta = mesmaConta;
+    this.escoposExtras = escoposExtras;
     final segurar = segurarLogin;
     if (segurar != null) {
       await Future.any<void>([
@@ -629,6 +632,13 @@ void testesLogin() {
     expect(c.conta.mesmaConta, isNull);
     await c.sync.conectar((_) async {}, mesmaConta: 'ana@gmail.com');
     expect(c.conta.mesmaConta, 'ana@gmail.com');
+    expect(c.conta.escoposExtras, isEmpty);
+    await c.sync.conectar(
+      (_) async {},
+      mesmaConta: 'ana@gmail.com',
+      escoposExtras: const [escopoDrive],
+    );
+    expect(c.conta.escoposExtras, [escopoDrive]);
   });
 
   test(
