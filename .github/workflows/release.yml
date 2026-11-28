@@ -424,6 +424,14 @@ jobs:
           name: windows
           path: saida
 
+      - name: Gerar o manifesto versao.json
+        env:
+          VERSAO: ${{ needs.versao.outputs.versao }}
+        run: |
+          set -e
+          # o app lê este arquivo em vez da API do GitHub (limite de 60 consultas por hora)
+          python3 app/ci/gerar_manifesto.py "$VERSAO" "docs/release/$VERSAO.md" saida/versao.json saida/CalculadoraDARF.exe saida/CalculadoraDARF.apk
+
       - name: Publicar a release estável
         uses: softprops/action-gh-release@v2
         with:
@@ -431,6 +439,7 @@ jobs:
           files: |
             saida/CalculadoraDARF.exe
             saida/CalculadoraDARF.apk
+            saida/versao.json
           prerelease: false    # /releases/latest (atualizadores Python e Flutter) só enxerga release estável
           make_latest: "true"
           body_path: docs/release/${{ needs.versao.outputs.versao }}.md
@@ -526,6 +535,28 @@ jobs:
             resumo="$resumo $nome=$tam bytes sha256:$sha;"
           done
           echo "ASSETS_RESUMO=$resumo" >> "$GITHUB_ENV"
+
+      - name: Conferir o manifesto versao.json
+        run: |
+          set -u
+          falha() { echo "::error title=Atualizadores::$1"; exit 1; }
+          URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSAO/versao.json"
+          ok=0
+          for i in $(seq 1 10); do
+            if curl -fsSL "$URL" -o versao.json && [ "$(jq -r .versao versao.json)" = "$VERSAO" ]; then
+              ok=1; break
+            fi
+            echo "tentativa $i: versao.json de $VERSAO ainda não disponível"
+            sleep 20
+          done
+          [ "$ok" = 1 ] || falha "versao.json da release $VERSAO não foi baixado ou traz outra versão"
+          for nome in CalculadoraDARF.exe CalculadoraDARF.apk; do
+            tam=$(stat -c %s "saida/$nome")
+            sha=$(sha256sum "saida/$nome" | cut -d' ' -f1)
+            [ "$(jq -r --arg n "$nome" '.assets[$n].tamanho' versao.json)" = "$tam" ] || falha "versao.json: tamanho de $nome difere do artefato ($tam)"
+            [ "$(jq -r --arg n "$nome" '.assets[$n].sha256' versao.json)" = "$sha" ] || falha "versao.json: sha256 de $nome difere do artefato ($sha)"
+          done
+          echo "versao.json confere com $VERSAO"
 
       - uses: actions/setup-python@v5
         with:

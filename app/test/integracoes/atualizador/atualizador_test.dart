@@ -75,10 +75,14 @@ void main() {
   group('verificar do Python', () {
     for (final c in carregarCasos('atualizador')) {
       if (c.funcao != 'verificar') continue;
+      // O corpo "rate limit exceeded" agora vira a mensagem de limite (grupo
+      // 'manifesto versao.json'); o 403 comum segue coberto abaixo.
+      if (c.nome == 'http 403') continue;
       test('verificar: ${c.nome}', () async {
         final e = _mapa(c.entrada);
         final saida = _mapa(c.saida);
         final falso = ClienteFalso.fila([
+          RespostaFalsa(404),
           RespostaFalsa(
             e['status']! as int,
             json: e['json'],
@@ -112,9 +116,11 @@ void main() {
         }
 
         final pedidos = _lista(saida['pedidos']);
-        expect(falso.pedidos, hasLength(pedidos.length));
+        // O primeiro pedido é o manifesto (404 aqui); o resto é o do Python.
+        expect(falso.pedidos, hasLength(pedidos.length + 1));
+        expect(falso.pedidos.first.url.toString(), urlManifesto);
         final esperado = _mapa(pedidos.single);
-        final pedido = falso.pedidos.single;
+        final pedido = falso.pedidos.last;
         expect(pedido.metodo, esperado['metodo']);
         expect(pedido.url.toString(), esperado['url']);
         final cab = _mapa(esperado['cabecalhos']);
@@ -149,6 +155,11 @@ void main() {
       'https://api.github.com/repos/JoaoGabrielOT/CalculadoraDARF/'
       'releases/latest',
     );
+    expect(
+      urlManifesto,
+      'https://github.com/JoaoGabrielOT/CalculadoraDARF/releases/latest/'
+      'download/versao.json',
+    );
     expect(nomeAssetWindows, 'CalculadoraDARF.exe');
     expect(nomeAssetAndroid, 'CalculadoraDARF.apk');
   });
@@ -160,7 +171,10 @@ void main() {
 
   for (final corpo in ['<html>erro</html>', '[1, 2]']) {
     test('verificar: corpo 200 que não é objeto JSON ($corpo)', () async {
-      final falso = ClienteFalso.fila([RespostaFalsa(200, texto: corpo)]);
+      final falso = ClienteFalso.fila([
+        RespostaFalsa(404),
+        RespostaFalsa(200, texto: corpo),
+      ]);
       await expectLater(
         verificarAtualizacao(
           _cliente(falso),
@@ -181,6 +195,7 @@ void main() {
   test('verificar: falha de transporte vira ErroConexao', () async {
     final falso = ClienteFalso.fila([
       RespostaFalsa(200, erro: const SocketException('sem rede')),
+      RespostaFalsa(200, erro: const SocketException('sem rede')),
     ]);
     await expectLater(
       verificarAtualizacao(
@@ -190,6 +205,145 @@ void main() {
       ),
       throwsA(isA<ErroConexao>()),
     );
+  });
+
+  group('manifesto versao.json', () {
+    const sha =
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    Map<String, Object?> manifesto({String versao = '2.11.0'}) => {
+      'versao': versao,
+      'notas': '  Notas da versão.\n',
+      'assets': {
+        'CalculadoraDARF.exe': {'tamanho': 1234, 'sha256': sha},
+        'CalculadoraDARF.apk': {'tamanho': 99, 'sha256': 'ab' * 32},
+      },
+    };
+
+    Future<InfoAtualizacao?> verificar(ClienteFalso falso, {String? asset}) =>
+        verificarAtualizacao(
+          _cliente(falso),
+          nomeAsset: asset ?? nomeAssetWindows,
+          versaoAtual: '2.10.0',
+          executar: executarDireto,
+        );
+
+    final releaseApi = {
+      'tag_name': 'v2.11.0',
+      'body': 'Notas da API',
+      'assets': [
+        {
+          'name': 'CalculadoraDARF.exe',
+          'browser_download_url': 'https://exemplo/api.exe',
+          'size': 7,
+          'digest': 'sha256:$sha',
+        },
+      ],
+    };
+
+    test('válido: usa o manifesto e não chama a API', () async {
+      final falso = ClienteFalso.fila([RespostaFalsa(200, json: manifesto())]);
+      final info = await verificar(falso);
+      expect(falso.pedidos, hasLength(1));
+      expect(falso.pedidos.single.url.toString(), urlManifesto);
+      expect(info, isNotNull);
+      expect(info!.versao, '2.11.0');
+      expect(info.notas, 'Notas da versão.');
+      expect(
+        info.url,
+        'https://github.com/JoaoGabrielOT/CalculadoraDARF/releases/download/'
+        '2.11.0/CalculadoraDARF.exe',
+      );
+      expect(info.tamanho, 1234);
+      expect(info.sha256, sha);
+    });
+
+    test('válido para o APK', () async {
+      final falso = ClienteFalso.fila([RespostaFalsa(200, json: manifesto())]);
+      final info = await verificar(falso, asset: nomeAssetAndroid);
+      expect(info!.url, endsWith('/2.11.0/CalculadoraDARF.apk'));
+      expect(info.tamanho, 99);
+    });
+
+    test('404: cai na API', () async {
+      final falso = ClienteFalso.fila([
+        RespostaFalsa(404),
+        RespostaFalsa(200, json: releaseApi),
+      ]);
+      final info = await verificar(falso);
+      expect(falso.pedidos, hasLength(2));
+      expect(falso.pedidos.last.url.toString(), urlUltimaVersao);
+      expect(info!.url, 'https://exemplo/api.exe');
+    });
+
+    test('versão não mais nova: null, sem chamar a API', () async {
+      final falso = ClienteFalso.fila([
+        RespostaFalsa(200, json: manifesto(versao: '2.10.0')),
+      ]);
+      expect(await verificar(falso), isNull);
+      expect(falso.pedidos, hasLength(1));
+    });
+
+    test('sem o asset da plataforma: null, sem chamar a API', () async {
+      final m = manifesto()
+        ..['assets'] = <String, Object?>{
+          'CalculadoraDARF.apk': <String, Object?>{},
+        };
+      final falso = ClienteFalso.fila([RespostaFalsa(200, json: m)]);
+      expect(await verificar(falso), isNull);
+      expect(falso.pedidos, hasLength(1));
+    });
+
+    test('JSON inválido: cai na API', () async {
+      final falso = ClienteFalso.fila([
+        RespostaFalsa(200, texto: '<html>'),
+        RespostaFalsa(200, json: releaseApi),
+      ]);
+      final info = await verificar(falso);
+      expect(falso.pedidos, hasLength(2));
+      expect(info!.url, 'https://exemplo/api.exe');
+    });
+
+    test('falha de rede no manifesto: cai na API', () async {
+      final falso = ClienteFalso.fila([
+        RespostaFalsa(200, erro: const SocketException('sem rede')),
+        RespostaFalsa(200, json: releaseApi),
+      ]);
+      final info = await verificar(falso);
+      expect(falso.pedidos, hasLength(2));
+      expect(info!.versao, '2.11.0');
+    });
+
+    test('API com 403 sem limite: segue o ErroHttp de sempre', () async {
+      final falso = ClienteFalso.fila([
+        RespostaFalsa(404),
+        RespostaFalsa(403, json: {'message': 'Forbidden'}, motivo: 'Forbidden'),
+      ]);
+      await expectLater(verificar(falso), throwsA(isA<ErroHttp>()));
+    });
+
+    for (final (status, cab, texto) in [
+      (403, {'x-ratelimit-remaining': '0'}, 'x'),
+      (429, {'x-ratelimit-remaining': '0'}, 'x'),
+      (403, <String, String>{}, '{"message":"API rate limit exceeded"}'),
+    ]) {
+      test('API com limite ($status, $cab): ErroAtualizacao', () async {
+        final falso = ClienteFalso.fila([
+          RespostaFalsa(404),
+          RespostaFalsa(status, texto: texto, cabecalhos: cab),
+        ]);
+        await expectLater(
+          verificar(falso),
+          throwsA(
+            isA<ErroAtualizacao>().having(
+              (e) => e.mensagem,
+              'mensagem',
+              'O GitHub limitou as consultas deste endereço de internet. '
+                  'Tente de novo em alguns minutos.',
+            ),
+          ),
+        );
+      });
+    }
   });
 
   group('baixar', () {

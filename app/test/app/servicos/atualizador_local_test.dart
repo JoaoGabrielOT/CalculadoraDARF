@@ -62,6 +62,7 @@ void main() {
       test('verificarAtualizacao usa o asset da plataforma '
           '(${windows ? 'Windows' : 'Android'})', () async {
         falso = ClienteFalso.fila([
+          RespostaFalsa(404), // manifesto ausente: cai na API
           RespostaFalsa(200, json: release('v99.0.0')),
         ]);
         final r = await montar(windows: windows).verificarAtualizacao();
@@ -72,6 +73,7 @@ void main() {
 
     test('sem versão mais nova devolve null', () async {
       falso = ClienteFalso.fila([
+        RespostaFalsa(404), // manifesto ausente: cai na API
         RespostaFalsa(200, json: release('v$versaoApp')),
       ]);
       expect(await montar().verificarAtualizacao(), isNull);

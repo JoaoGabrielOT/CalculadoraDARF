@@ -5,6 +5,7 @@
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http_pkg;
 
 import '../../nucleo/erros.dart';
 import '../../versao.dart';
@@ -16,6 +17,15 @@ import '../http/json.dart';
 const repositorioGithub = 'JoaoGabrielOT/CalculadoraDARF';
 const urlUltimaVersao =
     'https://api.github.com/repos/$repositorioGithub/releases/latest';
+
+/// Manifesto publicado junto da release: não conta no limite da API do GitHub.
+const urlManifesto =
+    'https://github.com/$repositorioGithub/releases/latest/download/versao.json';
+const _urlBaseDownload =
+    'https://github.com/$repositorioGithub/releases/download';
+const mensagemLimiteGithub =
+    'O GitHub limitou as consultas deste endereço de internet. '
+    'Tente de novo em alguns minutos.';
 const nomeAssetWindows = 'CalculadoraDARF.exe';
 const nomeAssetAndroid = 'CalculadoraDARF.apk';
 
@@ -69,13 +79,91 @@ bool versaoMaisNova(String tag, String atual) {
 }
 
 /// Dados da nova versão, ou `null` se não há (404, draft, prerelease, tag que
-/// não é mais nova ou release sem o asset).
+/// não é mais nova ou release sem o asset). Tenta primeiro o manifesto
+/// `versao.json` da release; sem ele (ou inválido), consulta a API.
 Future<InfoAtualizacao?> verificarAtualizacao(
   ClienteHttp http, {
   required String nomeAsset,
   String versaoAtual = versaoApp,
   Executar executar = executarEmIsolate,
 }) async {
+  final (usou, info) = await _doManifesto(
+    http,
+    nomeAsset,
+    versaoAtual,
+    executar,
+  );
+  if (usou) return info;
+  return _daApi(http, nomeAsset, versaoAtual, executar);
+}
+
+/// `(true, info)` quando o manifesto valeu; `(false, null)` para cair na API.
+Future<(bool, InfoAtualizacao?)> _doManifesto(
+  ClienteHttp http,
+  String nomeAsset,
+  String versaoAtual,
+  Executar executar,
+) async {
+  try {
+    final r = await http.enviar(
+      'GET',
+      Uri.parse(urlManifesto),
+      cabecalhos: const {'User-Agent': 'CalculadoraDARF'},
+      tempoLimite: const Duration(seconds: 15),
+    );
+    if (r.statusCode != 200) return (false, null);
+    final m = await decodificarJson(r.bodyBytes, executar);
+    if (m is! Map) return (false, null);
+    final versao = m['versao'];
+    final notas = m['notas'];
+    final assets = m['assets'];
+    if (versao is! String || versao.isEmpty || notas is! String) {
+      return (false, null);
+    }
+    if (assets is! Map) return (false, null);
+    if (!versaoMaisNova(versao, versaoAtual)) return (true, null);
+    final a = assets[nomeAsset];
+    if (a == null) return (true, null);
+    if (a is! Map) return (false, null);
+    final tamanho = a['tamanho'];
+    final sha = a['sha256'];
+    if (tamanho is! int || sha is! String) return (false, null);
+    return (
+      true,
+      InfoAtualizacao(
+        versao: versao.replaceFirst(RegExp(r'^[vV]+'), ''),
+        notas: notas.trim(),
+        url: '$_urlBaseDownload/$versao/$nomeAsset',
+        tamanho: tamanho,
+        sha256: sha,
+      ),
+    );
+  } on FormatException {
+    return (false, null);
+  } on ErroConexao {
+    return (false, null);
+  }
+}
+
+/// Limite de consultas da API: 403/429 com `x-ratelimit-remaining: 0` ou com
+/// "rate limit" no corpo.
+bool _limiteDaApi(http_pkg.Response r) {
+  if (r.statusCode != 403 && r.statusCode != 429) return false;
+  for (final e in r.headers.entries) {
+    if (e.key.toLowerCase() == 'x-ratelimit-remaining' &&
+        e.value.trim() == '0') {
+      return true;
+    }
+  }
+  return r.body.toLowerCase().contains('rate limit');
+}
+
+Future<InfoAtualizacao?> _daApi(
+  ClienteHttp http,
+  String nomeAsset,
+  String versaoAtual,
+  Executar executar,
+) async {
   final url = Uri.parse(urlUltimaVersao);
   final r = await http.enviar(
     'GET',
@@ -87,6 +175,7 @@ Future<InfoAtualizacao?> verificarAtualizacao(
     tempoLimite: const Duration(seconds: 15),
   );
   if (r.statusCode == 404) return null;
+  if (_limiteDaApi(r)) throw ErroAtualizacao(mensagemLimiteGithub);
   conferirStatus(r.statusCode, url, motivo: r.reasonPhrase);
   final Map<Object?, Object?> rel;
   try {
