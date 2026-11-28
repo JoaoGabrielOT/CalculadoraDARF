@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:calculadoradarf/app/estado/estado_app.dart';
+import 'package:calculadoradarf/app/componentes/cartao.dart' show Cartao;
 import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/componentes/logo_ativo.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
@@ -12,6 +13,7 @@ import 'package:calculadoradarf/app/telas/noticias/tela_noticias.dart';
 import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -249,15 +251,67 @@ void main() {
     testWidgets('$nome: o selo Nova fica logo após o título', (t) async {
       final s = _servicos(itens: [_n('a1')], detalhes: {}, novas: {'a1'});
       await _montar(t, servicos: s, tamanho: tam);
-      final titulo = t.getRect(
-        find.text('Título da notícia a1 com texto razoável'),
-      );
+      final titulo = find.textContaining('Título da notícia a1');
       final selo = t.getRect(find.widgetWithText(Selo, 'Nova'));
-      expect(selo.left, greaterThanOrEqualTo(titulo.right));
-      expect(selo.left - titulo.right, lessThan(12));
-      expect(selo.center.dy, inInclusiveRange(titulo.top, titulo.bottom));
+      final rt = t.renderObject<RenderParagraph>(titulo);
+      final fim = rt.getBoxesForSelection(
+        TextSelection(
+          baseOffset: 0,
+          extentOffset: rt.text.toPlainText().length,
+        ),
+      );
+      // o selo é o último pedaço do texto, na linha do título
+      final ultimo = t.getTopLeft(titulo) + fim.last.toRect().topLeft;
+      expect(
+        selo.center.dy,
+        closeTo(ultimo.dy + fim.last.toRect().height / 2, 6),
+      );
+    });
+
+    testWidgets('$nome: título longo, o selo Nova fica na última linha', (
+      t,
+    ) async {
+      final longo = 'Título muito longo ' * 8;
+      final s = _servicos(
+        itens: [_n('a1', titulo: longo.trim())],
+        detalhes: {},
+        novas: {'a1'},
+      );
+      await _montar(t, servicos: s, tamanho: tam);
+      final titulo = find.textContaining('Título muito longo');
+      final altura = t.getSize(titulo).height;
+      final topo = t.getTopLeft(titulo).dy;
+      expect(altura, greaterThan(40)); // mais de uma linha
+      final selo = t.getRect(find.widgetWithText(Selo, 'Nova'));
+      // dentro do bloco do título e na parte de baixo dele
+      expect(
+        selo.center.dy,
+        inInclusiveRange(topo + altura - 28, topo + altura),
+      );
+      expect(selo.right, lessThanOrEqualTo(t.getTopRight(titulo).dx + .5));
     });
   }
+
+  testWidgets('celular: Segmentado e SeletorCaixa com a mesma largura', (
+    t,
+  ) async {
+    await _montar(t, servicos: _servicos(), tamanho: const Size(360, 800));
+    final seg = t.getSize(find.byType(Segmentado<String>)).width;
+    final caixa = t.getSize(find.byType(SeletorCaixa<String>)).width;
+    expect(seg, closeTo(caixa, 1));
+  });
+
+  testWidgets('PC: Atualizar na ponta direita do cartão', (t) async {
+    await _montar(t, servicos: _servicos());
+    final cartao = t.getRect(
+      find.ancestor(
+        of: find.byType(Segmentado<String>),
+        matching: find.byType(Cartao),
+      ),
+    );
+    final botao = t.getRect(find.widgetWithIcon(BotaoIcone, Icons.refresh));
+    expect(cartao.right - botao.right, lessThan(28));
+  });
 
   testWidgets('360 px: sem overflow e Todas | Relevantes numa linha cada', (
     t,
@@ -349,8 +403,9 @@ void main() {
     );
     expect(find.byKey(const Key('favicon-a1')), findsOneWidget);
     expect(s.chamadas, contains('favicon(a1)'));
+    // o título leva o selo Nova no fim do mesmo texto
     expect(
-      find.text('Título da notícia a1 com texto razoável'),
+      find.textContaining('Título da notícia a1 com texto razoável'),
       findsOneWidget,
     );
     expect(find.text('O resumo da matéria original.'), findsOneWidget);

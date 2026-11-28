@@ -113,6 +113,7 @@ class _Tema extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Segmentado<String>(
     compacto: !expandido(context),
+    expandir: !expandido(context),
     opcoes: const [
       (todasNoticias, todasNoticias),
       (relevantesNoticias, relevantesNoticias),
@@ -254,11 +255,8 @@ class _Expandido extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 12,
               children: [
-                Wrap(
+                Row(
                   spacing: 16,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -274,15 +272,20 @@ class _Expandido extends StatelessWidget {
                         _Status(controle),
                       ],
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 12,
-                      children: [
-                        _Tema(controle),
-                        _FiltroAtivo(controle, largura: 220),
-                        _BotaoAtualizar(controle),
-                      ],
+                    // os controles à direita; se faltar largura, quebram
+                    Expanded(
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _Tema(controle),
+                          _FiltroAtivo(controle, largura: 220),
+                        ],
+                      ),
                     ),
+                    _BotaoAtualizar(controle),
                   ],
                 ),
                 Row(

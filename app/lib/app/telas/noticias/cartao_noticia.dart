@@ -303,21 +303,23 @@ class _TituloComSelo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final texto = Text(
-      titulo,
+    // o selo vai no fim do texto, na última linha do título
+    return Text.rich(
+      TextSpan(
+        text: titulo,
+        children: [
+          if (nova) ...[
+            const WidgetSpan(child: SizedBox(width: 8)),
+            const WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: _SeloNova(),
+            ),
+          ],
+        ],
+      ),
       maxLines: maxLinhas,
-      overflow: maxLinhas == null ? null : TextOverflow.ellipsis,
+      overflow: maxLinhas == null ? TextOverflow.clip : TextOverflow.ellipsis,
       style: estilo,
-    );
-    if (!nova) return texto;
-    // o texto cede espaço ao selo: o selo nunca cai sozinho na linha de baixo
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 8,
-      children: [
-        Flexible(child: texto),
-        const _SeloNova(),
-      ],
     );
   }
 }

@@ -192,6 +192,25 @@ void main() {
       await t.tap(find.text('Dois'));
       expect(v, 2);
     });
+    testWidgets('expandir ocupa a largura toda do pai', (t) async {
+      await montarComponente(
+        t,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Segmentado<int>(
+              expandir: true,
+              compacto: true,
+              opcoes: const [(1, 'Um'), (2, 'Dois')],
+              valor: 1,
+              aoMudar: (_) {},
+            ),
+          ],
+        ),
+        tamanho: _celular,
+      );
+      expect(t.getSize(find.byType(SegmentedButton<int>)).width, 360);
+    });
     testWidgets('rótulo usa a fonte do app (Roboto)', (t) async {
       await montarComponente(
         t,

@@ -187,6 +187,7 @@ class Segmentado<T> extends StatelessWidget {
     required this.valor,
     required this.aoMudar,
     this.compacto = false,
+    this.expandir = false,
     this.chaveOpcao,
   });
 
@@ -194,6 +195,9 @@ class Segmentado<T> extends StatelessWidget {
   final T valor;
   final ValueChanged<T> aoMudar;
   final bool compacto;
+
+  /// Ocupa a largura toda do pai, com as opções repartidas.
+  final bool expandir;
   final Key Function(T)? chaveOpcao;
 
   @override
@@ -201,6 +205,7 @@ class Segmentado<T> extends StatelessWidget {
     height: _altura(context),
     child: SegmentedButton<T>(
       showSelectedIcon: !compacto,
+      expandedInsets: expandir ? EdgeInsets.zero : null,
       // O SegmentedButton ignora fixedSize: a altura é 40 mais o ajuste da
       // densidade vertical; 1,75 dá exatamente 48 no segmento (medido: 2 dá
       // 50 e 1,5 dá 46).

@@ -30,17 +30,6 @@ Relatorio _fixture() => Relatorio.deJson(fixtureRelatorio());
 Color? _fundo(WidgetTester t, Finder f) =>
     (t.widget<DecoratedBox>(f).decoration as BoxDecoration).color;
 
-/// Cores (texto, fundo) do selo [f] (uma `Pilula`).
-(Color?, Color?) _coresSelo(WidgetTester t, Finder f) {
-  final texto = t.widget<Text>(
-    find.descendant(of: f, matching: find.byType(Text)),
-  );
-  final caixa = find
-      .descendant(of: f, matching: find.byType(DecoratedBox))
-      .first;
-  return (texto.style?.color, _fundo(t, caixa));
-}
-
 /// Cor do `Selo` chapado de [f] (o próprio ou um descendente).
 Color _corSeloLeitura(WidgetTester t, Finder f) {
   final selo = find.descendant(
@@ -359,9 +348,9 @@ void main() {
     );
     final alta = find.ancestor(
       of: find.text('▲ +4,51%'),
-      matching: find.byType(DecoratedBox),
+      matching: find.byType(Selo),
     );
-    expect(_fundo(t, alta.first), const Color(0xFFE6F4EA));
+    expect(t.widget<Selo>(alta.first).cor, PaletaRelatorio.positivaTexto);
   });
 
   testWidgets('selo Positiva com a cor da paleta', (t) async {
@@ -844,7 +833,7 @@ void main() {
     });
   });
 
-  testWidgets('cores fixas: aviso, faixas, alerta e direções', (t) async {
+  testWidgets('cores: aviso, faixas, alerta e direções', (t) async {
     final json = fixtureRelatorio();
     (json['indicadores'] as List).add({
       'nome': 'Estável',
@@ -877,18 +866,33 @@ void main() {
       t.widget<Text>(find.textContaining('Se o preço abrir')).style?.color,
       const Color(0xFFB3261E),
     );
-    Finder pilula(String s) => find.ancestor(
-      of: find.text(s),
-      matching: find.byWidgetPredicate((w) => w is Pilula),
+    Finder selo(String s) =>
+        find.ancestor(of: find.text(s), matching: find.byType(Selo));
+    expect(find.byType(Pilula), findsNothing);
+    // terminal é escuro: as cores do tema
+    final c = CoresApp.de(t.element(find.byType(VistaRelatorio)));
+    expect(t.widget<Selo>(selo('▼ -1,78%')).cor, c.queda);
+    expect(t.widget<Selo>(selo('0,00%')).cor, c.textoSuave);
+  });
+
+  testWidgets('variação no tema escuro: selo com as cores do tema', (t) async {
+    await montarComponente(
+      t,
+      const Column(
+        children: [
+          PilulaDirecao('+1%', Direcao.alta),
+          PilulaDirecao('-1%', Direcao.queda),
+          PilulaDirecao('0%', Direcao.neutra),
+        ],
+      ),
+      tema: TemaVisual.moderno,
     );
-    expect(_coresSelo(t, pilula('▼ -1,78%')), (
-      const Color(0xFFB3261E),
-      const Color(0xFFFCE8E6),
-    ));
-    expect(_coresSelo(t, pilula('0,00%')), (
-      const Color(0xFF5F6368),
-      const Color(0xFFF1F3F4),
-    ));
+    final c = CoresApp.de(t.element(find.byType(Column).first));
+    final cores = [
+      for (final w in t.widgetList<Selo>(find.byType(Selo))) w.cor,
+    ];
+    expect(cores, [c.alta, c.queda, c.textoSuave]);
+    expect(find.byType(Pilula), findsNothing);
   });
 
   testWidgets('os selos de leitura são Selo chapado, sem borda', (t) async {

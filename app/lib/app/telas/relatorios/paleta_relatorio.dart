@@ -5,7 +5,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../nucleo/relatorios/relatorio.dart';
-import '../../componentes/cartao.dart' hide Selo;
 import '../../componentes/controles.dart' show Selo;
 import '../../tema/cores_app.dart';
 
@@ -124,21 +123,36 @@ class SeloLeitura extends StatelessWidget {
   final String? texto;
 
   @override
-  Widget build(BuildContext context) {
-    // no tema escuro, o texto escuro da paleta some no fundo: valem as cores
-    // do tema para alta, aviso, queda e neutro
-    final c = CoresApp.de(context);
-    final cor = Theme.of(context).brightness == Brightness.dark
-        ? switch (leitura) {
-            Leitura.positiva => c.alta,
-            Leitura.mista => c.aviso,
-            Leitura.neutra => c.textoSuave,
-            Leitura.negativa => c.queda,
-          }
-        : PaletaRelatorio.coresLeitura(leitura).$1;
-    return Selo(texto: texto ?? rotuloLeitura(leitura), cor: cor);
-  }
+  Widget build(BuildContext context) => Selo(
+    texto: texto ?? rotuloLeitura(leitura),
+    cor: corLeitura(context, leitura),
+  );
 }
+
+/// Cor do selo de uma leitura. No tema escuro, o texto escuro da paleta some
+/// no fundo: valem as cores do tema para alta, aviso, queda e neutro.
+Color corLeitura(BuildContext context, Leitura leitura) {
+  if (Theme.of(context).brightness != Brightness.dark) {
+    return PaletaRelatorio.coresLeitura(leitura).$1;
+  }
+  final c = CoresApp.de(context);
+  return switch (leitura) {
+    Leitura.positiva => c.alta,
+    Leitura.mista => c.aviso,
+    Leitura.neutra => c.textoSuave,
+    Leitura.negativa => c.queda,
+  };
+}
+
+/// Cor do selo de uma direção: a da leitura equivalente.
+Color corDirecao(BuildContext context, Direcao d) => corLeitura(
+  context,
+  switch (d) {
+    Direcao.alta => Leitura.positiva,
+    Direcao.queda => Leitura.negativa,
+    Direcao.neutra => Leitura.neutra,
+  },
+);
 
 /// Selo "★ Destaque" (leitura positiva com especialistas indicando compra).
 class SeloDestaque extends StatelessWidget {
@@ -167,7 +181,7 @@ class SelosPlacar extends StatelessWidget {
   );
 }
 
-/// Variação em pílula com a cor e a seta da direção.
+/// Variação em selo chapado com a cor e a seta da direção.
 class PilulaDirecao extends StatelessWidget {
   const PilulaDirecao(this.variacao, this.direcao, {super.key});
 
@@ -175,14 +189,10 @@ class PilulaDirecao extends StatelessWidget {
   final Direcao direcao;
 
   @override
-  Widget build(BuildContext context) {
-    final (cor, fundo) = PaletaRelatorio.coresDirecao(direcao);
-    return Pilula(
-      texto: textoVariacao(variacao, direcao),
-      fundo: fundo,
-      cor: cor,
-    );
-  }
+  Widget build(BuildContext context) => Selo(
+    texto: textoVariacao(variacao, direcao),
+    cor: corDirecao(context, direcao),
+  );
 }
 
 /// Texto que abre [url] no navegador quando ela passa por [linkSeguro];
