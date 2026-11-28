@@ -68,8 +68,14 @@ class QuadroFormulario extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    // 48 dp no celular; no PC o ponteiro é preciso.
+    // 48 dp no celular; no PC o ponteiro é preciso. Altura fixa, sem a área
+    // de toque extra do Material, como os botões do kit de controles.
     final alvo = dialogo ? 40.0 : 48.0;
+    ButtonStyle estilo(double largura) => ButtonStyle(
+      fixedSize: WidgetStatePropertyAll(Size.fromHeight(alvo)),
+      minimumSize: WidgetStatePropertyAll(Size(largura, alvo)),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
     final miolo = SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(24, dialogo ? 4 : 16, 24, 8),
       child: Column(
@@ -98,12 +104,12 @@ class QuadroFormulario extends StatelessWidget {
             spacing: 8,
             children: [
               TextButton(
-                style: TextButton.styleFrom(minimumSize: Size(88, alvo)),
+                style: estilo(88),
                 onPressed: salvando ? null : () => Navigator.of(context).pop(),
                 child: const Text('Cancelar'),
               ),
               FilledButton(
-                style: FilledButton.styleFrom(minimumSize: Size(110, alvo)),
+                style: estilo(110),
                 onPressed: salvando || !podeSalvar ? null : aoSalvar,
                 child: indicador && salvando
                     ? const Row(

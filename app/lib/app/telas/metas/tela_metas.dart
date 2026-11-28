@@ -7,7 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../componentes/cartao.dart';
+import '../../componentes/controles.dart';
 import '../../estado/estado_app.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
@@ -118,12 +118,13 @@ class _Dialogo extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       spacing: 8,
                       children: [
-                        BotaoSegmentado<ModoMetas>(
+                        Segmentado<ModoMetas>(
                           opcoes: const [
                             (ModoMetas.sugestoes, 'Sugestões'),
                             (ModoMetas.calculadora, 'Calculadora'),
                           ],
                           valor: controle.modo,
+                          expandir: true,
                           aoMudar: controle.trocarModo,
                         ),
                         Expanded(
@@ -160,22 +161,17 @@ class _Cheia extends StatelessWidget {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Meta de lucro / Preço-alvo'),
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Sugestões'),
-              Tab(text: 'Calculadora'),
-              Tab(text: 'Metas'),
-            ],
-          ),
-        ),
+        appBar: AppBar(title: const Text('Meta de lucro / Preço-alvo')),
         body: SafeArea(
           child: Column(
             children: [
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
                 child: Align(alignment: Alignment.centerLeft, child: _Aviso()),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: _SeletorPagina(),
               ),
               const Expanded(
                 child: Padding(
@@ -192,6 +188,27 @@ class _Cheia extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Sugestões | Calculadora | Metas: troca a página do `TabBarView` e
+/// acompanha o deslizar do dedo.
+class _SeletorPagina extends StatelessWidget {
+  const _SeletorPagina();
+
+  @override
+  Widget build(BuildContext context) {
+    final aba = DefaultTabController.of(context);
+    return ListenableBuilder(
+      listenable: aba,
+      builder: (context, _) => Segmentado<int>(
+        opcoes: const [(0, 'Sugestões'), (1, 'Calculadora'), (2, 'Metas')],
+        valor: aba.index,
+        expandir: true,
+        compacto: true,
+        aoMudar: aba.animateTo,
       ),
     );
   }

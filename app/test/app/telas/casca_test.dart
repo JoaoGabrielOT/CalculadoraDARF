@@ -140,7 +140,7 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.text('Meta de lucro / Preço-alvo'));
     await t.pumpAndSettle();
-    expect(find.byType(TabBar), findsOneWidget);
+    expect(find.byType(Segmentado<int>), findsOneWidget);
     expect(find.text('Calculadora'), findsOneWidget);
   });
 

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/controles.dart';
 import '../../regras/formularios.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
@@ -108,12 +108,14 @@ class _FormSaldoState extends State<FormSaldo>
               : 'Informe o saldo livre na conta da corretora hoje.',
           style: suave,
         ),
-        BotaoSegmentado<ModoSaldo>(
+        Segmentado<ModoSaldo>(
           opcoes: [
             for (final m in r.definido ? ModoSaldo.values : [ModoSaldo.definir])
               (m, _nome(m)),
           ],
           valor: _modo,
+          expandir: true,
+          compacto: true,
           aoMudar: _trocar,
         ),
         TextField(

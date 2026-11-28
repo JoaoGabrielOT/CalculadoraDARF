@@ -11,10 +11,12 @@ import 'package:flutter/material.dart';
 
 import '../../../nucleo/nucleo.dart';
 import '../../servicos/api.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo, Pilula;
+import '../../componentes/controles.dart' show Segmentado, Selo;
 import '../../componentes/sinal.dart';
 import '../../regras/apresentacao.dart';
 import '../../tema/cores_app.dart';
+import '../../tema/layout.dart';
 import 'calculo_sugestao.dart';
 import 'controle_metas.dart';
 
@@ -156,10 +158,12 @@ class _CartaoAtivoState extends State<CartaoAtivo> {
       children: [
         if (!oportunidade && r.cenario != null)
           _SemOportunidade(motivo: r.cenario!.motivo),
-        BotaoSegmentado<_Aba>(
+        Segmentado<_Aba>(
           key: ValueKey('abas-$ticker'),
           opcoes: abas,
           valor: aba,
+          expandir: true,
+          compacto: !expandido(context),
           aoMudar: (v) => setState(() => _aba = v),
         ),
         conteudoAba,
@@ -268,15 +272,13 @@ Widget? _pilulaEstado(BuildContext context, SugestaoAtivo a) {
     EstadoDados.desatualizado => c.aviso,
     _ => c.textoSuave,
   };
-  return Pilula(
+  return Selo(
     texto: switch (a.estado) {
       EstadoDados.semDados => 'Sem dados',
       EstadoDados.desatualizado => 'Desatualizado',
       _ => 'Falha',
     },
     cor: cor,
-    // fundo próprio: o do chip some no tema Terminal
-    fundo: Color.alphaBlend(cor.withValues(alpha: .18), c.cartao),
   );
 }
 
@@ -351,13 +353,16 @@ class _Resumo extends StatelessWidget {
           children: [
             Selo(
               texto: '${setaDe(sinalDe(pctAlvo))}Alvo ${pctCurto(pctAlvo)}',
-              alta: _altaDe(pctAlvo),
+              cor: _corDe(context, pctAlvo),
             ),
             Selo(
               texto: '${setaDe(sinalDe(pctStop))}Stop ${pctCurto(pctStop)}',
-              alta: _altaDe(pctStop),
+              cor: _corDe(context, pctStop),
             ),
-            Selo(texto: 'R/R ${fmtDec(cen.rr!, 2)}'),
+            Selo(
+              texto: 'R/R ${fmtDec(cen.rr!, 2)}',
+              cor: CoresApp.de(context).textoSuave,
+            ),
           ],
         ),
         _nota(context, _textoOrigem(r), tamanho: 11),
@@ -366,11 +371,14 @@ class _Resumo extends StatelessWidget {
   }
 }
 
-bool? _altaDe(double? v) => switch (sinalDe(v)) {
-  Sinal.alta => true,
-  Sinal.queda => false,
-  Sinal.neutro => null,
-};
+Color _corDe(BuildContext context, double? v) {
+  final c = CoresApp.de(context);
+  return switch (sinalDe(v)) {
+    Sinal.alta => c.alta,
+    Sinal.queda => c.queda,
+    Sinal.neutro => c.textoSuave,
+  };
+}
 
 /// Sem oportunidade, sem dados ou com falha: uma linha cinza com o motivo
 /// curto.

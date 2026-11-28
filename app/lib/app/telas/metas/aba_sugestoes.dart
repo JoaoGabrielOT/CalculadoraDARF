@@ -10,7 +10,8 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/controles.dart';
 import '../../componentes/carregando.dart';
 import '../../tema/cores_app.dart';
 import 'calculo_sugestao.dart';
@@ -70,14 +71,10 @@ class PainelSugestoes extends StatelessWidget {
                   ],
                 ),
               ),
-              TextButton.icon(
+              BotaoIcone(
+                icone: Icons.refresh,
+                tooltip: 'Atualizar',
                 onPressed: () => unawaited(controle.recarregarSugestoes()),
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Atualizar'),
-                style: TextButton.styleFrom(
-                  foregroundColor: c.textoSuave,
-                  visualDensity: VisualDensity.compact,
-                ),
               ),
             ],
           ),
@@ -107,9 +104,10 @@ class _Corpo extends StatelessWidget {
           spacing: 8,
           children: [
             Text(erro, style: TextStyle(color: c.queda)),
-            OutlinedButton(
+            BotaoSecundario(
+              icone: Icons.refresh,
               onPressed: () => unawaited(controle.recarregarSugestoes()),
-              child: const Text('Tentar de novo'),
+              rotulo: 'Tentar de novo',
             ),
           ],
         ),
@@ -166,63 +164,63 @@ class _Filtros extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
-    Widget lista<T>(
+    Widget caixa<T>(
       String chave,
       String rotulo,
       T valor,
       Map<T, String> opcoes,
       ValueChanged<T> aoMudar,
-    ) => Row(
-      mainAxisSize: MainAxisSize.min,
+    ) => Expanded(
+      child: SeletorCaixa<T>(
+        key: ValueKey(chave),
+        rotulo: rotulo,
+        valor: valor,
+        itens: [for (final e in opcoes.entries) (e.key, e.value)],
+        aoMudar: aoMudar,
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 8,
       children: [
-        Text(rotulo, style: TextStyle(fontSize: 12, color: c.textoSuave)),
-        DropdownButton<T>(
-          key: ValueKey(chave),
-          value: valor,
-          isDense: true,
-          items: [
-            for (final e in opcoes.entries)
-              DropdownMenuItem(value: e.key, child: Text(e.value)),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            BotaoSegmentado<Horizonte>(
+              opcoes: const [
+                (Horizonte.swing, 'Swing'),
+                (Horizonte.dayTrade, 'Day trade'),
+              ],
+              valor: controle.horizonte,
+              aoMudar: controle.definirHorizonte,
+            ),
+            ChipFiltro(
+              rotulo: 'Só posições abertas',
+              selecionado: controle.soPosicoes,
+              aoTocar: controle.alternarSoPosicoes,
+            ),
           ],
-          onChanged: (v) {
-            if (v != null) aoMudar(v);
-          },
         ),
-      ],
-    );
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        BotaoSegmentado<Horizonte>(
-          opcoes: const [
-            (Horizonte.swing, 'Swing'),
-            (Horizonte.dayTrade, 'Day trade'),
+        Row(
+          spacing: 8,
+          children: [
+            caixa(
+              'filtro-dados',
+              'Dados',
+              controle.filtroDados,
+              _rotulosDados,
+              controle.definirFiltroDados,
+            ),
+            caixa(
+              'ordem-sugestoes',
+              'Ordenar por',
+              controle.ordem,
+              _rotulosOrdem,
+              controle.definirOrdem,
+            ),
           ],
-          valor: controle.horizonte,
-          aoMudar: controle.definirHorizonte,
-        ),
-        ChipFiltro(
-          rotulo: 'Só posições abertas',
-          selecionado: controle.soPosicoes,
-          aoTocar: controle.alternarSoPosicoes,
-        ),
-        lista(
-          'filtro-dados',
-          'Dados',
-          controle.filtroDados,
-          _rotulosDados,
-          controle.definirFiltroDados,
-        ),
-        lista(
-          'ordem-sugestoes',
-          'Ordenar por',
-          controle.ordem,
-          _rotulosOrdem,
-          controle.definirOrdem,
         ),
       ],
     );

@@ -1,3 +1,4 @@
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/formularios/abrir_formulario.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
@@ -66,6 +67,39 @@ void main() {
     expect(find.text('Retirada'), findsOneWidget);
     expect(campoTexto(t, 'valor').controller!.text, '5000,00');
   });
+
+  for (final (nome, tamanho, altura) in [
+    ('PC', const Size(1366, 768), 40.0),
+    ('celular 360', const Size(360, 800), 48.0),
+  ]) {
+    testWidgets('$nome: modos num Segmentado de largura cheia e rodapé com '
+        'Cancelar em texto e Salvar cheio', (t) async {
+      await _abrir(t, ServicosFalsos(), definido: true, tamanho: tamanho);
+      final seg = find.byType(Segmentado<ModoSaldo>);
+      expect(seg, findsOneWidget);
+      expect(t.getSize(seg).height, altura);
+      for (final r in ['Definir saldo', 'Aporte', 'Retirada']) {
+        final rotulo = find.descendant(of: seg, matching: find.text(r));
+        expect(rotulo, findsOneWidget);
+        expect(t.getSize(rotulo).height, lessThan(22));
+      }
+      // mesma largura do campo logo abaixo
+      expect(
+        t.getSize(seg).width,
+        t.getSize(find.byKey(const Key('valor'))).width,
+      );
+      final cancelar = find.widgetWithText(TextButton, 'Cancelar');
+      final salvar = find.widgetWithText(FilledButton, 'Salvar');
+      expect(cancelar, findsOneWidget);
+      expect(salvar, findsOneWidget);
+      expect(t.getSize(cancelar).height, altura);
+      expect(t.getSize(salvar).height, altura);
+      expect(t.getCenter(cancelar).dy, t.getCenter(salvar).dy);
+      expect(t.getTopLeft(salvar).dx, greaterThan(t.getTopRight(cancelar).dx));
+      expect(find.byType(FilledButton), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+  }
 
   testWidgets('trocar o modo muda rótulo e ajuda', (t) async {
     await _abrir(t, ServicosFalsos(), definido: true);

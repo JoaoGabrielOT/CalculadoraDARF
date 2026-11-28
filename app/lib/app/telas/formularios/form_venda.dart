@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/campo_data.dart';
 import '../../componentes/chips_ticker.dart';
+import '../../componentes/controles.dart';
 import '../../componentes/dialogos.dart';
 import '../../regras/formularios.dart';
 import '../../regras/textos.dart';
@@ -455,9 +456,10 @@ class _FormVendaState extends State<FormVenda>
         if (widget.fecharMesAberto != null)
           Align(
             alignment: Alignment.centerLeft,
-            child: OutlinedButton(
+            child: BotaoSecundario(
+              icone: Icons.lock,
               onPressed: salvando || _fechandoMes ? null : _fecharMesAberto,
-              child: Text(rotuloFecharMesAberto(aberto)),
+              rotulo: rotuloFecharMesAberto(aberto),
             ),
           ),
       ],
@@ -767,15 +769,19 @@ class _FormVendaState extends State<FormVenda>
 
   // --- tela
 
-  Widget _modos() => SegmentedButton<ModoVenda>(
+  Widget _modos() => Segmentado<ModoVenda>(
     key: const ValueKey('modo-venda'),
-    showSelectedIcon: false,
-    segments: const [
-      ButtonSegment(value: ModoVenda.automatico, label: Text('Automático')),
-      ButtonSegment(value: ModoVenda.manual, label: Text('Manual')),
+    opcoes: const [
+      (ModoVenda.automatico, 'Automático'),
+      (ModoVenda.manual, 'Manual'),
     ],
-    selected: {_modo},
-    onSelectionChanged: salvando ? null : (s) => _mudouModo(s.first),
+    valor: _modo,
+    expandir: true,
+    compacto: !widget.dialogo,
+    // durante a gravação, tocar não muda o modo
+    aoMudar: (m) {
+      if (!salvando) _mudouModo(m);
+    },
   );
 
   /// Automático com quantidade acima do disponível: a mensagem do núcleo.
@@ -989,22 +995,15 @@ class _FormVendaState extends State<FormVenda>
           },
         ),
         if (legado)
-          DropdownButtonFormField<String>(
-            // novo valor inicial quando a lista de opções muda
+          SeletorCaixa<String>(
             key: ValueKey('compra-${_tickerAtual ?? ''}-$_rotulo'),
-            initialValue: _rotulo,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Compra'),
-            disabledHint: Text(semOpcao),
-            items: [
-              for (final (rot, _) in _opcoes)
-                DropdownMenuItem(value: rot, child: Text(rot)),
-            ],
-            onChanged: _editando || _opcoes.isEmpty
-                ? null
-                : (rot) {
-                    if (rot != null) _escolherCompra(rot);
-                  },
+            rotulo: 'Compra',
+            // sem opção, a caixa desabilitada mostra o motivo
+            valor: _opcoes.isEmpty ? '' : (_rotulo ?? ''),
+            itens: _opcoes.isEmpty
+                ? [('', semOpcao)]
+                : [for (final (rot, _) in _opcoes) (rot, rot)],
+            aoMudar: _editando || _opcoes.isEmpty ? null : _escolherCompra,
           )
         else if (_opcoes.isEmpty)
           Text(semOpcao, style: suave),

@@ -439,6 +439,25 @@ void main() {
         isFalse,
       );
     });
+    testWidgets('chaveItem marca os itens do menu', (t) async {
+      await montarComponente(
+        t,
+        SizedBox(
+          width: 200,
+          child: SeletorCaixa<String>(
+            rotulo: 'Tipo',
+            valor: 'a',
+            itens: const [('a', 'A'), ('b', 'B')],
+            aoMudar: (_) {},
+            chaveItem: (v) => Key('item-$v'),
+          ),
+        ),
+      );
+      await t.tap(find.text('A'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('item-a')), findsOneWidget);
+      expect(find.byKey(const Key('item-b')), findsOneWidget);
+    });
     testWidgets('escolher chama aoMudar', (t) async {
       String? v;
       await montarComponente(

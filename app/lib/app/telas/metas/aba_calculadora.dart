@@ -8,7 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/controles.dart';
 import '../../tema/cores_app.dart';
 import 'controle_metas.dart';
 
@@ -115,11 +116,15 @@ class AbaCalculadora extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 4),
-          FilledButton(
-            onPressed: controle.criando
-                ? null
-                : () => unawaited(controle.criar()),
-            child: const Text('Criar venda automática com este preço'),
+          Align(
+            alignment: Alignment.centerRight,
+            child: BotaoPrincipal(
+              icone: Icons.add,
+              onPressed: controle.criando
+                  ? null
+                  : () => unawaited(controle.criar()),
+              rotulo: 'Criar venda automática com este preço',
+            ),
           ),
           Padding(
             padding: const EdgeInsets.only(top: 6),

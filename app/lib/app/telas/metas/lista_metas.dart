@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/controles.dart';
 import '../../componentes/carregando.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
@@ -25,27 +26,25 @@ class ListaMetas extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Row(
-            children: [
-              Text(
-                'METAS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: c.textoSuave,
-                ),
+        Row(
+          children: [
+            Text(
+              'METAS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: c.textoSuave,
               ),
-              const Spacer(),
-              OutlinedButton(
-                onPressed: controle.verificando
-                    ? null
-                    : () => unawaited(controle.verificarAgora()),
-                child: const Text('Verificar agora'),
-              ),
-            ],
-          ),
+            ),
+            const Spacer(),
+            BotaoSecundario(
+              icone: Icons.task_alt,
+              onPressed: controle.verificando
+                  ? null
+                  : () => unawaited(controle.verificarAgora()),
+              rotulo: 'Verificar agora',
+            ),
+          ],
         ),
         if (controle.textoVerif.isNotEmpty)
           Padding(
@@ -86,9 +85,10 @@ class _Corpo extends StatelessWidget {
           spacing: 8,
           children: [
             Text(erro, style: TextStyle(color: c.queda)),
-            OutlinedButton(
+            BotaoSecundario(
+              icone: Icons.refresh,
               onPressed: () => unawaited(controle.recarregar()),
-              child: const Text('Tentar de novo'),
+              rotulo: 'Tentar de novo',
             ),
           ],
         ),

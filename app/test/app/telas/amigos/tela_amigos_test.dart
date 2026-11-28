@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/amigos/tela_amigos.dart';
@@ -72,10 +73,56 @@ void main() {
         await t.pumpAndSettle();
         expect(_status(t), 'Sem conexão com a internet.');
         // o botão volta a habilitar depois do erro
-        final b = t.widget<FilledButton>(
-          find.byKey(const Key('amigos-adicionar')),
+        final b = t.widget(find.byKey(const Key('amigos-adicionar')));
+        expect(
+          b is IconButton ? b.onPressed : (b as BotaoPrincipal).onPressed,
+          isNotNull,
         );
-        expect(b.onPressed, isNotNull);
+      });
+
+      testWidgets('Ver é secundário compacto e Remover é ícone destrutivo, '
+          'na altura do kit', (t) async {
+        final s = _servicos(amigos: [_bia]);
+        await _abrir(t, s, tamanho: tamanho);
+        final altura = tamanho == _pc ? 40.0 : 48.0;
+        final ver = find.byKey(const Key('amigo-ver-bia@gmail.com'));
+        final remover = find.byKey(const Key('amigo-remover-bia@gmail.com'));
+        final b = t.widget<BotaoSecundario>(ver);
+        expect(b.compacto, isTrue);
+        expect(b.rotulo, 'Ver');
+        final i = t.widget<BotaoIcone>(remover);
+        expect(i.destrutivo, isTrue);
+        expect(i.tooltip, 'Remover');
+        expect(find.text('Remover'), findsNothing);
+        expect(t.getSize(ver).height, altura);
+        expect(t.getSize(remover).height, altura);
+        expect(t.getCenter(ver).dy, t.getCenter(remover).dy);
+        expect(
+          t.getTopLeft(remover).dx,
+          greaterThanOrEqualTo(t.getTopRight(ver).dx),
+        );
+      });
+
+      testWidgets('Adicionar é o principal, na linha e na altura do campo', (
+        t,
+      ) async {
+        await _abrir(t, _servicos(), tamanho: tamanho);
+        final altura = tamanho == _pc ? 40.0 : 48.0;
+        final campoEmail = find.byKey(const Key('amigos-email'));
+        final adicionar = find.byKey(const Key('amigos-adicionar'));
+        // celular: só o "+" roxo, para o campo ter largura
+        expect(
+          t.widget(adicionar),
+          tamanho == _pc ? isA<BotaoPrincipal>() : isA<IconButton>(),
+        );
+        expect(t.getSize(adicionar).height, altura);
+        expect(t.getSize(campoEmail).height, altura);
+        expect(t.getCenter(adicionar).dy, t.getCenter(campoEmail).dy);
+        expect(
+          find.byType(BotaoPrincipal),
+          tamanho == _pc ? findsOneWidget : findsNothing,
+        );
+        expect(t.takeException(), isNull);
       });
 
       testWidgets('remover confirma com o texto do Python', (t) async {

@@ -11,7 +11,8 @@ import 'package:provider/provider.dart';
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../../versao.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/controles.dart';
 import '../../componentes/dialogos.dart';
 import '../../estado/estado_app.dart';
 import '../../plataforma/plataforma.dart';
@@ -335,17 +336,18 @@ class _BlocoGoogle extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilledButton.icon(
-                  icon: const Icon(Icons.login),
+                BotaoPrincipal(
+                  icone: Icons.login,
                   onPressed: livre
                       ? () => unawaited(controle.conectar())
                       : null,
-                  label: const Text('Conectar Google'),
+                  rotulo: 'Conectar Google',
                 ),
                 if (login)
-                  OutlinedButton(
+                  BotaoSecundario(
+                    icone: Icons.close,
                     onPressed: () => unawaited(controle.cancelarLogin()),
-                    child: const Text('Cancelar login'),
+                    rotulo: 'Cancelar login',
                   ),
               ],
             ),
@@ -376,26 +378,26 @@ class _BlocoGoogle extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              FilledButton.icon(
-                icon: const Icon(Icons.sync),
+              BotaoPrincipal(
+                icone: Icons.sync,
                 onPressed: controle.agindo
                     ? null
                     : () => unawaited(controle.sincronizarAgora()),
-                label: const Text('Sincronizar agora'),
+                rotulo: 'Sincronizar agora',
               ),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.open_in_new),
+              BotaoSecundario(
+                icone: Icons.open_in_new,
                 onPressed: conta.linkPlanilha == null
                     ? null
                     : () => unawaited(controle.abrirPlanilha()),
-                label: const Text('Abrir planilha'),
+                rotulo: 'Abrir planilha',
               ),
-              TextButton.icon(
-                icon: const Icon(Icons.logout),
+              BotaoLeve(
+                icone: Icons.logout,
                 onPressed: controle.agindo
                     ? null
                     : () => unawaited(controle.sair(context)),
-                label: const Text('Sair'),
+                rotulo: 'Sair',
               ),
             ],
           ),
@@ -424,11 +426,11 @@ class _BlocoAmigos extends StatelessWidget {
             textoExplicacao,
             style: TextStyle(color: CoresApp.de(context).textoSuave),
           ),
-          OutlinedButton.icon(
+          BotaoSecundario(
             key: const ValueKey('conta-abrir-amigos'),
-            icon: const Icon(Icons.group),
+            icone: Icons.group,
             onPressed: () => unawaited(abrirAmigos(context)),
-            label: const Text('Abrir amigos'),
+            rotulo: 'Abrir amigos',
           ),
         ],
       ),
@@ -449,18 +451,9 @@ class _BlocoConfiguracoes extends StatelessWidget {
         spacing: 8,
         children: [
           const Text('Tema', style: TextStyle(fontWeight: FontWeight.bold)),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final t in TemaVisual.values)
-                ChoiceChip(
-                  key: ValueKey('tema-${t.chave}'),
-                  label: Text(t.rotulo),
-                  selected: prefs.tema == t,
-                  onSelected: (_) => unawaited(estado.trocarTema(t)),
-                ),
-            ],
+          _SeletorTema(
+            tema: prefs.tema,
+            aoMudar: (t) => unawaited(estado.trocarTema(t)),
           ),
           Row(
             children: [
@@ -475,6 +468,38 @@ class _BlocoConfiguracoes extends StatelessWidget {
           const _PrejuizoInicial(),
         ],
       ),
+    );
+  }
+}
+
+/// Quatro opções não cabem lado a lado em 360 px: no celular vira caixa.
+class _SeletorTema extends StatelessWidget {
+  const _SeletorTema({required this.tema, required this.aoMudar});
+
+  final TemaVisual tema;
+  final ValueChanged<TemaVisual> aoMudar;
+
+  @override
+  Widget build(BuildContext context) {
+    final opcoes = [for (final t in TemaVisual.values) (t, t.rotulo)];
+    Key chave(TemaVisual t) => ValueKey('tema-${t.chave}');
+    if (expandido(context)) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Segmentado<TemaVisual>(
+          opcoes: opcoes,
+          valor: tema,
+          aoMudar: aoMudar,
+          chaveOpcao: chave,
+        ),
+      );
+    }
+    return SeletorCaixa<TemaVisual>(
+      rotulo: 'Tema',
+      valor: tema,
+      itens: opcoes,
+      aoMudar: aoMudar,
+      chaveItem: chave,
     );
   }
 }
@@ -586,6 +611,7 @@ class _PrejuizoInicialState extends State<_PrejuizoInicial> {
     if (dados == null) return const SizedBox.shrink();
     final cores = CoresApp.de(context);
     final editavel = dados.editavel;
+    final altura = expandido(context) ? 40.0 : 48.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 8,
@@ -596,39 +622,51 @@ class _PrejuizoInicialState extends State<_PrejuizoInicial> {
           '(para compensar no imposto)',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        Row(
-          spacing: 8,
-          children: [
+        _LinhaPrejuizo(
+          campos: [
             for (final (chave, rotulo, c) in [
               ('prejuizo-comum', 'Operações comuns', _comum),
               ('prejuizo-dt', 'Day trade', _dayTrade),
             ])
               Expanded(
-                child: TextField(
-                  key: ValueKey(chave),
-                  controller: c,
-                  enabled: editavel,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: rotulo,
-                    prefixText: 'R\$ ',
+                child: SizedBox(
+                  height: altura,
+                  child: TextField(
+                    key: ValueKey(chave),
+                    controller: c,
+                    enabled: editavel,
+                    textAlignVertical: TextAlignVertical.center,
+                    // preenche a altura do kit: o contorno acompanha
+                    expands: true,
+                    maxLines: null,
+                    minLines: null,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: rotulo,
+                      prefixText: 'R\$ ',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                      ),
+                    ),
                   ),
                 ),
               ),
           ],
+          salvar: editavel
+              ? BotaoPrincipal(
+                  key: const ValueKey('prejuizo-salvar'),
+                  icone: Icons.save,
+                  onPressed: _salvando
+                      ? null
+                      : () => unawaited(_salvar(servicos)),
+                  rotulo: 'Salvar prejuízo',
+                )
+              : null,
         ),
-        if (editavel)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton(
-              key: const ValueKey('prejuizo-salvar'),
-              onPressed: _salvando ? null : () => unawaited(_salvar(servicos)),
-              child: const Text('Salvar prejuízo'),
-            ),
-          )
-        else
+        if (!editavel)
           Text(
             textoPrejuizoFechado,
             style: TextStyle(fontSize: 12, color: cores.textoSuave),
@@ -637,6 +675,31 @@ class _PrejuizoInicialState extends State<_PrejuizoInicial> {
           Text(_erro, style: TextStyle(fontSize: 12, color: cores.queda)),
         if (_ok.isNotEmpty)
           Text(_ok, style: TextStyle(fontSize: 12, color: cores.alta)),
+      ],
+    );
+  }
+}
+
+/// Os dois campos e o Salvar: numa linha no PC; no celular o botão desce,
+/// à direita, para os campos terem largura.
+class _LinhaPrejuizo extends StatelessWidget {
+  const _LinhaPrejuizo({required this.campos, required this.salvar});
+
+  final List<Widget> campos;
+  final Widget? salvar;
+
+  @override
+  Widget build(BuildContext context) {
+    final pc = expandido(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      spacing: 8,
+      children: [
+        Row(
+          spacing: 8,
+          children: [...campos, if (pc && salvar != null) salvar!],
+        ),
+        if (!pc && salvar != null) salvar!,
       ],
     );
   }
@@ -664,12 +727,12 @@ class _BlocoSobre extends StatelessWidget {
           if (!web)
             Align(
               alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.system_update),
+              child: BotaoSecundario(
+                icone: Icons.system_update,
                 onPressed: controle.verificando
                     ? null
                     : () => unawaited(controle.verificarAtualizacao(context)),
-                label: const Text('Verificar atualização'),
+                rotulo: 'Verificar atualização',
               ),
             ),
           if (!web && controle.mensagemAtualizacao.isNotEmpty)

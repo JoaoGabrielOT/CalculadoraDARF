@@ -1,6 +1,11 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/cartao.dart'
+    show BotaoSegmentado, ChipFiltro;
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
+import 'package:calculadoradarf/app/telas/metas/calculo_sugestao.dart'
+    show FiltroDados, OrdemSugestao;
 import 'package:calculadoradarf/app/telas/metas/controle_metas.dart';
 import 'package:calculadoradarf/app/telas/metas/tela_metas.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
@@ -108,14 +113,18 @@ VisaoSugestoes _visao(List<SugestaoAtivo> ativos) => VisaoSugestoes(
   rodape: const [('Patrimônio considerado', 'R\$ 10.000,00', null)],
 );
 
-Future<ServicosFalsos> _abrir(WidgetTester t, ServicosFalsos s) async {
+Future<ServicosFalsos> _abrir(
+  WidgetTester t,
+  ServicosFalsos s, {
+  Size tamanho = _pc,
+}) async {
   s.visaoMetas ??= VisaoMetas(
     metas: const [],
     descricoes: const {},
     lotes: [(mes: '2026-10', lote: _lote, livre: 100)],
     ativas: 0,
   );
-  await abrirNoTeste<void>(t, s, abrirMetas, tamanho: _pc);
+  await abrirNoTeste<void>(t, s, abrirMetas, tamanho: tamanho);
   return s;
 }
 
@@ -190,10 +199,10 @@ void main() {
       ..sugestoesMetasFn = (_) =>
           n++ == 0 ? Future.value(_visao([])) : espera.future;
     await _abrir(t, s);
-    await t.tap(find.text('Atualizar'));
+    await t.tap(find.byTooltip('Atualizar'));
     await t.pump();
     expect(find.text('Carregando sugestões…'), findsOneWidget);
-    expect(find.text('Atualizar'), findsOneWidget);
+    expect(find.byTooltip('Atualizar'), findsOneWidget);
     espera.complete(_visao([_ativo('PETR4')]));
     await t.pumpAndSettle();
     expect(find.textContaining('Atualizado às '), findsOneWidget);
@@ -667,6 +676,91 @@ void main() {
     expect(find.textContaining('28/10/2026 11:55'), findsWidgets);
   });
 
+  for (final (nome, tamanho, altura) in [
+    ('PC', _pc, 40.0),
+    ('celular 360', const Size(360, 900), 48.0),
+  ]) {
+    testWidgets('$nome: Dados e Ordenar por são caixas, Atualizar é ícone e '
+        'Horizonte continua chip', (t) async {
+      final s = ServicosFalsos()
+        ..visaoSugestoes = _visao([_ativo('PETR4'), _ativo('VALE3')]);
+      await _abrir(t, s, tamanho: tamanho);
+      expect(find.byType(DropdownButton<FiltroDados>), findsNothing);
+      expect(find.byType(DropdownButton<OrdemSugestao>), findsNothing);
+      final dados = find.byKey(const ValueKey('filtro-dados'));
+      final ordem = find.byKey(const ValueKey('ordem-sugestoes'));
+      expect(t.widget(dados), isA<SeletorCaixa<FiltroDados>>());
+      expect(t.widget(ordem), isA<SeletorCaixa<OrdemSugestao>>());
+      expect(t.getSize(dados).height, altura);
+      expect(t.getSize(ordem).height, altura);
+      expect(
+        find.descendant(of: dados, matching: find.text('Dados')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: ordem, matching: find.text('Ordenar por')),
+        findsOneWidget,
+      );
+      final atualizar = find.widgetWithIcon(BotaoIcone, Icons.refresh);
+      expect(atualizar, findsOneWidget);
+      expect(find.byTooltip('Atualizar'), findsOneWidget);
+      expect(find.text('Atualizar'), findsNothing);
+      expect(t.getSize(atualizar).height, altura);
+      // o Horizonte continua chip (spec); "Só posições abertas" também
+      expect(find.byType(BotaoSegmentado<Horizonte>), findsOneWidget);
+      expect(find.byType(ChipFiltro), findsNWidgets(3));
+      expect(t.takeException(), isNull);
+    });
+  }
+
+  testWidgets('selos de alvo, stop, R/R e de estado dos dados são etiquetas '
+      'chapadas', (t) async {
+    final s = ServicosFalsos()
+      ..visaoSugestoes = _visao([
+        _ativo('PETR4'),
+        _ativo(
+          'VALE3',
+          estado: EstadoDados.semDados,
+          mensagem: 'Sem dados para VALE3 no Yahoo Finance.',
+          semBarras: true,
+        ),
+      ]);
+    await _abrir(t, s);
+    expect(
+      find.byWidgetPredicate((w) => w is Selo && w.texto.contains('Alvo')),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate((w) => w is Selo && w.texto.contains('Stop')),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate((w) => w is Selo && w.texto.startsWith('R/R')),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(Selo, 'Sem dados'), findsOneWidget);
+  });
+
+  testWidgets('abas do cartão aberto são um Segmentado', (t) async {
+    final s = ServicosFalsos()..visaoSugestoes = _visao([_ativo('PETR4')]);
+    await _abrir(t, s);
+    await _expandir(t, 'PETR4');
+    final abas = find.byKey(const ValueKey('abas-PETR4'));
+    expect(abas, findsOneWidget);
+    expect(t.widget(abas).runtimeType.toString(), startsWith('Segmentado'));
+    expect(t.getSize(abas).height, 40);
+    expect(
+      find.descendant(of: abas, matching: find.byType(ChipFiltro)),
+      findsNothing,
+    );
+    for (final r in ['Mercado', 'Meta financeira', 'Equilíbrio']) {
+      expect(find.descendant(of: abas, matching: find.text(r)), findsOneWidget);
+    }
+    await t.tap(find.descendant(of: abas, matching: find.text('Equilíbrio')));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('Atualizar recarrega e o pedido antigo é descartado', (t) async {
     final lenta = Completer<VisaoSugestoes>();
     var n = 0;
@@ -689,9 +783,9 @@ void main() {
         };
       };
     await _abrir(t, s);
-    await t.tap(find.text('Atualizar'));
+    await t.tap(find.byTooltip('Atualizar'));
     await t.pump();
-    await t.tap(find.text('Atualizar'));
+    await t.tap(find.byTooltip('Atualizar'));
     await t.pumpAndSettle();
     expect(find.text('terceira'), findsOneWidget);
     lenta.complete(

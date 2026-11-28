@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:calculadoradarf/app/componentes/campo_data.dart';
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/regras/formularios.dart'
     show textoEscolhaDasCompras, textoEscolhaDasComprasPorCompra;
 import 'package:calculadoradarf/app/servicos/api.dart';
@@ -85,7 +86,8 @@ void main() {
     await _abrir(t, s, ticker: 'PETR4');
     await t.enterText(_campoData, '15/09/2026');
     await t.pump();
-    await t.tap(find.byType(DropdownButtonFormField<String>));
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+    await t.tap(find.byType(SeletorCaixa<String>));
     await t.pumpAndSettle();
     expect(find.text('05/07/2026  ·  R\$ 30,00  ·  10 disp.'), findsWidgets);
     expect(
@@ -328,6 +330,7 @@ void main() {
       await t.pump();
       expect(find.text(aviso), findsOneWidget);
       expect(find.text(botao), findsOneWidget);
+      expect(find.widgetWithText(BotaoSecundario, botao), findsOneWidget);
       expect(campoData(t).maximo, '2026-10-31');
       await t.pump(const Duration(milliseconds: 400));
     });
@@ -663,7 +666,10 @@ void main() {
     ModoVenda? modo(WidgetTester t) {
       final sel = t
           .widget<SegmentedButton<ModoVenda>>(
-            find.byKey(const ValueKey('modo-venda')),
+            find.descendant(
+              of: find.byKey(const ValueKey('modo-venda')),
+              matching: find.byType(SegmentedButton<ModoVenda>),
+            ),
           )
           .selected;
       return sel.isEmpty ? null : sel.first;
@@ -677,6 +683,30 @@ void main() {
         s.chamadas.where((c) => c.startsWith('$nome(')).length;
 
     const meio = Duration(milliseconds: 400);
+
+    testWidgets(
+      'modo é um Segmentado de largura cheia, sem quebra no celular',
+      (t) async {
+        final s = servicos([b1, b2]);
+        await _abrir(t, s, ticker: 'BBAS3', tamanho: const Size(360, 800));
+        final seg = find.byKey(const ValueKey('modo-venda'));
+        expect(t.widget(seg), isA<Segmentado<ModoVenda>>());
+        expect(t.getSize(seg).height, 48);
+        expect(
+          t.getSize(seg).width,
+          t.getSize(find.byKey(const ValueKey('ticker'))).width,
+        );
+        for (final r in ['Automático', 'Manual']) {
+          final rotulo = find.descendant(of: seg, matching: find.text(r));
+          expect(rotulo, findsOneWidget);
+          expect(t.getSize(rotulo).height, lessThan(22));
+        }
+        await t.tap(find.text('Manual'));
+        await t.pump(meio);
+        expect(modo(t), ModoVenda.manual);
+        expect(t.takeException(), isNull);
+      },
+    );
 
     testWidgets('caminho geral abre em Automático com a regra explicada', (
       t,

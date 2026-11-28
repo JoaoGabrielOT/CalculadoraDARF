@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/regras/textos.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
+import 'package:calculadoradarf/app/telas/metas/controle_metas.dart'
+    show ModoMetas;
 import 'package:calculadoradarf/app/telas/metas/tela_metas.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
@@ -537,16 +540,69 @@ void main() {
       expect(dialogo.width, 900);
     });
 
-    testWidgets('compacto: tela cheia com abas', (t) async {
-      await _abrir(t, tamanho: _celular);
-      expect(find.byType(TabBar), findsOneWidget);
-      await t.tap(
-        find.descendant(of: find.byType(TabBar), matching: find.text('Metas')),
-      );
+    testWidgets('PC: Segmentado Sugestões | Calculadora na linha do Verificar '
+        'agora, que é secundário', (t) async {
+      await _abrir(t);
+      expect(find.byType(TabBar), findsNothing);
+      final seg = find.byType(Segmentado<ModoMetas>);
+      expect(seg, findsOneWidget);
+      expect(t.getSize(seg).height, 40);
+      expect(t.getSize(seg).width, 420);
+      final verificar = find.widgetWithText(BotaoSecundario, 'Verificar agora');
+      expect(verificar, findsOneWidget);
+      expect(t.getSize(verificar).height, 40);
+      expect(t.getCenter(verificar).dy, t.getCenter(seg).dy);
+      // um só principal na janela: a calculadora ainda nem foi aberta
+      expect(find.byType(BotaoPrincipal), findsNothing);
+      await t.tap(find.descendant(of: seg, matching: find.text('Calculadora')));
       await t.pumpAndSettle();
-      expect(find.text('Verificar agora'), findsOneWidget);
-      expect(find.textContaining('PETR4 · 60 un. a'), findsOneWidget);
-      expect(find.textContaining('VALE3 · 100 un. · stop'), findsOneWidget);
+      expect(t.widget<Segmentado<ModoMetas>>(seg).valor, ModoMetas.calculadora);
+      expect(find.byKey(const ValueKey('meta-qtd')), findsOneWidget);
+      expect(find.byType(BotaoPrincipal), findsOneWidget);
+    });
+
+    for (final largura in [360.0, 400.0]) {
+      testWidgets('celular $largura: Segmentado Sugestões | Calculadora | '
+          'Metas em vez das abas', (t) async {
+        await _abrir(t, tamanho: Size(largura, 850));
+        expect(find.byType(TabBar), findsNothing);
+        final seg = find.byType(Segmentado<int>);
+        expect(seg, findsOneWidget);
+        expect(t.getSize(seg).height, 48);
+        // largura toda do corpo (16 px de cada lado)
+        expect(t.getSize(seg).width, largura - 32);
+        for (final r in ['Sugestões', 'Calculadora', 'Metas']) {
+          final rotulo = find.descendant(of: seg, matching: find.text(r));
+          expect(rotulo, findsOneWidget);
+          expect(t.getSize(rotulo).height, lessThan(22));
+        }
+        await t.tap(find.descendant(of: seg, matching: find.text('Metas')));
+        await t.pumpAndSettle();
+        expect(t.widget<Segmentado<int>>(seg).valor, 2);
+        final verificar = find.widgetWithText(
+          BotaoSecundario,
+          'Verificar agora',
+        );
+        expect(verificar, findsOneWidget);
+        expect(t.getSize(verificar).height, 48);
+        expect(find.textContaining('PETR4 · 60 un. a'), findsOneWidget);
+        expect(find.textContaining('VALE3 · 100 un. · stop'), findsOneWidget);
+        await t.tap(
+          find.descendant(of: seg, matching: find.text('Calculadora')),
+        );
+        await t.pumpAndSettle();
+        expect(t.widget<Segmentado<int>>(seg).valor, 1);
+        expect(find.byKey(const ValueKey('meta-qtd')), findsOneWidget);
+        expect(t.takeException(), isNull);
+      });
+    }
+
+    testWidgets('celular: deslizar a página acompanha o Segmentado', (t) async {
+      await _abrir(t, tamanho: _celular);
+      final seg = find.byType(Segmentado<int>);
+      await t.drag(find.byType(TabBarView), const Offset(-400, 0));
+      await t.pumpAndSettle();
+      expect(t.widget<Segmentado<int>>(seg).valor, 1);
     });
 
     testWidgets('com amigo na tela volta para "Meus dados" antes de abrir', (

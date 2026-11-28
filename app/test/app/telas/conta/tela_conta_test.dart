@@ -55,6 +55,12 @@ Finder _botao(String texto) => find.ancestor(
 bool _habilitado(WidgetTester t, String texto) =>
     t.widget<ButtonStyleButton>(_botao(texto)).onPressed != null;
 
+Future<void> _escolherTema(WidgetTester t, String chave) async {
+  await t.tap(find.byType(SeletorCaixa<TemaVisual>));
+  await t.pumpAndSettle();
+  await t.tap(find.byKey(Key(chave)));
+}
+
 Color _fundo(WidgetTester t) =>
     Theme.of(t.element(find.byType(Scaffold).first)).scaffoldBackgroundColor;
 
@@ -235,6 +241,38 @@ void main() {
       expect(_estado(t).aba, Aba.apuracao);
     });
 
+    testWidgets('lista: Ver é secundário compacto e Remover é ícone vermelho', (
+      t,
+    ) async {
+      final s = _servicos(_conectada)
+        ..listaAmigos = [Amigo(email: 'bia@gmail.com', desde: '2026-10-01')];
+      await _abrirConta(t, s, tamanho: const Size(360, 2400));
+      final ver = find.byKey(const Key('amigo-ver-bia@gmail.com'));
+      final remover = find.byKey(const Key('amigo-remover-bia@gmail.com'));
+      expect(t.widget<BotaoSecundario>(ver).compacto, isTrue);
+      expect(t.widget<BotaoSecundario>(ver).rotulo, 'Ver');
+      final icone = t.widget<BotaoIcone>(remover);
+      expect(icone.destrutivo, isTrue);
+      expect(icone.tooltip, 'Remover');
+      expect(t.getSize(ver).height, 48);
+      expect(t.getSize(remover).height, 48);
+      expect(t.takeException(), isNull);
+      await t.tap(remover);
+      await t.pumpAndSettle();
+      expect(find.text('Remover amigo'), findsOneWidget);
+      expect(
+        find.text('bia@gmail.com deixará de ter acesso à sua planilha.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('PC: Abrir amigos é botão secundário', (t) async {
+      await _abrirConta(t, _servicos(_conectada));
+      final abrir = find.byKey(const Key('conta-abrir-amigos'));
+      expect(t.widget(abrir), isA<BotaoSecundario>());
+      expect(t.getSize(abrir).height, 40);
+    });
+
     testWidgets('no PC a seção abre o diálogo e o bloco não aparece', (
       t,
     ) async {
@@ -254,11 +292,13 @@ void main() {
   });
 
   group('Configurações', () {
-    testWidgets('escolher Terminal aplica o tema na hora', (t) async {
+    testWidgets('celular: escolher Terminal no seletor aplica o tema na hora', (
+      t,
+    ) async {
       final s = _servicos();
       await _abrirConta(t, s, tamanho: _celular);
       final antes = _fundo(t);
-      await t.tap(find.byKey(const Key('tema-terminal')));
+      await _escolherTema(t, 'tema-terminal');
       await t.pump();
       final terminal = temaDe(
         resolverTema(TemaVisual.terminal, Brightness.light),
@@ -269,23 +309,54 @@ void main() {
       expect(s.preferenciasSalvas!.tema, TemaVisual.terminal);
     });
 
-    testWidgets('mostra os quatro temas, com o escolhido marcado', (t) async {
+    testWidgets('PC: Tema é um Segmentado com os quatro temas e o escolhido '
+        'marcado', (t) async {
+      final s = _servicos();
+      await _abrirConta(t, s);
+      expect(find.byType(SeletorCaixa<TemaVisual>), findsNothing);
+      final seg = find.byType(Segmentado<TemaVisual>);
+      expect(seg, findsOneWidget);
+      expect(t.getSize(seg).height, 40);
+      for (final r in ['Automático', 'Terminal', 'Claro', 'Moderno']) {
+        expect(
+          find.descendant(of: seg, matching: find.text(r)),
+          findsOneWidget,
+        );
+      }
+      expect(t.widget<Segmentado<TemaVisual>>(seg).valor, TemaVisual.claro);
+      await t.tap(find.byKey(const Key('tema-moderno')));
+      await t.pumpAndSettle();
+      expect(t.widget<Segmentado<TemaVisual>>(seg).valor, TemaVisual.moderno);
+      expect(s.preferenciasSalvas!.tema, TemaVisual.moderno);
+    });
+
+    testWidgets('celular: Tema é um SeletorCaixa com os quatro temas no menu', (
+      t,
+    ) async {
       final s = _servicos();
       await _abrirConta(t, s, tamanho: _celular);
-      for (final r in ['Automático', 'Terminal', 'Claro', 'Moderno']) {
-        expect(find.widgetWithText(ChoiceChip, r), findsOneWidget);
+      expect(find.byType(Segmentado<TemaVisual>), findsNothing);
+      final caixa = find.byType(SeletorCaixa<TemaVisual>);
+      expect(caixa, findsOneWidget);
+      expect(t.getSize(caixa).height, 48);
+      expect(
+        find.descendant(of: caixa, matching: find.text('Tema')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: caixa, matching: find.text('Claro')),
+        findsOneWidget,
+      );
+      await t.tap(caixa);
+      await t.pumpAndSettle();
+      for (final k in ['automatico', 'terminal', 'claro', 'moderno']) {
+        expect(find.byKey(Key('tema-$k')), findsOneWidget);
       }
-      final claro = t.widget<ChoiceChip>(find.byKey(const Key('tema-claro')));
-      expect(claro.selected, isTrue); // montarApp parte do tema Claro
       await t.tap(find.byKey(const Key('tema-moderno')));
       await t.pumpAndSettle();
       expect(
-        t.widget<ChoiceChip>(find.byKey(const Key('tema-moderno'))).selected,
-        isTrue,
-      );
-      expect(
-        t.widget<ChoiceChip>(find.byKey(const Key('tema-claro'))).selected,
-        isFalse,
+        t.widget<SeletorCaixa<TemaVisual>>(caixa).valor,
+        TemaVisual.moderno,
       );
     });
 
@@ -337,6 +408,52 @@ void main() {
       expect(s.chamadas, contains('definirPrejuizoInicial(2000.5, 30.0)'));
       expect(s.prejuizo.comum, 2000.5);
       expect(find.text('Prejuízo inicial salvo.'), findsOneWidget);
+    });
+
+    testWidgets('PC: Salvar prejuízo é o principal, na linha dos campos de '
+        '40 px', (t) async {
+      final s = _servicos()
+        ..prejuizo = const PrejuizoInicial(
+          mesCorte: '2026-10',
+          comum: 1500,
+          editavel: true,
+        );
+      await _abrirConta(t, s);
+      final salvar = find.byKey(const Key('prejuizo-salvar'));
+      expect(t.widget(salvar), isA<BotaoPrincipal>());
+      expect(t.getSize(salvar).height, 40);
+      final comum = find.byKey(const Key('prejuizo-comum'));
+      final dt = find.byKey(const Key('prejuizo-dt'));
+      expect(t.getSize(comum).height, 40);
+      expect(t.getSize(dt).height, 40);
+      expect(t.getCenter(salvar).dy, t.getCenter(comum).dy);
+      expect(t.getCenter(salvar).dy, t.getCenter(dt).dy);
+      expect(t.getTopLeft(salvar).dx, greaterThan(t.getTopRight(dt).dx));
+      // um só principal na área de Configurações
+      expect(
+        find.widgetWithText(BotaoPrincipal, 'Salvar prejuízo'),
+        findsOneWidget,
+      );
+      await t.enterText(comum, '10');
+      await t.tap(salvar);
+      await t.pumpAndSettle();
+      expect(s.chamadas, contains('definirPrejuizoInicial(10.0, 0.0)'));
+    });
+
+    testWidgets('celular: Salvar prejuízo de 48 px à direita, sob os campos', (
+      t,
+    ) async {
+      final s = _servicos()
+        ..prejuizo = const PrejuizoInicial(mesCorte: '2026-10', editavel: true);
+      await _abrirConta(t, s, tamanho: const Size(360, 2400));
+      final salvar = find.byKey(const Key('prejuizo-salvar'));
+      expect(t.widget(salvar), isA<BotaoPrincipal>());
+      expect(t.getSize(salvar).height, 48);
+      final dt = find.byKey(const Key('prejuizo-dt'));
+      expect(t.getSize(dt).height, 48);
+      expect(t.getTopLeft(salvar).dy, greaterThan(t.getBottomLeft(dt).dy));
+      expect(t.getTopRight(salvar).dx, t.getTopRight(dt).dx);
+      expect(t.takeException(), isNull);
     });
 
     testWidgets('"-0" vira zero e o salvo aparece normalizado', (t) async {

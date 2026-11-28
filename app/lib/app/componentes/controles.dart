@@ -493,6 +493,7 @@ class SeletorCaixa<T> extends StatelessWidget {
     required this.itens,
     this.aoMudar,
     this.largura,
+    this.chaveItem,
   });
 
   final String rotulo;
@@ -500,6 +501,9 @@ class SeletorCaixa<T> extends StatelessWidget {
   final List<(T, String)> itens;
   final ValueChanged<T>? aoMudar;
   final double? largura;
+
+  /// Chave de cada item do menu (para os testes).
+  final Key Function(T)? chaveItem;
 
   @override
   Widget build(BuildContext context) {
@@ -521,6 +525,7 @@ class SeletorCaixa<T> extends StatelessWidget {
                       texto,
                       marcado: v == valor,
                       aoTocar: () => aoMudar!(v),
+                      chave: chaveItem?.call(v),
                     ),
                 ])
               : null,

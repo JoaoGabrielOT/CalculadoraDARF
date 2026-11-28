@@ -12,7 +12,8 @@ import 'package:provider/provider.dart';
 
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/controles.dart';
 import '../../componentes/carregando.dart';
 import '../../componentes/dialogos.dart';
 import '../../estado/estado_app.dart';
@@ -367,25 +368,51 @@ class _CorpoState extends State<_Corpo> {
           spacing: 8,
           children: [
             Expanded(
-              child: TextField(
-                key: const ValueKey('amigos-email'),
-                controller: _email,
-                autofocus: widget.dialogo,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  hintText: 'email@gmail.com',
-                  isDense: true,
+              child: SizedBox(
+                height: expandido(context) ? 40 : 48,
+                child: TextField(
+                  key: const ValueKey('amigos-email'),
+                  controller: _email,
+                  autofocus: widget.dialogo,
+                  keyboardType: TextInputType.emailAddress,
+                  textAlignVertical: TextAlignVertical.center,
+                  // preenche a altura do botão ao lado
+                  expands: true,
+                  maxLines: null,
+                  minLines: null,
+                  decoration: const InputDecoration(
+                    hintText: 'email@gmail.com',
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  onSubmitted: (_) => unawaited(_adicionar(controle)),
                 ),
-                onSubmitted: (_) => unawaited(_adicionar(controle)),
               ),
             ),
-            FilledButton(
-              key: const ValueKey('amigos-adicionar'),
-              onPressed: controle.ocupado
-                  ? null
-                  : () => unawaited(_adicionar(controle)),
-              child: const Text('Adicionar'),
-            ),
+            // no celular só o "+" roxo, como no Radar: o campo precisa da largura
+            if (expandido(context))
+              BotaoPrincipal(
+                key: const ValueKey('amigos-adicionar'),
+                icone: Icons.person_add,
+                onPressed: controle.ocupado
+                    ? null
+                    : () => unawaited(_adicionar(controle)),
+                rotulo: 'Adicionar',
+              )
+            else
+              IconButton.filled(
+                key: const ValueKey('amigos-adicionar'),
+                tooltip: 'Adicionar',
+                icon: const Icon(Icons.add),
+                onPressed: controle.ocupado
+                    ? null
+                    : () => unawaited(_adicionar(controle)),
+                style: IconButton.styleFrom(
+                  fixedSize: const Size.square(48),
+                  minimumSize: const Size.square(48),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 8),
@@ -450,12 +477,13 @@ class _AvisoPermitir extends StatelessWidget {
             const Text(textoPermitirCompartilhamento),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton(
+              child: BotaoPrincipal(
                 key: const ValueKey('amigos-permitir'),
+                icone: Icons.lock_open,
                 onPressed: controle.permitindo
                     ? null
                     : () => unawaited(controle.permitir()),
-                child: const Text('Permitir'),
+                rotulo: 'Permitir',
               ),
             ),
           ],
@@ -483,9 +511,10 @@ class _Lista extends StatelessWidget {
         spacing: 8,
         children: [
           Text(erro, style: TextStyle(color: cores.queda)),
-          OutlinedButton(
+          BotaoSecundario(
+            icone: Icons.refresh,
             onPressed: () => unawaited(controle.recarregar()),
-            child: const Text('Tentar de novo'),
+            rotulo: 'Tentar de novo',
           ),
         ],
       );
@@ -502,14 +531,6 @@ class _Lista extends StatelessWidget {
       );
     }
     final livre = !controle.ocupado;
-    // Embutido (Conta do celular): o cartão já tem margem e os botões ficam
-    // mais estreitos, para o e-mail caber numa linha em 360 px.
-    final estiloBotao = embutido
-        ? TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: const Size(48, 40),
-          )
-        : null;
     return ListView(
       shrinkWrap: true,
       physics: embutido ? const NeverScrollableScrollPhysics() : null,
@@ -525,9 +546,10 @@ class _Lista extends StatelessWidget {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextButton(
+                BotaoSecundario(
                   key: ValueKey('amigo-ver-${a.email}'),
-                  style: estiloBotao,
+                  icone: Icons.visibility,
+                  compacto: true,
                   onPressed: livre
                       ? () => embutido
                             ? unawaited(
@@ -539,16 +561,16 @@ class _Lista extends StatelessWidget {
                               )
                             : Navigator.of(context).pop(a.email)
                       : null,
-                  child: const Text('Ver'),
+                  rotulo: 'Ver',
                 ),
-                TextButton(
+                BotaoIcone(
                   key: ValueKey('amigo-remover-${a.email}'),
-                  style: TextButton.styleFrom(foregroundColor: cores.queda)
-                      .merge(estiloBotao),
+                  icone: Icons.delete_outline,
+                  tooltip: 'Remover',
+                  destrutivo: true,
                   onPressed: livre
                       ? () => unawaited(controle.remover(context, a.email))
                       : null,
-                  child: const Text('Remover'),
                 ),
               ],
             ),
