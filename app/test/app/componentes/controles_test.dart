@@ -463,6 +463,63 @@ void main() {
     expect(v, 'b');
   });
 
+  for (final tema in _temas) {
+    testWidgets('BotaoPrincipal desabilitado tem fundo apagado '
+        '(${tema.chave})', (t) async {
+      await montarComponente(
+        t,
+        Column(
+          children: [
+            BotaoPrincipal(icone: Icons.lock, rotulo: 'Sim', onPressed: () {}),
+            const BotaoPrincipal(icone: Icons.lock, rotulo: 'Nao'),
+          ],
+        ),
+        tema: tema,
+      );
+      Color? fundo(String r) => t
+          .widget<Material>(
+            find
+                .descendant(
+                  of: find.widgetWithText(FilledButton, r),
+                  matching: find.byType(Material),
+                )
+                .first,
+          )
+          .color;
+      expect(fundo('Nao'), isNot(fundo('Sim')));
+      final c = CoresApp.de(t.element(find.text('Sim')));
+      expect(fundo('Sim'), c.destaque);
+    });
+
+    testWidgets('SeletorMes tem contorno em pílula (${tema.chave})', (t) async {
+      await montarComponente(
+        t,
+        SeletorMes(
+          mes: '2026-10',
+          maximo: '2026-11',
+          aoMudar: (_) {},
+          aoAbrir: () {},
+        ),
+        tema: tema,
+        tamanho: _pc,
+      );
+      final c = CoresApp.de(t.element(find.byType(SeletorMes)));
+      final material = t.widget<Material>(
+        find
+            .descendant(
+              of: find.byType(SeletorMes),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      final forma = material.shape;
+      expect(forma, isA<StadiumBorder>());
+      expect((forma! as StadiumBorder).side.color, c.bordaCampo);
+      expect((forma as StadiumBorder).side.width, 1);
+      expect(t.getSize(find.byType(SeletorMes)).height, 40);
+    });
+  }
+
   testWidgets('só ícone com ativo desenha o ponto (BotaoMenu e BotaoOrdenar)', (
     t,
   ) async {

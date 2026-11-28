@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/cartao.dart' show Cartao;
 import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
@@ -158,8 +159,8 @@ Future<void> _duploToque(WidgetTester t, Finder f) async {
 void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: hojeExemplo));
 
-  testWidgets('expandido: tabela de ativos com as 11 colunas', (t) async {
-    await _montar(t);
+  testWidgets('expandido largo: tabela de ativos com as 11 colunas', (t) async {
+    await _montar(t, tamanho: const Size(1920, 1400));
     for (final titulo in [
       'TICKER ↕',
       'TIPO',
@@ -505,6 +506,80 @@ void main() {
       );
     });
   }
+
+  group('PC 1366 (app inteiro)', () {
+    Future<ServicosFalsos> montarApp1366(
+      WidgetTester t, {
+      double altura = 768,
+    }) async {
+      final s = ServicosFalsos()
+        ..precos = {'PETR4': 36.2, 'VALE3': 58.4, 'AAPL34': 57.1};
+      await montarApp(t, servicos: s, tamanho: Size(1366, altura));
+      await t.pumpAndSettle();
+      return s;
+    }
+
+    Finder cartaoDe(String chave) => find
+        .ancestor(of: find.byKey(Key(chave)), matching: find.byType(Cartao))
+        .first;
+
+    testWidgets('a tabela cabe no cartão: o ganho/perda da primeira linha '
+        'aparece inteiro', (t) async {
+      await montarApp1366(t);
+      final ganho = _celula('L1', 6);
+      expect(t.widget<Text>(ganho).data, startsWith('▲ +R\$'));
+      final cartao = t.getRect(cartaoDe('tabela-lotes'));
+      final texto = t.getRect(ganho);
+      expect(cartao.left <= texto.left && texto.right <= cartao.right, isTrue);
+      expect(t.renderObject<RenderParagraph>(ganho).didExceedMaxLines, isFalse);
+      // nada rola na horizontal: a tabela inteira está à vista
+      expect(
+        find.ancestor(
+          of: find.byKey(const Key('tabela-lotes')),
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is SingleChildScrollView &&
+                w.scrollDirection == Axis.horizontal,
+          ),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('vendas: a tabela cabe no cartão, sem rolar', (t) async {
+      // a altura só traz o cartão de vendas à vista; a largura é a de 1366
+      await montarApp1366(t, altura: 1400);
+      final cartao = t.getRect(cartaoDe('tabela-vendas'));
+      final textos = find.descendant(
+        of: find.byKey(const Key('linha-V1')),
+        matching: find.byType(Text),
+      );
+      expect(textos, findsWidgets);
+      for (var i = 0; i < textos.evaluate().length; i++) {
+        final f = textos.at(i);
+        expect(t.getRect(f).right, lessThanOrEqualTo(cartao.right));
+        expect(t.renderObject<RenderParagraph>(f).didExceedMaxLines, isFalse);
+      }
+    });
+
+    testWidgets('filtros numa linha: Situação, busca, Tipo e Ordenar', (
+      t,
+    ) async {
+      await montarApp1366(t);
+      final dy = t.getCenter(find.byType(Segmentado<String>)).dy;
+      for (final f in [
+        find.byKey(const Key('busca-lotes')),
+        find.byKey(const Key('chip-lotes-tipo')),
+        find.byKey(const Key('chip-lotes-ordem')),
+      ]) {
+        expect(t.getCenter(f).dy, moreOrLessEquals(dy, epsilon: 1));
+      }
+      expect(
+        t.getSize(find.byKey(const Key('busca-lotes'))).width,
+        greaterThanOrEqualTo(160),
+      );
+    });
+  });
 
   group('controles do cartão (PC)', () {
     testWidgets('Ativos comprados: ícones Editar e Excluir, Registrar venda '

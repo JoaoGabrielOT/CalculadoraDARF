@@ -577,30 +577,38 @@ class SeletorMes extends StatelessWidget {
   Widget build(BuildContext context) {
     final h = _altura(context);
     final noMaximo = mes.compareTo(maximo) >= 0;
-    return SizedBox(
-      height: h,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          BotaoIcone(
-            icone: Icons.chevron_left,
-            tooltip: 'Mês anterior',
-            onPressed: () => aoMudar(_somaMes(mes, -1)),
-          ),
-          TextButton(
-            style: _estilo(context),
-            onPressed: aoAbrir,
-            child: Text(
-              fmtMes(mes),
-              style: const TextStyle(fontWeight: FontWeight.w700),
+    // pílula contornada; o recorte segura o efeito do toque dentro dela
+    return Material(
+      type: MaterialType.transparency,
+      shape: StadiumBorder(
+        side: BorderSide(color: CoresApp.de(context).bordaCampo),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: h,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            BotaoIcone(
+              icone: Icons.chevron_left,
+              tooltip: 'Mês anterior',
+              onPressed: () => aoMudar(_somaMes(mes, -1)),
             ),
-          ),
-          BotaoIcone(
-            icone: Icons.chevron_right,
-            tooltip: 'Próximo mês',
-            onPressed: noMaximo ? null : () => aoMudar(_somaMes(mes, 1)),
-          ),
-        ],
+            TextButton(
+              style: _estilo(context),
+              onPressed: aoAbrir,
+              child: Text(
+                fmtMes(mes),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            BotaoIcone(
+              icone: Icons.chevron_right,
+              tooltip: 'Próximo mês',
+              onPressed: noMaximo ? null : () => aoMudar(_somaMes(mes, 1)),
+            ),
+          ],
+        ),
       ),
     );
   }

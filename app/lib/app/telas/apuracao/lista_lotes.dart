@@ -31,25 +31,94 @@ double alturaTabela(BuildContext context, int linhas) {
   return a.cabecalho + math.min(linhas, 8) * a.linha;
 }
 
-/// Largura mínima das tabelas: com menos, as colunas não se espremem e só a
-/// tabela rola na horizontal; título, ações e filtros do cartão ficam à vista.
-const larguraMinimaTabela = 1168.0;
+/// Tabela que cabe no cartão: cada coluna tem a largura mínima do título
+/// (com a seta de ordenar) e do texto mais longo, em negrito (a linha
+/// marcada), e peso igual a ela, para nenhuma cortar o texto. Sem espaço, saem
+/// as colunas secundárias, uma por vez, na ordem de [descartar] (títulos); só
+/// se nem assim couber, a tabela rola na horizontal.
+class TabelaAjustada<T> extends StatelessWidget {
+  const TabelaAjustada({
+    super.key,
+    required this.colunas,
+    required this.linhas,
+    required this.descartar,
+    required this.montar,
+  });
 
-class RolagemTabela extends StatelessWidget {
-  const RolagemTabela({super.key, required this.child});
+  final List<ColunaTabela<T>> colunas;
 
-  final Widget child;
+  /// As linhas à vista (com as filhas abertas), para medir os textos.
+  final List<T> linhas;
+  final List<String> descartar;
+
+  /// Monta a [Tabela] com as colunas que cabem.
+  final Tabela<T> Function(List<ColunaTabela<T>> colunas) montar;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, caixa) {
-      if (caixa.maxWidth >= larguraMinimaTabela) return child;
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(width: larguraMinimaTabela, child: child),
-      );
-    },
-  );
+  Widget build(BuildContext context) {
+    final estilo = DefaultTextStyle.of(context).style;
+    final escala = MediaQuery.textScalerOf(context);
+    double medir(String texto, FontWeight peso) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: texto,
+          style: estilo.copyWith(fontWeight: peso),
+        ),
+        textDirection: TextDirection.ltr,
+        textScaler: escala,
+        maxLines: 1,
+      )..layout();
+      final largura = tp.width;
+      tp.dispose();
+      return largura;
+    }
+
+    // a margem de 8 px de cada lado da célula, e um respiro de 4 px
+    final minimos = {
+      for (final col in colunas)
+        col: () {
+          var longo = '';
+          for (final l in linhas) {
+            final t = col.texto(l);
+            if (t.length > longo.length) longo = t;
+          }
+          final titulo = col.chave == null ? col.titulo : '${col.titulo} ↕';
+          return 20 +
+              [
+                medir(titulo, FontWeight.w500),
+                medir(longo, FontWeight.w700),
+              ].reduce(math.max);
+        }(),
+    };
+    return LayoutBuilder(
+      builder: (context, caixa) {
+        final visiveis = [...colunas];
+        double soma() => visiveis.fold(0.0, (s, c) => s + minimos[c]!);
+        for (final titulo in descartar) {
+          if (soma() <= caixa.maxWidth) break;
+          visiveis.removeWhere((c) => c.titulo == titulo);
+        }
+        final ajustadas = [
+          for (final col in visiveis)
+            ColunaTabela<T>(
+              titulo: col.titulo,
+              largura: minimos[col]! / 100,
+              alinhamento: col.alinhamento,
+              texto: col.texto,
+              chave: col.chave,
+              cor: col.cor,
+            ),
+        ];
+        final tabela = montar(ajustadas);
+        final minimo = soma();
+        if (minimo <= caixa.maxWidth) return tabela;
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(width: minimo, child: tabela),
+        );
+      },
+    );
+  }
 }
 
 /// Título da lista e contagem ("N" ou "visíveis/total" com filtro) à
@@ -501,12 +570,23 @@ class _Expandido extends StatelessWidget {
           ),
           SizedBox(
             height: alturaTabela(context, itens.length),
-            child: RolagemTabela(
-              child: Tabela<Lote>(
+            child: TabelaAjustada<Lote>(
+              colunas: colunas,
+              linhas: itens,
+              descartar: const [
+                'VENDIDA',
+                'TOTAL',
+                'RESTANTE',
+                'SITUAÇÃO',
+                'TIPO',
+              ],
+              montar: (colunas) => Tabela<Lote>(
                 key: const Key('tabela-lotes'),
+                // com outras colunas, o índice do título clicado muda
                 reiniciarOrdem: (
                   controle.filtroLotes.ordem,
                   controle.filtroLotes.desc,
+                  colunas.length,
                 ),
                 colunas: colunas,
                 linhas: itens,

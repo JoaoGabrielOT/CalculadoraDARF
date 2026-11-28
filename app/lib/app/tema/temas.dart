@@ -392,9 +392,19 @@ ThemeData _montar(
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
+      // desabilitado, apagado como no Material 3 (o texto a 12% e 38%), para
+      // não parecer clicável
       style: estiloBotao.copyWith(
-        backgroundColor: WidgetStatePropertyAll(c.destaque),
-        foregroundColor: WidgetStatePropertyAll(onPrimary),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (e) => e.contains(WidgetState.disabled)
+              ? c.texto.withValues(alpha: .12)
+              : c.destaque,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (e) => e.contains(WidgetState.disabled)
+              ? c.texto.withValues(alpha: .38)
+              : onPrimary,
+        ),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
