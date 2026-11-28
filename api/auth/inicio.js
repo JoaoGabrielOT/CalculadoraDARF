@@ -14,6 +14,9 @@ const ESCOPOS = [
 const HINT = /^[^@\s<>"'&]{1,64}@[^@\s<>"'&]+\.[^@\s<>"'&]+$/;
 const HINT_MAX = 254;
 
+// "Permitir" da tela de Amigos (dono da pasta de relatórios): só `drive`.
+const EXTRAS = { drive: 'https://www.googleapis.com/auth/drive' };
+
 export function criar(dep) {
   return criarRota(
     {
@@ -31,6 +34,9 @@ export function criar(dep) {
           // hint fora do formato: só não vai ao Google
           const pedido = url.searchParams.get('hint');
           const hint = pedido !== null && pedido.length <= HINT_MAX && HINT.test(pedido) ? pedido : null;
+          // extra fora da lista: login com os escopos padrão
+          const nomeExtra = url.searchParams.get('extra');
+          const extra = Object.hasOwn(EXTRAS, nomeExtra ?? '') ? EXTRAS[nomeExtra] : null;
 
           const state = randomBytes(16).toString('base64url');
           const verificador = randomBytes(32).toString('base64url');
@@ -40,12 +46,14 @@ export function criar(dep) {
             client_id: cfg.clientId,
             redirect_uri: cfg.retorno,
             response_type: 'code',
-            scope: ESCOPOS.join(' '),
+            scope: (extra === null ? ESCOPOS : [...ESCOPOS, extra]).join(' '),
             access_type: 'offline',
             prompt: 'consent',
             code_challenge: desafio,
             code_challenge_method: 'S256',
             state,
+            // sempre: o "entrar de novo" do dono não tira o drive do token
+            include_granted_scopes: 'true',
             ...(hint === null ? {} : { login_hint: hint }),
           }).toString();
           const cookie = cifrar(
