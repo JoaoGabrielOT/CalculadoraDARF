@@ -10,8 +10,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
 import '../../componentes/carregando.dart';
+import '../../componentes/controles.dart';
 import '../../componentes/logo_ativo.dart';
 import '../../estado/estado_app.dart';
 import '../../servicos/api.dart';
@@ -110,7 +111,8 @@ class _Tema extends StatelessWidget {
   final ControleNoticias controle;
 
   @override
-  Widget build(BuildContext context) => BotaoSegmentado<String>(
+  Widget build(BuildContext context) => Segmentado<String>(
+    compacto: !expandido(context),
     opcoes: const [
       (todasNoticias, todasNoticias),
       (relevantesNoticias, relevantesNoticias),
@@ -120,67 +122,55 @@ class _Tema extends StatelessWidget {
   );
 }
 
-/// Menu do ativo, com o botão que tira o filtro.
+/// Seletor do ativo, com o botão que tira o filtro; [largura] fixa o campo
+/// (nula, ele ocupa o que o pai der).
 class _FiltroAtivo extends StatelessWidget {
-  const _FiltroAtivo(this.controle, {required this.rotulo});
+  const _FiltroAtivo(this.controle, {this.largura});
 
   final ControleNoticias controle;
-
-  /// Texto antes do ativo escolhido ("Ativo: " no celular).
-  final String rotulo;
+  final double? largura;
 
   @override
   Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
-    final alvo = expandido(context) ? 40.0 : 48.0;
+    final campo = SeletorCaixa<String>(
+      key: const Key('menu-ativo-noticias'),
+      rotulo: 'Ativo',
+      valor: controle.ticker,
+      largura: largura,
+      itens: [
+        for (final t in [todosAtivos, ...controle.ativos]) (t, t),
+      ],
+      aoMudar: controle.definirTicker,
+    );
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: largura == null ? MainAxisSize.max : MainAxisSize.min,
+      spacing: 4,
       children: [
-        PopupMenuButton<String>(
-          key: const Key('menu-ativo-noticias'),
-          tooltip: 'Filtrar por ativo',
-          initialValue: controle.ticker,
-          onSelected: controle.definirTicker,
-          itemBuilder: (_) => [
-            for (final t in [todosAtivos, ...controle.ativos])
-              PopupMenuItem(value: t, child: Text(t)),
-          ],
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border.all(color: c.bordaCampo),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: alvo),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 14, right: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '$rotulo${controle.ticker}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
+        if (largura == null) Expanded(child: campo) else campo,
         if (controle.filtrandoAtivo)
-          IconButton(
+          BotaoIcone(
             key: const Key('limpar-filtro-noticias'),
             tooltip: 'Mostrar todos os ativos',
             onPressed: () => controle.definirTicker(todosAtivos),
-            icon: const Icon(Icons.close),
+            icone: Icons.close,
           ),
       ],
     );
   }
+}
+
+/// Atualizar em ícone, igual no PC e no celular.
+class _BotaoAtualizar extends StatelessWidget {
+  const _BotaoAtualizar(this.controle);
+
+  final ControleNoticias controle;
+
+  @override
+  Widget build(BuildContext context) => BotaoIcone(
+    tooltip: 'Atualizar',
+    onPressed: () => unawaited(controle.atualizar(forcar: true)),
+    icone: Icons.refresh,
+  );
 }
 
 /// "Notificar notícias relevantes" e a chave.
@@ -284,18 +274,13 @@ class _Expandido extends StatelessWidget {
                         _Status(controle),
                       ],
                     ),
-                    Wrap(
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
                       spacing: 12,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _Tema(controle),
-                        _FiltroAtivo(controle, rotulo: ''),
-                        OutlinedButton(
-                          onPressed: () =>
-                              unawaited(controle.atualizar(forcar: true)),
-                          child: const Text('Atualizar'),
-                        ),
+                        _FiltroAtivo(controle, largura: 220),
+                        _BotaoAtualizar(controle),
                       ],
                     ),
                   ],
@@ -447,24 +432,12 @@ class _Compacto extends StatelessWidget {
                           ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Atualizar',
-                        onPressed: () =>
-                            unawaited(controle.atualizar(forcar: true)),
-                        icon: const Icon(Icons.refresh),
-                      ),
+                      _BotaoAtualizar(controle),
                     ],
                   ),
                   _Status(controle),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      _Tema(controle),
-                      _FiltroAtivo(controle, rotulo: 'Ativo: '),
-                    ],
-                  ),
+                  _Tema(controle),
+                  _FiltroAtivo(controle),
                   _Notificar(
                     controle,
                     sub: 'Com o app aberto ou em segundo plano',

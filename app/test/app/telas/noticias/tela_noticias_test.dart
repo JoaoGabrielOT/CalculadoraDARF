@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:calculadoradarf/app/estado/estado_app.dart';
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/componentes/logo_ativo.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
@@ -230,6 +231,44 @@ void main() {
     });
   });
 
+  for (final (nome, tam) in [('PC', _pc), ('celular', _celular)]) {
+    testWidgets('$nome: Segmentado, SeletorCaixa Ativo e Atualizar em ícone', (
+      t,
+    ) async {
+      await _montar(t, servicos: _servicos(), tamanho: tam);
+      expect(find.byType(Segmentado<String>), findsOneWidget);
+      expect(find.byType(SeletorCaixa<String>), findsOneWidget);
+      expect(find.text('Ativo'), findsOneWidget);
+      final botao = find.widgetWithIcon(BotaoIcone, Icons.refresh);
+      expect(botao, findsOneWidget);
+      expect(t.widget<BotaoIcone>(botao).tooltip, 'Atualizar');
+      expect(find.byType(OutlinedButton), findsNothing);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('$nome: o selo Nova fica logo após o título', (t) async {
+      final s = _servicos(itens: [_n('a1')], detalhes: {}, novas: {'a1'});
+      await _montar(t, servicos: s, tamanho: tam);
+      final titulo = t.getRect(
+        find.text('Título da notícia a1 com texto razoável'),
+      );
+      final selo = t.getRect(find.widgetWithText(Selo, 'Nova'));
+      expect(selo.left, greaterThanOrEqualTo(titulo.right));
+      expect(selo.left - titulo.right, lessThan(12));
+      expect(selo.center.dy, inInclusiveRange(titulo.top, titulo.bottom));
+    });
+  }
+
+  testWidgets('360 px: sem overflow e Todas | Relevantes numa linha cada', (
+    t,
+  ) async {
+    await _montar(t, servicos: _servicos(), tamanho: const Size(360, 800));
+    for (final rotulo in ['Todas', 'Relevantes']) {
+      expect(t.getSize(find.text(rotulo)).height, lessThan(22));
+    }
+    expect(t.takeException(), isNull);
+  });
+
   testWidgets('expandido: mural com colunas pela largura e cartões de '
       'tamanhos variados', (t) async {
     await _montar(t, servicos: _servicos(), tamanho: _pcAlto);
@@ -446,7 +485,7 @@ void main() {
     final espera = Completer<VisaoNoticias>();
     s.atualizarNoticiasFn = (_) => espera.future;
     await _montar(t, servicos: s);
-    await t.tap(find.text('Atualizar'));
+    await t.tap(find.byTooltip('Atualizar'));
     await t.pump();
     expect(_textoStatus(t), 'Buscando notícias…');
     final rolagem = t.state<ScrollableState>(find.byType(Scrollable).first);
@@ -500,7 +539,7 @@ void main() {
       final s = _servicos();
       await _montar(t, servicos: s);
       s.erros['atualizarNoticias'] = ErroValidacao('Sem conexão com o Google');
-      await t.tap(find.text('Atualizar'));
+      await t.tap(find.byTooltip('Atualizar'));
       await t.pumpAndSettle();
       expect(
         _textoStatus(t),

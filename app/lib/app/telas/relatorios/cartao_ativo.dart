@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../../nucleo/relatorios/destaques.dart';
 import '../../../nucleo/relatorios/relatorio.dart';
 import '../../componentes/cartao.dart';
+import '../../componentes/controles.dart' show Segmentado;
 import '../../tema/cores_app.dart';
 import 'especialistas_ativo.dart';
 import 'graficos_ativo.dart';
@@ -93,7 +94,7 @@ class _CartaoAtivoState extends State<CartaoAtivo>
                 ),
                 if (a.descricao case final d?)
                   Text(d, style: TextStyle(color: c.textoSuave, fontSize: 13)),
-                BotaoSegmentado<bool>(
+                Segmentado<bool>(
                   key: Key('abas-${a.ticker}'),
                   opcoes: const [(false, 'Relatório'), (true, 'Gráficos')],
                   valor: _graficos,

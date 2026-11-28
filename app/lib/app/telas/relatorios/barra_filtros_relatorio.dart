@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 
 import '../../../nucleo/relatorios/filtros_relatorio.dart';
 import '../../../nucleo/relatorios/relatorio.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/controles.dart';
 import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
 
@@ -162,27 +163,11 @@ class _EstadoBarra extends State<BarraFiltrosRelatorio> {
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
     final recolhivel = !expandido(context);
-    final campo = TextField(
+    final campo = CampoBusca(
       key: const Key('filtro-busca'),
       controller: _campo,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        hintText: 'Buscar ativo',
-        prefixIcon: const Icon(Icons.search),
-        isDense: true,
-        suffixIcon: _campo.text.isEmpty
-            ? null
-            : IconButton(
-                key: const Key('filtro-busca-limpar'),
-                tooltip: 'Limpar busca',
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  _campo.clear();
-                  widget.aoMudar(_f.copiar(texto: ''));
-                },
-              ),
-      ),
-      onChanged: (s) => widget.aoMudar(_f.copiar(texto: s)),
+      dica: 'Buscar ativo',
+      aoMudar: (s) => widget.aoMudar(_f.copiar(texto: s)),
     );
     return Cartao(
       key: const Key('filtros-ativos'),
@@ -195,11 +180,11 @@ class _EstadoBarra extends State<BarraFiltrosRelatorio> {
               spacing: 8,
               children: [
                 Expanded(child: campo),
-                OutlinedButton.icon(
+                BotaoSecundario(
                   key: const Key('filtros-alternar'),
                   onPressed: () => setState(() => _aberto = !_aberto),
-                  icon: Icon(_aberto ? Icons.expand_less : Icons.expand_more),
-                  label: Text('Filtros ($_ativos)'),
+                  icone: _aberto ? Icons.expand_less : Icons.expand_more,
+                  rotulo: 'Filtros ($_ativos)',
                 ),
               ],
             )
@@ -216,13 +201,14 @@ class _EstadoBarra extends State<BarraFiltrosRelatorio> {
                 style: TextStyle(color: c.textoSuave, fontSize: 13),
               ),
               if (!_f.vazio)
-                TextButton(
+                BotaoLeve(
                   key: const Key('filtro-limpar'),
                   onPressed: () {
                     _campo.clear();
                     widget.aoMudar(const FiltroAtivos());
                   },
-                  child: const Text('Limpar filtros'),
+                  icone: Icons.filter_alt_off,
+                  rotulo: 'Limpar filtros',
                 ),
             ],
           ),

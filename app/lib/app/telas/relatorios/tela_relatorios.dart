@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../../nucleo/relatorios/filtros_relatorio.dart';
 import '../../componentes/cartao.dart';
+import '../../componentes/controles.dart';
 import '../../componentes/carregando.dart';
 import '../../estado/estado_app.dart';
 import '../../servicos/api.dart';
@@ -325,14 +326,14 @@ class _BotaoAtualizar extends StatelessWidget {
   final ControleRelatorios controle;
 
   @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
+  Widget build(BuildContext context) => BotaoIcone(
     key: const Key('relatorios-atualizar'),
+    tooltip: 'Atualizar',
     // ícone parado: a lista nunca espera a pasta
     onPressed: controle.atualizando
         ? null
         : () => unawaited(controle.atualizar()),
-    icon: Icon(controle.atualizando ? Icons.hourglass_top : Icons.refresh),
-    label: const Text('Atualizar'),
+    icone: controle.atualizando ? Icons.hourglass_top : Icons.refresh,
   );
 }
 
@@ -442,24 +443,18 @@ class _ChipsPeriodo extends StatelessWidget {
   final ControleRelatorios controle;
 
   @override
-  Widget build(BuildContext context) => Wrap(
+  Widget build(BuildContext context) => Segmentado<int?>(
     key: const Key('periodo-relatorios'),
-    spacing: 6,
-    runSpacing: 6,
-    children: [
-      for (final (dias, rotulo) in const [
-        (7, '7 dias'),
-        (30, '30 dias'),
-        (90, '90 dias'),
-        (null, 'Todos'),
-      ])
-        ChipFiltro(
-          key: Key('periodo-${dias ?? 'todos'}'),
-          rotulo: rotulo,
-          selecionado: controle.periodoDias == dias,
-          aoTocar: () => controle.definirPeriodo(dias),
-        ),
+    compacto: true,
+    opcoes: const [
+      (7, '7 dias'),
+      (30, '30 dias'),
+      (90, '90 dias'),
+      (null, 'Todos'),
     ],
+    valor: controle.periodoDias,
+    aoMudar: controle.definirPeriodo,
+    chaveOpcao: (dias) => Key('periodo-${dias ?? 'todos'}'),
   );
 }
 
@@ -492,16 +487,23 @@ class _Expandido extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // o título numa linha só; o botão logo abaixo
+                  // o título numa linha só, com Atualizar à direita
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       spacing: 8,
                       children: [
-                        _tituloLista,
-                        _BotaoAtualizar(controle),
-                        _ChipsPeriodo(controle),
+                        Row(
+                          children: [
+                            const Expanded(child: _tituloLista),
+                            _BotaoAtualizar(controle),
+                          ],
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: _ChipsPeriodo(controle),
+                        ),
                       ],
                     ),
                   ),
@@ -532,12 +534,12 @@ class _Compacto extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
           child: Row(
             children: [
-              OutlinedButton.icon(
+              BotaoSecundario(
                 onPressed: visao.itens.isEmpty
                     ? null
                     : () => unawaited(_abrirFolha(context)),
-                icon: const Icon(Icons.history),
-                label: const Text('Anteriores'),
+                icone: Icons.history,
+                rotulo: 'Anteriores',
               ),
               const Spacer(),
               _BotaoAtualizar(controle),

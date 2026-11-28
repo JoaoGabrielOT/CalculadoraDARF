@@ -12,7 +12,8 @@ import 'package:provider/provider.dart';
 
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/controles.dart' show Selo;
 import '../../componentes/logo_ativo.dart';
 import '../../tema/cores_app.dart';
 import 'controle_noticias.dart';
@@ -282,10 +283,41 @@ class _SeloNova extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
-    return Pilula(
-      texto: 'Nova',
-      fundo: c.chipAtivoFundo,
-      cor: c.chipAtivoTexto,
+    return Selo(texto: 'Nova', cor: c.destaque);
+  }
+}
+
+/// O título e, logo depois dele, o selo "Nova".
+class _TituloComSelo extends StatelessWidget {
+  const _TituloComSelo(
+    this.titulo, {
+    required this.nova,
+    required this.estilo,
+    this.maxLinhas,
+  });
+
+  final String titulo;
+  final bool nova;
+  final TextStyle estilo;
+  final int? maxLinhas;
+
+  @override
+  Widget build(BuildContext context) {
+    final texto = Text(
+      titulo,
+      maxLines: maxLinhas,
+      overflow: maxLinhas == null ? null : TextOverflow.ellipsis,
+      style: estilo,
+    );
+    if (!nova) return texto;
+    // o texto cede espaço ao selo: o selo nunca cai sozinho na linha de baixo
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 8,
+      children: [
+        Flexible(child: texto),
+        const _SeloNova(),
+      ],
     );
   }
 }
@@ -335,13 +367,16 @@ class _Conteudo extends StatelessWidget {
               maxLines: 1,
               style: TextStyle(color: c.textoSuave, fontSize: 12),
             ),
-            if (nova) ...[const Spacer(), const _SeloNova()],
           ],
         ),
         SizedBox(height: destaque ? 10 : 8),
-        Text(
+        _TituloComSelo(
           item.titulo,
-          style: TextStyle(fontSize: estilo.fonte, fontWeight: FontWeight.bold),
+          nova: nova,
+          estilo: TextStyle(
+            fontSize: estilo.fonte,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         if (mostrarResumo) ...[
           const SizedBox(height: 8),
@@ -428,11 +463,11 @@ class _Compacto extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 6,
               children: [
-                Text(
+                _TituloComSelo(
                   item.titulo,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  nova: nova,
+                  maxLinhas: 4,
+                  estilo: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
@@ -451,12 +486,11 @@ class _Compacto extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (nova || item.temas.isNotEmpty)
+                if (item.temas.isNotEmpty)
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      if (nova) const _SeloNova(),
                       for (final t in item.temas.take(2)) Pilula(texto: t),
                     ],
                   ),

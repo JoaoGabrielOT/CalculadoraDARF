@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
@@ -278,7 +279,7 @@ void main() {
     await t.tap(find.byKey(const Key('relatorios-atualizar')));
     await t.pumpAndSettle();
     expect(_contar(cena.servicos, 'atualizarRelatorios()'), antes + 1);
-    expect(find.text('Atualizar'), findsOneWidget);
+    expect(find.byTooltip('Atualizar'), findsOneWidget);
   });
 
   testWidgets('sair e voltar à aba atualiza de novo', (t) async {
@@ -755,7 +756,7 @@ void main() {
     });
   });
 
-  testWidgets('no PC, o título da lista numa linha e Atualizar abaixo', (
+  testWidgets('no PC, o título da lista numa linha com Atualizar em ícone', (
     t,
   ) async {
     await _montar(t);
@@ -767,9 +768,60 @@ void main() {
       lessThanOrEqualTo(linha.size.width + .01),
     );
     expect(t.getSize(titulo).height, lessThan(30));
+    final botao = find.byKey(const Key('relatorios-atualizar'));
+    expect(botao, findsOneWidget);
+    expect(t.widget(botao), isA<BotaoIcone>());
+    expect(t.widget<BotaoIcone>(botao).tooltip, 'Atualizar');
+    // mesma linha do título, à direita
     expect(
-      t.getTopLeft(find.byKey(const Key('relatorios-atualizar'))).dy,
-      greaterThanOrEqualTo(t.getBottomLeft(titulo).dy),
+      t.getCenter(botao).dy,
+      inInclusiveRange(t.getTopLeft(titulo).dy, t.getBottomLeft(titulo).dy),
+    );
+    expect(
+      t.getTopLeft(botao).dx,
+      greaterThanOrEqualTo(t.getTopRight(titulo).dx),
+    );
+    expect(t.takeException(), isNull);
+  });
+
+  void periodoNumaLinha(WidgetTester t) {
+    final seg = find.byType(Segmentado<int?>);
+    expect(seg, findsOneWidget);
+    for (final r in ['7 dias', '30 dias', '90 dias', 'Todos']) {
+      expect(t.getSize(find.text(r)).height, lessThan(22), reason: r);
+    }
+    expect(
+      t.getTopLeft(find.byKey(const Key('periodo-todos'))).dy,
+      closeTo(t.getTopLeft(find.byKey(const Key('periodo-7'))).dy, .5),
+    );
+    expect(t.takeException(), isNull);
+  }
+
+  testWidgets('PC: período é Segmentado numa linha', (t) async {
+    await _montar(t);
+    periodoNumaLinha(t);
+  });
+
+  testWidgets('celular 360 px: período na folha, numa linha e sem overflow', (
+    t,
+  ) async {
+    await _montar(t, tamanho: _celular);
+    await t.tap(find.text('Anteriores'));
+    await t.pumpAndSettle();
+    periodoNumaLinha(t);
+  });
+
+  testWidgets('celular: Anteriores é BotaoSecundario e Atualizar é ícone', (
+    t,
+  ) async {
+    await _montar(t, tamanho: _celular);
+    expect(find.widgetWithText(BotaoSecundario, 'Anteriores'), findsOneWidget);
+    final botao = find.byKey(const Key('relatorios-atualizar'));
+    expect(t.widget(botao), isA<BotaoIcone>());
+    expect(t.getSize(botao).height, 48);
+    expect(
+      t.getSize(find.widgetWithText(BotaoSecundario, 'Anteriores')).height,
+      48,
     );
   });
 
@@ -871,7 +923,7 @@ void main() {
       await t.tap(_item('2026-11-25'));
       await t.pumpAndSettle();
       expect(find.text('22 de 22 ativos'), findsOneWidget);
-      expect(t.widget<TextField>(campo).controller!.text, isEmpty);
+      expect(t.widget<CampoBusca>(campo).controller.text, isEmpty);
     });
 
     testWidgets('trocar de conta zera a carteira e ignora resposta velha', (

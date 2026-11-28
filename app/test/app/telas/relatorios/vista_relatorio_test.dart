@@ -1,4 +1,6 @@
-import 'package:calculadoradarf/app/componentes/cartao.dart';
+import 'package:calculadoradarf/app/componentes/cartao.dart' hide Selo;
+import 'package:calculadoradarf/app/componentes/controles.dart' show Selo;
+import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:calculadoradarf/app/telas/relatorios/cartao_ativo.dart';
 import 'package:calculadoradarf/app/telas/relatorios/paleta_relatorio.dart';
@@ -37,6 +39,17 @@ Color? _fundo(WidgetTester t, Finder f) =>
       .descendant(of: f, matching: find.byType(DecoratedBox))
       .first;
   return (texto.style?.color, _fundo(t, caixa));
+}
+
+/// Cor do `Selo` chapado de [f] (o próprio ou um descendente).
+Color _corSeloLeitura(WidgetTester t, Finder f) {
+  final selo = find.descendant(
+    of: f,
+    matching: find.byType(Selo),
+    matchRoot: true,
+  );
+  expect(selo, findsOneWidget);
+  return t.widget<Selo>(selo).cor;
 }
 
 Finder _vertical() => find.byWidgetPredicate(
@@ -351,20 +364,20 @@ void main() {
     expect(_fundo(t, alta.first), const Color(0xFFE6F4EA));
   });
 
-  testWidgets('selo Positiva com as cores da paleta', (t) async {
+  testWidgets('selo Positiva com a cor da paleta', (t) async {
     await montarComponente(t, _vista(_fixture()), tamanho: _pcAlto);
     final selo = find.ancestor(
       of: find.text('Positiva').first,
-      matching: find.byType(DecoratedBox),
+      matching: find.byType(Selo),
     );
-    expect(_fundo(t, selo.first), const Color(0xFFE6F4EA));
-    expect(
-      t.widget<Text>(find.text('Positiva').first).style?.color,
-      const Color(0xFF1B7F3B),
-    );
+    expect(t.widget<Selo>(selo.first).cor, PaletaRelatorio.positivaTexto);
   });
 
-  for (final tema in [TemaVisual.terminal, TemaVisual.moderno]) {
+  for (final tema in [
+    TemaVisual.terminal,
+    TemaVisual.claro,
+    TemaVisual.moderno,
+  ]) {
     testWidgets('tema ${tema.chave}: selos mantêm a paleta', (t) async {
       await montarComponente(
         t,
@@ -372,14 +385,17 @@ void main() {
         tamanho: _pcAlto,
         tema: tema,
       );
-      expect(_coresSelo(t, find.byKey(const Key('selo-termometro-T1TW34'))), (
-        const Color(0xFF1B7F3B),
-        const Color(0xFFE6F4EA),
-      ));
-      expect(_coresSelo(t, find.byKey(const Key('selo-termometro-HAPV3'))), (
-        const Color(0xFFB3261E),
-        const Color(0xFFFCE8E6),
-      ));
+      // claro: o texto escuro da paleta; escuros: as cores do tema
+      final cores = CoresApp.de(t.element(find.byType(VistaRelatorio)));
+      final claro = tema == TemaVisual.claro;
+      expect(
+        _corSeloLeitura(t, find.byKey(const Key('selo-termometro-T1TW34'))),
+        claro ? PaletaRelatorio.positivaTexto : cores.alta,
+      );
+      expect(
+        _corSeloLeitura(t, find.byKey(const Key('selo-termometro-HAPV3'))),
+        claro ? PaletaRelatorio.negativaTexto : cores.queda,
+      );
     });
   }
 
@@ -744,10 +760,10 @@ void main() {
       final selo = find
           .descendant(
             of: find.byKey(const Key('placar-GOGL34')),
-            matching: find.byType(Pilula),
+            matching: find.byType(Selo),
           )
           .first;
-      expect(_coresSelo(t, selo).$1, PaletaRelatorio.positivaTexto);
+      expect(t.widget<Selo>(selo).cor, PaletaRelatorio.positivaTexto);
     });
 
     testWidgets('fixture de 26/11: destaques e placar contado', (t) async {
@@ -875,6 +891,40 @@ void main() {
     ));
   });
 
+  testWidgets('os selos de leitura são Selo chapado, sem borda', (t) async {
+    await montarComponente(
+      t,
+      const Column(
+        children: [
+          SeloLeitura(Leitura.positiva),
+          SeloLeitura(Leitura.mista),
+          SeloLeitura(Leitura.neutra),
+          SeloLeitura(Leitura.negativa, texto: 'Venda'),
+        ],
+      ),
+    );
+    expect(find.byType(Selo), findsNWidgets(4));
+    expect(find.byType(Pilula), findsNothing);
+    final cores = [
+      for (final w in t.widgetList<Selo>(find.byType(Selo))) w.cor,
+    ];
+    expect(cores, [
+      PaletaRelatorio.positivaTexto,
+      PaletaRelatorio.mistaTexto,
+      PaletaRelatorio.neutraTexto,
+      PaletaRelatorio.negativaTexto,
+    ]);
+    final caixa = t.widget<DecoratedBox>(
+      find
+          .descendant(
+            of: find.byType(Selo).first,
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    expect((caixa.decoration as BoxDecoration).border, isNull);
+  });
+
   group('guia dos especialistas', () {
     Relatorio guia() => Relatorio.deJson(fixtureRelatorioGuia());
     double y(WidgetTester t, String k) => t.getTopLeft(find.byKey(Key(k))).dy;
@@ -885,7 +935,7 @@ void main() {
       matching: find.textContaining(s),
     );
     Finder pilulaDe(Finder texto) =>
-        find.ancestor(of: texto, matching: find.byType(Pilula));
+        find.ancestor(of: texto, matching: find.byType(Selo));
     const explicacao =
         'Preço-alvo é quanto a casa acha que a ação vai valer no prazo '
         'indicado (em geral 12 meses). Não é preço para comprar nem para '
@@ -935,10 +985,10 @@ void main() {
       ]) {
         expect(em('comparacao-BPAC11', s), findsOneWidget, reason: s);
       }
-      expect(_coresSelo(t, pilulaDe(em('comparacao-BPAC11', '+18,9%'))), (
+      expect(
+        t.widget<Selo>(pilulaDe(em('comparacao-BPAC11', '+18,9%'))).cor,
         PaletaRelatorio.positivaTexto,
-        PaletaRelatorio.positivaFundo,
-      ));
+      );
     });
 
     testWidgets('faixa com min igual a max; sem alvo médio, sem comparação', (
@@ -959,18 +1009,18 @@ void main() {
           montarComponente(t, _vista(um(esp, preco: preco)), tamanho: _pcAlto);
       const k = 'comparacao-ZZZ3';
       await monta({'alvoMedio': 'R\$ 9', 'potencialMedio': '-4,0%'});
-      expect(_coresSelo(t, pilulaDe(em(k, '-4,0%'))), (
+      expect(
+        t.widget<Selo>(pilulaDe(em(k, '-4,0%'))).cor,
         PaletaRelatorio.negativaTexto,
-        PaletaRelatorio.negativaFundo,
-      ));
+      );
       await monta({'alvoMedio': 'R\$ 9', 'potencialMedio': '−4,0%'});
       expect(
-        _coresSelo(t, pilulaDe(em(k, '−4,0%'))).$1,
+        t.widget<Selo>(pilulaDe(em(k, '−4,0%'))).cor,
         PaletaRelatorio.negativaTexto,
       );
       await monta({'alvoMedio': 'R\$ 9', 'potencialMedio': 'n/d'});
       expect(
-        _coresSelo(t, pilulaDe(em(k, 'n/d'))).$1,
+        t.widget<Selo>(pilulaDe(em(k, 'n/d'))).cor,
         PaletaRelatorio.neutraTexto,
       );
       // sem min ou max, a faixa some; sem referência, o preço do ativo
@@ -1058,7 +1108,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const Key('casa-ZZZ3-1')),
-          matching: find.byType(Pilula),
+          matching: find.byType(Selo),
         ),
         findsNothing,
       );

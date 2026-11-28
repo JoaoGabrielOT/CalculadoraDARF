@@ -5,7 +5,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../nucleo/relatorios/relatorio.dart';
-import '../../componentes/cartao.dart';
+import '../../componentes/cartao.dart' hide Selo;
+import '../../componentes/controles.dart' show Selo;
 import '../../tema/cores_app.dart';
 
 abstract final class PaletaRelatorio {
@@ -115,7 +116,7 @@ String textoVariacao(String variacao, Direcao d) => switch (d) {
   Direcao.neutra => variacao,
 };
 
-/// Selo da leitura com as cores da paleta (por padrão, o rótulo).
+/// Selo chapado da leitura na cor da paleta (por padrão, o rótulo).
 class SeloLeitura extends StatelessWidget {
   const SeloLeitura(this.leitura, {super.key, this.texto});
 
@@ -124,12 +125,18 @@ class SeloLeitura extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (cor, fundo) = PaletaRelatorio.coresLeitura(leitura);
-    return Pilula(
-      texto: texto ?? rotuloLeitura(leitura),
-      fundo: fundo,
-      cor: cor,
-    );
+    // no tema escuro, o texto escuro da paleta some no fundo: valem as cores
+    // do tema para alta, aviso, queda e neutro
+    final c = CoresApp.de(context);
+    final cor = Theme.of(context).brightness == Brightness.dark
+        ? switch (leitura) {
+            Leitura.positiva => c.alta,
+            Leitura.mista => c.aviso,
+            Leitura.neutra => c.textoSuave,
+            Leitura.negativa => c.queda,
+          }
+        : PaletaRelatorio.coresLeitura(leitura).$1;
+    return Selo(texto: texto ?? rotuloLeitura(leitura), cor: cor);
   }
 }
 
