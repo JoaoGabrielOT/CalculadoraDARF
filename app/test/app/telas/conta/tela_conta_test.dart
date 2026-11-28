@@ -1,3 +1,4 @@
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
@@ -491,15 +492,14 @@ void main() {
   });
 
   group('botão da conta no cabeçalho (PC)', () {
-    Finder cabecalho(String texto) => find.descendant(
-      of: find.byType(OutlinedButton),
-      matching: find.text(texto),
-    );
+    final conectar = find.widgetWithText(BotaoSecundario, 'Conectar Google');
+    // o avatar com a inicial leva o e-mail no tooltip
+    Finder avatar(String email) => find.byTooltip(email);
 
     testWidgets('sem credencial avisa', (t) async {
       final s = _servicos();
       await montarApp(t, servicos: s);
-      await t.tap(cabecalho('Conectar Google'));
+      await t.tap(conectar);
       await t.pumpAndSettle();
       expect(find.text('Credencial não encontrada'), findsOneWidget);
     });
@@ -507,7 +507,7 @@ void main() {
     testWidgets('sem conta conecta', (t) async {
       final s = _servicos(const EstadoConta(temCredencial: true));
       await montarApp(t, servicos: s);
-      await t.tap(cabecalho('Conectar Google'));
+      await t.tap(conectar);
       await t.pumpAndSettle();
       expect(s.chamadas, contains('conectar()'));
     });
@@ -521,10 +521,7 @@ void main() {
         ),
       );
       await montarApp(t, servicos: s);
-      final botao = t.widget<OutlinedButton>(
-        find.widgetWithText(OutlinedButton, 'Conectar Google'),
-      );
-      expect(botao.onPressed, isNull);
+      expect(t.widget<BotaoSecundario>(conectar).onPressed, isNull);
     });
 
     testWidgets('conectada abre o menu do Windows', (t) async {
@@ -539,7 +536,7 @@ void main() {
         ),
       );
       await montarApp(t, servicos: s, plataforma: p);
-      await t.tap(cabecalho('eu@gmail.com'));
+      await t.tap(avatar('eu@gmail.com'));
       await t.pumpAndSettle();
       expect(
         find.text(
@@ -557,7 +554,7 @@ void main() {
     testWidgets('o menu sincroniza e sai com confirmação', (t) async {
       final s = _servicos(_conectada);
       await montarApp(t, servicos: s);
-      await t.tap(cabecalho('eu@gmail.com'));
+      await t.tap(avatar('eu@gmail.com'));
       await t.pumpAndSettle();
       expect(
         find.text('Planilha "Calculadora DARF" no seu Google Drive.'),
@@ -566,7 +563,7 @@ void main() {
       await t.tap(find.text('Sincronizar agora'));
       await t.pumpAndSettle();
       expect(s.chamadas, contains('sincronizarAgora()'));
-      await t.tap(cabecalho('eu@gmail.com'));
+      await t.tap(avatar('eu@gmail.com'));
       await t.pumpAndSettle();
       await t.tap(find.text('Sair da conta'));
       await t.pumpAndSettle();

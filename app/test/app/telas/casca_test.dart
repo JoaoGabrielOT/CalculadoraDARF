@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
+import 'package:calculadoradarf/app/telas/amigos/tela_amigos.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
 import 'package:calculadoradarf/app/telas/caixa/tela_caixa.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
@@ -12,12 +14,14 @@ import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:calculadoradarf/app/telas/noticias/tela_noticias.dart';
 import 'package:calculadoradarf/app/telas/radar/tela_radar.dart';
 import 'package:calculadoradarf/app/telas/relatorios/tela_relatorios.dart';
+import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import '../apoio/dados_exemplo.dart';
 import '../apoio/montar.dart';
 import '../apoio/servicos_falsos.dart';
 
@@ -56,6 +60,51 @@ class _ContadorState extends State<_Contador> {
   );
 }
 
+/// O seletor de dados do cabeçalho do PC (texto com o ícone de grupo).
+Finder get _seletorPc => find.widgetWithIcon(BotaoLeve, Icons.group);
+
+Finder _noMenu(String texto) => find.descendant(
+  of: find.byWidgetPredicate((w) => w is PopupMenuItem),
+  matching: find.text(texto),
+);
+
+/// Casca com abas vazias: o teste olha só o cabeçalho.
+Future<void> _montarCabecalho(
+  WidgetTester t,
+  ServicosFalsos s, {
+  Size tamanho = const Size(1366, 768),
+}) async {
+  await montarApp(
+    t,
+    servicos: s,
+    tamanho: tamanho,
+    tela: Casca(telaDaAba: (_) => const SizedBox()),
+  );
+  await t.pumpAndSettle();
+}
+
+/// Apuração com valores redondos, para ver o Atualizar trazer dados novos.
+VisaoMes _visaoComValores({String? amigo}) => VisaoMes(
+  mes: '2026-10',
+  dados: mesAbertoExemplo(),
+  amigo: amigo,
+  apuracao: Apuracao(
+    ops: [],
+    vendasAcoesSt: 15000,
+    isento: true,
+    bruto: 1234.56,
+    custos: 12.34,
+    impSt: 0,
+    impDt: 20.5,
+    impostoTotal: 20.5,
+    irrf: 1.5,
+    lucroLiquido: 1200,
+    darfMes: 25,
+    darfAnterior: 5,
+    darf: 30,
+  ),
+);
+
 void main() {
   testWidgets('1366 de largura mostra barra lateral e cabeçalho', (t) async {
     await montarApp(t);
@@ -66,8 +115,12 @@ void main() {
     expect(find.textContaining('Saldo: '), findsOneWidget);
     expect(find.text('○ Google não conectado'), findsOneWidget);
     expect(find.text('Meta de lucro'), findsOneWidget);
-    expect(find.text('Amigos'), findsOneWidget);
-    expect(find.text('Conectar Google'), findsOneWidget);
+    expect(find.text('Meus dados'), findsOneWidget);
+    expect(find.text('Amigos'), findsNothing);
+    expect(
+      find.widgetWithText(BotaoSecundario, 'Conectar Google'),
+      findsOneWidget,
+    );
     expect(_naLateral('Apuração / DARF'), findsOneWidget);
   });
 
@@ -91,22 +144,268 @@ void main() {
     expect(find.text('Calculadora'), findsOneWidget);
   });
 
-  testWidgets('cabeçalho mostra a conta cortada em 26 e o amigo', (t) async {
-    final s = ServicosFalsos();
-    await montarApp(t, servicos: s);
-    s.eventosFalsos.add(
-      const EventoConta(
-        EstadoConta(email: 'nome.muito.comprido.demais@gmail.com'),
-      ),
-    );
-    await t.pump();
-    expect(find.text('nome.muito.comprido.dema…'), findsOneWidget);
-    await _estado(t).trocarVisao('bia@gmail.com');
-    await t.pump();
-    expect(
-      find.text('Dados de bia@gmail.com · somente leitura'),
-      findsOneWidget,
-    );
+  group('cabeçalho do PC', () {
+    testWidgets('1366: seletor, saldo, Meta · N e avatar, sem Amigos', (
+      t,
+    ) async {
+      final s = ServicosFalsos()
+        ..metasAtivasFalsas = 2
+        ..estadoConta = const EstadoConta(
+          email: 'joana@gmail.com',
+          status: StatusSync.ok,
+        );
+      await montarApp(t, servicos: s);
+      await t.pumpAndSettle();
+      expect(
+        find.descendant(of: _seletorPc, matching: find.text('Meus dados')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Saldo: '), findsOneWidget);
+      expect(find.text('Meta de lucro · 2'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(CircleAvatar),
+          matching: find.text('J'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('joana@gmail.com'), findsOneWidget);
+      expect(find.text('Amigos'), findsNothing);
+      expect(find.text('● Sincronizado'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('a conta aberta mostra o amigo no subtítulo', (t) async {
+      final s = ServicosFalsos();
+      await montarApp(t, servicos: s);
+      s.eventosFalsos.add(
+        const EventoConta(EstadoConta(email: 'eu@gmail.com')),
+      );
+      await t.pump();
+      await _estado(t).trocarVisao('bia@gmail.com');
+      await t.pump();
+      expect(
+        find.text('Dados de bia@gmail.com · somente leitura'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('o avatar fica desabilitado durante o login', (t) async {
+      final s = ServicosFalsos()
+        ..estadoConta = const EstadoConta(
+          email: 'joana@gmail.com',
+          status: StatusSync.login,
+        );
+      await montarApp(t, servicos: s);
+      final avatar = find.ancestor(
+        of: find.byType(CircleAvatar),
+        matching: find.byType(IconButton),
+      );
+      expect(t.widget<IconButton>(avatar).onPressed, isNull);
+    });
+
+    testWidgets('sem conta, Conectar Google é o botão secundário', (t) async {
+      await _montarCabecalho(t, ServicosFalsos());
+      expect(
+        find.widgetWithText(BotaoSecundario, 'Conectar Google'),
+        findsOneWidget,
+      );
+      expect(find.byType(CircleAvatar), findsNothing);
+    });
+
+    testWidgets('840: Meta e seletor só com ícone; status só com o ponto', (
+      t,
+    ) async {
+      final s = ServicosFalsos()
+        ..metasAtivasFalsas = 2
+        ..estadoConta = const EstadoConta(
+          email: 'joana@gmail.com',
+          status: StatusSync.ok,
+        );
+      await _montarCabecalho(t, s, tamanho: const Size(840, 768));
+      expect(t.takeException(), isNull);
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.text('Meta de lucro · 2'), findsNothing);
+      expect(find.byTooltip('Meta de lucro · 2'), findsOneWidget);
+      expect(find.text('Meus dados'), findsNothing);
+      expect(find.byTooltip('Meus dados'), findsOneWidget);
+      expect(find.text('● Sincronizado'), findsNothing);
+      expect(find.byTooltip('● Sincronizado'), findsOneWidget);
+      expect(find.textContaining('Saldo: '), findsOneWidget);
+      expect(find.byTooltip('joana@gmail.com'), findsOneWidget);
+    });
+
+    testWidgets('840 com amigo aberto e conta longa não estoura', (t) async {
+      final s = ServicosFalsos()
+        ..metasAtivasFalsas = 2
+        ..estadoConta = const EstadoConta(
+          email: 'outro.nome.bem.comprido.demais@gmail.com',
+          status: StatusSync.offline,
+        );
+      await _montarCabecalho(t, s, tamanho: const Size(840, 768));
+      await _estado(t).trocarVisao('nome.bem.comprido.de.verdade@exemplo.com');
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      expect(find.byTooltip('Atualizar'), findsOneWidget);
+    });
+
+    testWidgets('e-mails de 40 caracteres a 1366 não estouram', (t) async {
+      const longo = 'nome.bem.comprido.de.verdade@exemplo.com';
+      expect(longo.length, 40);
+      final s = ServicosFalsos()
+        ..metasAtivasFalsas = 2
+        ..estadoConta = const EstadoConta(
+          email: 'outro.nome.bem.comprido.demais@gmail.com',
+          status: StatusSync.offline,
+        );
+      await _montarCabecalho(t, s);
+      await _estado(t).trocarVisao(longo);
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      expect(find.text('Dados de $longo · somente leitura'), findsOneWidget);
+      expect(
+        find.descendant(of: _seletorPc, matching: find.text(longo)),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('seletor de dados', () {
+    ServicosFalsos comAmigos() => ServicosFalsos()
+      ..estadoConta = const EstadoConta(
+        email: 'eu@gmail.com',
+        linkPlanilha: 'https://docs.google.com/spreadsheets/d/x',
+      )
+      ..listaAmigos = [Amigo(email: 'ana@exemplo.com', desde: '2026-10-01')];
+
+    testWidgets('o menu lista Meus dados e os amigos e troca a visão', (
+      t,
+    ) async {
+      final s = comAmigos();
+      await montarApp(t, servicos: s);
+      await t.pumpAndSettle();
+      await t.tap(_seletorPc);
+      await t.pumpAndSettle();
+      expect(_noMenu('Meus dados'), findsOneWidget);
+      expect(_noMenu('Gerenciar amigos…'), findsOneWidget);
+      await t.tap(_noMenu('ana@exemplo.com'));
+      await t.pumpAndSettle();
+      expect(s.chamadas, contains('carregarAmigo(ana@exemplo.com)'));
+      expect(_estado(t).amigo, 'ana@exemplo.com');
+      expect(
+        find.text('Dados de ana@exemplo.com · somente leitura'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Gerenciar amigos… abre Amigos', (t) async {
+      await montarApp(t, servicos: comAmigos());
+      await t.pumpAndSettle();
+      await t.tap(_seletorPc);
+      await t.pumpAndSettle();
+      await t.tap(_noMenu('Gerenciar amigos…'));
+      await t.pumpAndSettle();
+      expect(find.byType(TelaAmigos), findsOneWidget);
+    });
+
+    testWidgets('com amigo aberto: e-mail na cor aviso e Atualizar', (t) async {
+      final s = comAmigos();
+      await montarApp(t, servicos: s);
+      await t.pumpAndSettle();
+      expect(find.byTooltip('Atualizar'), findsNothing);
+      await _estado(t).trocarVisao('ana@exemplo.com');
+      await t.pumpAndSettle();
+      final botao = t.widget<BotaoLeve>(_seletorPc);
+      expect(botao.rotulo, 'ana@exemplo.com');
+      expect(botao.cor, CoresApp.de(t.element(_seletorPc)).aviso);
+      expect(find.widgetWithIcon(BotaoIcone, Icons.refresh), findsOneWidget);
+      int carregas() =>
+          s.chamadas.where((c) => c.startsWith('carregarAmigo')).length;
+      final antes = carregas();
+      s.visoes['2026-10'] = _visaoComValores(amigo: 'ana@exemplo.com');
+      expect(find.text('R\$ 1.234,56'), findsNothing);
+      await t.tap(find.byTooltip('Atualizar'));
+      await t.pumpAndSettle();
+      expect(carregas(), antes + 1);
+      expect(find.text('R\$ 1.234,56'), findsOneWidget);
+    });
+
+    testWidgets('desabilitado enquanto os dados do amigo carregam', (t) async {
+      final s = _AmigoLento()
+        ..estadoConta = const EstadoConta(email: 'eu@gmail.com');
+      await montarApp(t, servicos: s);
+      await t.pumpAndSettle();
+      unawaited(_estado(t).trocarVisao('ana@exemplo.com'));
+      await t.pump();
+      expect(_estado(t).carregandoAmigo, isTrue);
+      expect(t.widget<BotaoLeve>(_seletorPc).onPressed, isNull);
+      s.liberar.complete();
+      await t.pumpAndSettle();
+      expect(t.widget<BotaoLeve>(_seletorPc).onPressed, isNotNull);
+    });
+
+    testWidgets('sem a lista de amigos sobram Meus dados e o aberto', (
+      t,
+    ) async {
+      final s = comAmigos()..erros['amigos'] = Offline();
+      await montarApp(t, servicos: s);
+      await t.pumpAndSettle();
+      await _estado(t).trocarVisao('bia@exemplo.com');
+      await t.pumpAndSettle();
+      await t.tap(_seletorPc);
+      await t.pumpAndSettle();
+      expect(_noMenu('Meus dados'), findsOneWidget);
+      expect(_noMenu('bia@exemplo.com'), findsOneWidget);
+      expect(_noMenu('ana@exemplo.com'), findsNothing);
+    });
+
+    group('celular (360)', () {
+      Finder noAppBar(Finder f) =>
+          find.descendant(of: find.byType(AppBar), matching: f);
+
+      testWidgets('ícone Meus dados no AppBar com o mesmo menu', (t) async {
+        final s = comAmigos();
+        await montarApp(t, servicos: s, tamanho: _pequeno);
+        await t.pumpAndSettle();
+        final icone = noAppBar(find.byTooltip('Meus dados'));
+        expect(icone, findsOneWidget);
+        expect(
+          noAppBar(find.widgetWithIcon(BotaoIcone, Icons.group)),
+          findsOneWidget,
+        );
+        expect(find.text('Voltar aos meus'), findsNothing);
+        await t.tap(icone);
+        await t.pumpAndSettle();
+        expect(_noMenu('Meus dados'), findsOneWidget);
+        expect(_noMenu('Gerenciar amigos…'), findsOneWidget);
+        await t.tap(_noMenu('ana@exemplo.com'));
+        await t.pumpAndSettle();
+        expect(_estado(t).amigo, 'ana@exemplo.com');
+      });
+
+      testWidgets('faixa do amigo com Atualizar e Voltar aos meus', (t) async {
+        final s = comAmigos();
+        await montarApp(t, servicos: s, tamanho: _pequeno);
+        await t.pumpAndSettle();
+        expect(find.byTooltip('Atualizar'), findsNothing);
+        await _estado(t).trocarVisao('ana@exemplo.com');
+        await t.pumpAndSettle();
+        expect(
+          find.text('Dados de ana@exemplo.com · somente leitura'),
+          findsOneWidget,
+        );
+        expect(find.byTooltip('Atualizar'), findsOneWidget);
+        s.visoes['2026-10'] = _visaoComValores(amigo: 'ana@exemplo.com');
+        await t.tap(find.byTooltip('Atualizar'));
+        await t.pumpAndSettle();
+        expect(find.text('R\$ 1.234,56'), findsOneWidget);
+        await t.tap(find.text('Voltar aos meus'));
+        await t.pumpAndSettle();
+        expect(_estado(t).amigo, isNull);
+        expect(find.text('Voltar aos meus'), findsNothing);
+        expect(t.takeException(), isNull);
+      });
+    });
   });
 
   testWidgets('360 de largura mostra barra inferior e AppBar', (t) async {
@@ -482,6 +781,17 @@ void main() {
     await t.pump();
     expect(find.byType(NavigationRail), findsOneWidget);
   });
+}
+
+/// `carregarAmigo` só termina quando o teste liberar.
+class _AmigoLento extends ServicosFalsos {
+  final Completer<void> liberar = Completer<void>();
+
+  @override
+  Future<ResumoAmigo> carregarAmigo(String email) async {
+    await liberar.future;
+    return super.carregarAmigo(email);
+  }
 }
 
 /// `iniciar` só termina quando o teste liberar.

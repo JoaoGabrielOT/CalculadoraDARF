@@ -412,6 +412,17 @@ class EstadoApp extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// "Atualizar" da visão de amigo: baixa os dados dele de novo. O e-mail não
+  /// muda, então `versaoDados` avança para Apuração, Caixa e Radar recarregarem.
+  Future<void> atualizarAmigo() async {
+    final email = amigo;
+    if (email == null) return;
+    await trocarVisao(email);
+    if (amigo != email) return;
+    versaoDados++;
+    notifyListeners();
+  }
+
   bool _superado(Object e) => e is PedidoSuperado;
 
   /// O serviço já limpou o amigo quando o usuário sai da conta ou o remove:

@@ -14,7 +14,6 @@ import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
 import '../apuracao/lista_lotes.dart' show alturaTabela;
-import '../apuracao/seletor_visao.dart';
 import 'controle_caixa.dart';
 
 /// Quantas liquidações futuras aparecem como cartão (py:1943).
@@ -131,7 +130,6 @@ class _Expandido extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
     final visao = controle.visao;
     final amigo = controle.amigo;
     final definido = visao?.resumo.definido ?? false;
@@ -149,18 +147,8 @@ class _Expandido extends StatelessWidget {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Text(
-                  'Visualizando',
-                  style: TextStyle(
-                    color: c.textoSuave,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SeletorVisao(),
                 if (amigo != null) _Dono(amigo),
                 if (amigo == null && visao != null) ...[
-                  const SizedBox(width: 12),
                   FilledButton(
                     onPressed: livre
                         ? () => controle.editarSaldo(context)
@@ -778,9 +766,7 @@ class _Compacto extends StatelessWidget {
       children: [
         _Progresso(controle.carregando),
         const SizedBox(height: 12),
-        const SeletorVisao(largura: double.infinity),
-        if (amigo != null) ...[const SizedBox(height: 8), _Dono(amigo)],
-        const SizedBox(height: 12),
+        if (amigo != null) ...[_Dono(amigo), const SizedBox(height: 12)],
         if (controle.erro != null) _Erro(controle.erro!),
         if (visao == null && controle.erro == null)
           const Padding(

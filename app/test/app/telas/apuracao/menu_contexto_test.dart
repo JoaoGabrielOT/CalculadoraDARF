@@ -52,6 +52,9 @@ Future<void> _direito(WidgetTester t, Finder f) async {
 
 Finder _linha(String id) => find.byKey(Key('linha-$id'));
 
+/// O selo do mês, na barra: área sem menu próprio (cai no menu geral).
+Finder get _seloMes => find.text('● Aberto');
+
 Finder _item(String texto) => find.ancestor(
   of: find.text(texto),
   matching: find.byWidgetPredicate((w) => w is PopupMenuItem),
@@ -228,7 +231,7 @@ void main() {
 
     testWidgets('área vazia: só Geral', (t) async {
       await _montar(t);
-      await _direito(t, find.text('Visualizando'));
+      await _direito(t, _seloMes);
       _esperaItens(
         [
           'Nova compra',
@@ -327,7 +330,7 @@ void main() {
 
     testWidgets('Nova compra (Geral) vem em branco', (t) async {
       await _montar(t);
-      await _direito(t, find.text('Visualizando'));
+      await _direito(t, _seloMes);
       await _escolher(t, 'Nova compra');
       expect(_noDialogo('Novo ativo'), findsOneWidget);
       expect(campoTexto(t, 'ticker').controller!.text, '');
@@ -461,31 +464,31 @@ void main() {
 
     testWidgets('Trocar mês… abre a grade de meses', (t) async {
       await _montar(t);
-      await _direito(t, find.text('Visualizando'));
+      await _direito(t, _seloMes);
       await _escolher(t, 'Trocar mês…');
       expect(find.text('Mês atual'), findsOneWidget);
     });
 
     testWidgets('a troca de lista mostra o destino e alterna', (t) async {
       await _montar(t);
-      await _direito(t, find.text('Visualizando'));
+      await _direito(t, _seloMes);
       await _escolher(t, 'Posição em 28/10/2026');
       expect(find.byKey(const Key('lista-posicoes')), findsOneWidget);
-      await _direito(t, find.text('Visualizando'));
+      await _direito(t, _seloMes);
       await _escolher(t, 'Carteira atual');
       expect(find.byKey(const Key('tabela-lotes')), findsOneWidget);
     });
 
     testWidgets('Meta de lucro… abre as metas', (t) async {
       await _montar(t);
-      await _direito(t, find.text('Visualizando'));
+      await _direito(t, _seloMes);
       await _escolher(t, 'Meta de lucro…');
       expect(find.byKey(const ValueKey('metas-dialogo')), findsOneWidget);
     });
 
     testWidgets('Fechar mês segue o fluxo do botão', (t) async {
       await _montar(t);
-      await _direito(t, find.text('Visualizando'));
+      await _direito(t, _seloMes);
       await _escolher(t, 'Fechar mês 10/2026');
       expect(find.text('Fechar 10/2026'), findsOneWidget);
     });

@@ -136,6 +136,17 @@ VisaoRadar _radarAmigo() => VisaoRadar(
 void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: hojeExemplo));
 
+  for (final (nome, tamanho) in [
+    ('PC', _pc),
+    ('celular', const Size(360, 800)),
+  ]) {
+    testWidgets('$nome: sem o seletor de dados, que fica na casca', (t) async {
+      await _montar(t, tamanho: tamanho);
+      expect(find.byType(DropdownButton<String>), findsNothing);
+      expect(find.text('Visualizando'), findsNothing);
+    });
+  }
+
   testWidgets('lista rola enquanto as cotações carregam e mostra erro por '
       'linha', (t) async {
     final itens = [

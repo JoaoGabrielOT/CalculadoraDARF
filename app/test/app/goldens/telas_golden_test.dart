@@ -491,6 +491,13 @@ void main() {
                 await t.pumpAndSettle();
               }
               await t.pumpAndSettle();
+              // o seletor e a primeira linha à vista, seja qual for o
+              // tamanho do que vem antes da lista
+              await Scrollable.ensureVisible(
+                t.element(seletor),
+                alignment: 0.2,
+              );
+              await t.pumpAndSettle();
               if (carteira) {
                 await t.tap(find.text('Carteira atual'));
                 await t.pumpAndSettle();

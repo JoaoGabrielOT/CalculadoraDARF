@@ -275,7 +275,7 @@ class CampoBusca extends StatelessWidget {
 
 /// Abre um menu ancorado embaixo do widget de [context]. Cada item age pelo
 /// próprio `onTap`; o valor devolvido pelo menu não é usado.
-Future<void> _abrirMenu<T>(
+Future<void> abrirMenuAncorado<T>(
   BuildContext context,
   List<PopupMenuEntry<T>> entradas,
 ) {
@@ -300,7 +300,8 @@ Future<void> _abrirMenu<T>(
   );
 }
 
-PopupMenuItem<T> _item<T>(
+/// Item de menu com a coluna do ✓ (marcado ou vazia, para alinhar os textos).
+PopupMenuItem<T> itemMenu<T>(
   T valor,
   String texto, {
   required bool marcado,
@@ -349,7 +350,12 @@ class BotaoMenu<T> extends StatelessWidget {
     soIcone: soIcone,
     entradas: () => [
       for (final (v, texto) in itens)
-        _item<T>(v, texto, marcado: v == marcado, aoTocar: () => aoEscolher(v)),
+        itemMenu<T>(
+          v,
+          texto,
+          marcado: v == marcado,
+          aoTocar: () => aoEscolher(v),
+        ),
     ],
   );
 }
@@ -389,7 +395,7 @@ class BotaoOrdenar<T> extends StatelessWidget {
       soIcone: soIcone,
       entradas: () => [
         for (final (v, texto) in campos)
-          _item<T>(
+          itemMenu<T>(
             v,
             texto,
             marcado: v == campo,
@@ -398,7 +404,7 @@ class BotaoOrdenar<T> extends StatelessWidget {
           ),
         if (aoInverter != null) ...[
           const PopupMenuDivider(),
-          _item<T>(
+          itemMenu<T>(
             campo,
             desc ? 'Crescente ↑' : 'Decrescente ↓',
             marcado: false,
@@ -431,7 +437,7 @@ class _GatilhoMenu<T> extends StatelessWidget {
     // O Builder faz o menu ancorar no botão, não no widget inteiro.
     return Builder(
       builder: (ctx) {
-        void abrir() => _abrirMenu<T>(ctx, entradas());
+        void abrir() => abrirMenuAncorado<T>(ctx, entradas());
         if (soIcone) {
           return BotaoIcone(icone: icone, tooltip: tooltip, onPressed: abrir);
         }
@@ -480,9 +486,9 @@ class SeletorCaixa<T> extends StatelessWidget {
         builder: (ctx) => InkWell(
           borderRadius: BorderRadius.circular(c.raioCartao),
           onTap: ativo
-              ? () => _abrirMenu<T>(ctx, [
+              ? () => abrirMenuAncorado<T>(ctx, [
                   for (final (v, texto) in itens)
-                    _item<T>(
+                    itemMenu<T>(
                       v,
                       texto,
                       marcado: v == valor,

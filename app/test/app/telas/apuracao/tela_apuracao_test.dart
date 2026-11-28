@@ -6,7 +6,6 @@ import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/servicos/eventos.dart';
 import 'package:calculadoradarf/app/telas/apuracao/controle_apuracao.dart';
 import 'package:calculadoradarf/app/telas/apuracao/tela_apuracao.dart';
-import 'package:calculadoradarf/app/telas/casca.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -78,6 +77,14 @@ int _chamadasA(ServicosFalsos s, String prefixo) =>
 
 void main() {
   setUp(() => ambiente = Ambiente.fixo(hoje: hojeExemplo));
+
+  for (final (nome, tamanho) in [('PC', _pc), ('celular', _celular)]) {
+    testWidgets('$nome: sem o seletor de dados, que fica na casca', (t) async {
+      await _montar(t, tamanho: tamanho);
+      expect(find.byType(DropdownButton<String>), findsNothing);
+      expect(find.text('Visualizando'), findsNothing);
+    });
+  }
 
   testWidgets('mostra KPIs e detalhamento com os textos do Python', (t) async {
     final s = ServicosFalsos();
@@ -233,10 +240,6 @@ void main() {
     expect(find.text('● Aberto'), findsOneWidget);
     expect(find.text('10/2026  ▾'), findsOneWidget);
     expect(_habilitado(_botaoFechar, t), isTrue);
-    expect(
-      _habilitado(find.widgetWithText(OutlinedButton, 'Atualizar'), t),
-      isFalse,
-    );
   });
 
   testWidgets('selo e botões: mês fechado', (t) async {
@@ -252,10 +255,6 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Somente leitura'), findsOneWidget);
     expect(_habilitado(_botaoFechar, t), isFalse);
-    expect(
-      _habilitado(find.widgetWithText(OutlinedButton, 'Atualizar'), t),
-      isTrue,
-    );
     expect(amigo.chamadas, contains('carregarMes(2026-10, ana@exemplo.com)'));
   });
 
@@ -623,72 +622,6 @@ void main() {
       expect(find.text('Tarde demais.'), findsNothing);
       expect(find.text('Fechar 10/2026'), findsNothing);
     });
-  });
-
-  testWidgets('Visualizando amigo: subtítulo e Atualizar habilitado', (
-    t,
-  ) async {
-    final s = ServicosFalsos();
-    await montarApp(
-      t,
-      servicos: s,
-      tela: Casca(
-        telaDaAba: (a) =>
-            a == Aba.apuracao ? const TelaApuracao() : const SizedBox(),
-      ),
-    );
-    await t.pumpAndSettle();
-    expect(find.text('Ações e BDRs · apuração mensal de IR'), findsOneWidget);
-    await _estado(t).trocarVisao('ana@exemplo.com');
-    await t.pumpAndSettle();
-    expect(
-      find.text('Dados de ana@exemplo.com · somente leitura'),
-      findsOneWidget,
-    );
-    final atualizar = find.widgetWithText(OutlinedButton, 'Atualizar');
-    expect(_habilitado(atualizar, t), isTrue);
-    final antes = _chamadasA(s, 'carregarAmigo');
-    await t.tap(atualizar);
-    await t.pumpAndSettle();
-    expect(_chamadasA(s, 'carregarAmigo'), antes + 1);
-  });
-
-  testWidgets('Atualizar do amigo mostra os dados novos na tela', (t) async {
-    final s = ServicosFalsos();
-    await _montar(t, servicos: s);
-    await _estado(t).trocarVisao('ana@exemplo.com');
-    await t.pumpAndSettle();
-    expect(find.text('R\$ 1.234,56'), findsNothing);
-    s.visoes['2026-10'] = _visaoComValores(amigo: 'ana@exemplo.com');
-    await t.tap(find.widgetWithText(OutlinedButton, 'Atualizar'));
-    await t.pumpAndSettle();
-    expect(find.text('R\$ 1.234,56'), findsOneWidget);
-  });
-
-  testWidgets('compacto: Atualizar só aparece com amigo e atualiza', (t) async {
-    final s = ServicosFalsos();
-    await _montar(t, servicos: s, tamanho: _celular);
-    expect(find.byTooltip('Atualizar'), findsNothing);
-    await _estado(t).trocarVisao('ana@exemplo.com');
-    await t.pumpAndSettle();
-    expect(find.byTooltip('Atualizar'), findsOneWidget);
-    s.visoes['2026-10'] = _visaoComValores(amigo: 'ana@exemplo.com');
-    await t.tap(find.byTooltip('Atualizar'));
-    await t.pumpAndSettle();
-    expect(find.text('R\$ 1.234,56'), findsOneWidget);
-  });
-
-  testWidgets('o seletor Visualizando lista Meus dados e os amigos', (t) async {
-    final s = ServicosFalsos()
-      ..listaAmigos = [Amigo(email: 'ana@exemplo.com', desde: '2026-10-01')];
-    await _montar(t, servicos: s);
-    await t.tap(find.byType(DropdownButton<String>));
-    await t.pumpAndSettle();
-    expect(find.text('ana@exemplo.com'), findsOneWidget);
-    await t.tap(find.text('ana@exemplo.com'));
-    await t.pumpAndSettle();
-    expect(s.chamadas, contains('carregarAmigo(ana@exemplo.com)'));
-    expect(_estado(t).amigo, 'ana@exemplo.com');
   });
 
   testWidgets('mês ilegível mostra aviso e permite trocar de mês', (t) async {

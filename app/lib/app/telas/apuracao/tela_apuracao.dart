@@ -1,4 +1,4 @@
-// Tela de Apuração: barra (Visualizando, Atualizar, Mês, selo, Fechar mês),
+// Tela de Apuração: barra (Mês, selo, Fechar mês),
 // indicadores e Detalhamento (calculadora_darf.py:1279-1345, 1408-1443;
 // android/main.py:725-866). As tabelas de compras e vendas entram em [conteudo]
 // ([listasApuracao], Tarefa 14). Expandido: conteúdo e Detalhamento lado a lado; compacto: lista
@@ -22,7 +22,6 @@ import 'indicadores.dart';
 import 'lista_posicoes.dart';
 import 'lista_vendas.dart';
 import 'menu_contexto.dart';
-import 'seletor_visao.dart';
 
 class TelaApuracao extends StatelessWidget {
   /// [aoAbrirMetas] abre o diálogo de metas (cartão do celular);
@@ -118,7 +117,10 @@ class _Expandido extends StatelessWidget {
             _Progresso(controle.carregando || controle.verificando),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-              child: _Barra(controle: controle, compacto: false),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _Barra(controle: controle, compacto: false),
+              ),
             ),
             _Avisos(controle),
             if (visao == null)
@@ -207,8 +209,6 @@ class _Compacto extends StatelessWidget {
           aoTocar: aoAbrirMetas,
         ),
       ],
-      const SizedBox(height: 12),
-      const SeletorVisao(largura: double.infinity),
       if (visao == null && controle.erro == null)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 48),
@@ -311,8 +311,8 @@ class _Avisos extends StatelessWidget {
   }
 }
 
-/// Barra da tela. Expandido: Visualizando + Atualizar à esquerda, Mês, selo e
-/// Fechar mês à direita (py:1279-1295). Compacto: mês, selo e menu.
+/// Barra da tela (py:1279-1295; o seletor de dados fica na casca).
+/// Expandido: Mês, selo e Fechar mês. Compacto: mês, selo e menu.
 class _Barra extends StatelessWidget {
   const _Barra({required this.controle, required this.compacto});
 
@@ -337,14 +337,6 @@ class _Barra extends StatelessWidget {
           botaoMes,
           ?selo,
           const Spacer(),
-          if (estado.amigo != null)
-            IconButton(
-              tooltip: 'Atualizar',
-              icon: const Icon(Icons.refresh),
-              onPressed: estado.carregandoAmigo
-                  ? null
-                  : () => controle.atualizarAmigo(),
-            ),
           if (visao != null && visao.editavel)
             PopupMenuButton<String>(
               tooltip: 'Mais ações',
@@ -362,22 +354,6 @@ class _Barra extends StatelessWidget {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(
-          'Visualizando',
-          style: TextStyle(
-            color: c.textoSuave,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SeletorVisao(),
-        OutlinedButton(
-          onPressed: estado.amigo == null || estado.carregandoAmigo
-              ? null
-              : controle.atualizarAmigo,
-          child: const Text('Atualizar'),
-        ),
-        const SizedBox(width: 24),
         Text(
           'Mês',
           style: TextStyle(

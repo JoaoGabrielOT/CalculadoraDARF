@@ -682,15 +682,6 @@ class ControleApuracao extends ChangeNotifier {
     }
   }
 
-  /// "Atualizar" (visão de amigo): baixa os dados dele de novo.
-  Future<void> atualizarAmigo() async {
-    final amigo = _estado.amigo;
-    if (amigo == null) return;
-    // baixa de novo; versaoDados não muda, então a tela recarrega aqui
-    await _estado.trocarVisao(amigo);
-    if (_estado.amigo == amigo) await recarregar();
-  }
-
   /// Grade de meses; os com dados vêm marcados (py:2989-2990).
   Future<void> escolher(BuildContext c) async {
     Set<String> comDados;

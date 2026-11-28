@@ -8,11 +8,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../integracoes/integracoes.dart';
+import '../componentes/controles.dart';
+import '../componentes/seletor_dados.dart';
 import '../estado/estado_app.dart';
 import '../regras/textos.dart';
 import '../tema/cores_app.dart';
 import '../tema/layout.dart';
-import 'amigos/tela_amigos.dart';
 import 'apuracao/tela_apuracao.dart';
 import 'atualizacao/dialogo_atualizacao.dart';
 import 'caixa/tela_caixa.dart';
@@ -113,8 +114,10 @@ class _CascaState extends State<Casca> {
           ),
       ],
     );
+    final amigo = estado.amigo;
     final corpo = Column(
       children: [
+        if (amigo != null) _FaixaAmigo(estado, amigo),
         ..._faixas(estado),
         Expanded(child: paginas),
       ],
@@ -150,6 +153,7 @@ class _CascaState extends State<Casca> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               actions: [
+                const SeletorDados(soIcone: true),
                 IconButton(
                   icon: Icon(_iconeSync(estado.conta.status)),
                   tooltip: textoStatusSync(estado.conta),
@@ -301,7 +305,10 @@ class _BarraLateral extends StatelessWidget {
   );
 }
 
-/// Calculadora_darf.py:1297-1322: título, subtítulo e os botões da conta.
+/// Calculadora_darf.py:1297-1322, numa linha: título e subtítulo à esquerda;
+/// status, saldo, metas, seletor de dados e conta à direita. Abaixo de
+/// [_larguraCabecalhoCheio] as metas e o seletor viram ícone e o status vira
+/// só o ponto, com o texto no tooltip.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho(this.estado);
 
@@ -311,15 +318,16 @@ class _Cabecalho extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = CoresApp.de(context);
     final amigo = estado.amigo;
-    final email = estado.conta.email;
     final ativas = estado.metasAtivas;
-    // o Windows desabilita o botão enquanto espera o login (py:2760)
-    final login =
-        estado.conta.ocupado || estado.conta.status == StatusSync.login;
+    final estreito = MediaQuery.sizeOf(context).width < _larguraCabecalhoCheio;
+    final status = textoStatusSync(estado.conta);
+    final corStatus = corSync(cores, estado.conta.status);
+    final metas = ativas > 0 ? 'Meta de lucro · $ativas' : 'Meta de lucro';
+    void aoMetas() => unawaited(abrirMetas(context));
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 8,
         children: [
           Expanded(
             child: Column(
@@ -327,12 +335,16 @@ class _Cabecalho extends StatelessWidget {
               children: [
                 const Text(
                   'Calculadora DARF',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   amigo == null
                       ? 'Ações e BDRs · apuração mensal de IR'
                       : 'Dados de $amigo · somente leitura',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: amigo == null ? cores.textoSuave : cores.aviso,
                   ),
@@ -340,53 +352,153 @@ class _Cabecalho extends StatelessWidget {
               ],
             ),
           ),
-          Flexible(
-            flex: 2,
-            child: Wrap(
-              alignment: WrapAlignment.end,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                OutlinedButton(
-                  onPressed: () => estado.irPara(Aba.caixa),
-                  child: Text(estado.textoSaldo),
-                ),
-                Text(
-                  textoStatusSync(estado.conta),
-                  style: TextStyle(
-                    color: corSync(cores, estado.conta.status),
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+          if (estreito)
+            Tooltip(
+              message: status,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: corStatus,
+                    shape: BoxShape.circle,
                   ),
+                  child: const SizedBox.square(dimension: 10),
                 ),
-                OutlinedButton(
-                  onPressed: () => unawaited(abrirMetas(context)),
-                  child: Text(
-                    'Meta de lucro'
-                    '${ativas > 0 ? ' · $ativas ativa${ativas == 1 ? '' : 's'}' : ''}',
-                  ),
-                ),
-                OutlinedButton(
-                  onPressed: () => unawaited(abrirAmigos(context)),
-                  child: const Text('Amigos'),
-                ),
-                OutlinedButton(
-                  onPressed: login
-                      ? null
-                      : () => unawaited(clicarConta(context)),
-                  child: Text(
-                    email == null
-                        ? 'Conectar Google'
-                        : email.length <= 26
-                        ? email
-                        : '${email.substring(0, 24)}…',
-                  ),
-                ),
-              ],
+              ),
+            )
+          else
+            Text(
+              status,
+              style: TextStyle(
+                color: corStatus,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
             ),
+          BotaoLeve(
+            icone: Icons.account_balance_wallet_outlined,
+            rotulo: estado.textoSaldo,
+            onPressed: () => estado.irPara(Aba.caixa),
           ),
+          if (estreito)
+            BotaoIcone(
+              icone: Icons.track_changes,
+              tooltip: metas,
+              marcado: ativas > 0,
+              onPressed: aoMetas,
+            )
+          else
+            BotaoLeve(
+              icone: Icons.track_changes,
+              rotulo: metas,
+              onPressed: aoMetas,
+            ),
+          SeletorDados(soIcone: estreito),
+          if (amigo != null) _BotaoAtualizarAmigo(estado),
+          _Conta(estado),
         ],
+      ),
+    );
+  }
+}
+
+/// Abaixo desta largura de janela o cabeçalho do PC encolhe para ícones.
+const _larguraCabecalhoCheio = 1200.0;
+
+/// "Atualizar" da visão de amigo (cabeçalho do PC e faixa do celular).
+class _BotaoAtualizarAmigo extends StatelessWidget {
+  const _BotaoAtualizarAmigo(this.estado);
+
+  final EstadoApp estado;
+
+  @override
+  Widget build(BuildContext context) => BotaoIcone(
+    icone: Icons.refresh,
+    tooltip: 'Atualizar',
+    onPressed: estado.carregandoAmigo
+        ? null
+        : () => unawaited(estado.atualizarAmigo()),
+  );
+}
+
+/// Avatar com a inicial do e-mail (tooltip com o e-mail) ou, sem conta,
+/// "Conectar Google". Os dois abrem `clicarConta`.
+class _Conta extends StatelessWidget {
+  const _Conta(this.estado);
+
+  final EstadoApp estado;
+
+  @override
+  Widget build(BuildContext context) {
+    final email = estado.conta.email;
+    // o Windows desabilita o botão enquanto espera o login (py:2760)
+    final login =
+        estado.conta.ocupado || estado.conta.status == StatusSync.login;
+    final aoTocar = login ? null : () => unawaited(clicarConta(context));
+    if (email == null) {
+      return BotaoSecundario(
+        icone: Icons.login,
+        rotulo: 'Conectar Google',
+        onPressed: aoTocar,
+      );
+    }
+    final cores = CoresApp.de(context);
+    return IconButton(
+      tooltip: email,
+      onPressed: aoTocar,
+      padding: EdgeInsets.zero,
+      style: const ButtonStyle(
+        fixedSize: WidgetStatePropertyAll(Size.square(40)),
+        minimumSize: WidgetStatePropertyAll(Size.square(40)),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: CircleAvatar(
+        radius: 17,
+        backgroundColor: cores.destaque,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        child: Text(
+          email.isEmpty ? '?' : email.characters.first.toUpperCase(),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+}
+
+/// Celular: faixa fixa abaixo do AppBar com o amigo aberto; empurra o
+/// conteúdo e some ao voltar para "Meus dados".
+class _FaixaAmigo extends StatelessWidget {
+  const _FaixaAmigo(this.estado, this.amigo);
+
+  final EstadoApp estado;
+  final String amigo;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = CoresApp.de(context);
+    return Material(
+      color: cores.aviso.withValues(alpha: .18),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 16, right: 4),
+        child: Row(
+          children: [
+            Icon(Icons.group, size: 18, color: cores.aviso),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Dados de $amigo · somente leitura',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            _BotaoAtualizarAmigo(estado),
+            TextButton(
+              onPressed: () => unawaited(estado.trocarVisao(null)),
+              child: const Text('Voltar aos meus'),
+            ),
+          ],
+        ),
       ),
     );
   }

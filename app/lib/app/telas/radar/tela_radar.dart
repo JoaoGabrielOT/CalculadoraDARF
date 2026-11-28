@@ -16,7 +16,6 @@ import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
 import '../../tema/layout.dart';
 import '../../tema/temas.dart';
-import '../apuracao/seletor_visao.dart';
 import '../grafico/tela_grafico.dart';
 import 'controle_radar.dart';
 import 'linha_radar.dart';
@@ -471,7 +470,6 @@ class _Expandido extends StatelessWidget {
                       runSpacing: 8,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        const SeletorVisao(largura: 240),
                         if (amigo == null)
                           _Adicionar(controle: controle, compacto: false)
                         else
@@ -686,7 +684,6 @@ class _Compacto extends StatelessWidget {
                   ],
                 ),
                 _Status(controle),
-                const SeletorVisao(largura: double.infinity),
                 if (amigo == null)
                   _Adicionar(controle: controle, compacto: true)
                 else

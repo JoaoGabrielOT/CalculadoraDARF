@@ -183,6 +183,30 @@ void main() {
       expect(e.carregandoAmigo, isFalse);
     });
 
+    test('atualizarAmigo baixa de novo e avança versaoDados', () async {
+      final (e, s, _) = await _criar();
+      await e.trocarVisao('bia@gmail.com');
+      final versao = e.versaoDados;
+      var avisos = 0;
+      e.addListener(() => avisos++);
+      await e.atualizarAmigo();
+      expect(
+        s.chamadas.where((c) => c == 'carregarAmigo(bia@gmail.com)'),
+        hasLength(2),
+      );
+      expect(e.amigo, 'bia@gmail.com');
+      expect(e.versaoDados, versao + 1);
+      expect(avisos, greaterThan(0));
+    });
+
+    test('atualizarAmigo sem amigo aberto não faz nada', () async {
+      final (e, s, _) = await _criar();
+      final versao = e.versaoDados;
+      await e.atualizarAmigo();
+      expect(s.chamadas, isNot(contains(startsWith('carregarAmigo'))));
+      expect(e.versaoDados, versao);
+    });
+
     test('trocarVisao(null) volta aos meus dados no mês inicial', () async {
       final (e, s, _) = await _criar();
       await e.trocarVisao('bia@gmail.com');

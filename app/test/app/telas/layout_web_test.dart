@@ -1,5 +1,6 @@
 // Web no celular: alturas baixas, paisagem e teclado aberto sem overflow.
 
+import 'package:calculadoradarf/app/estado/estado_app.dart';
 import 'package:calculadoradarf/app/servicos/api.dart';
 import 'package:calculadoradarf/app/telas/casca.dart';
 import 'package:calculadoradarf/app/telas/formularios/abrir_formulario.dart';
@@ -8,6 +9,7 @@ import 'package:calculadoradarf/integracoes/integracoes.dart';
 import 'package:calculadoradarf/nucleo/nucleo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import '../apoio/abrir_formulario.dart';
 import '../apoio/dados_exemplo.dart';
@@ -44,6 +46,29 @@ void main() {
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       expect(find.byType(TelaLoginWeb), findsOneWidget);
+    });
+  }
+
+  for (final tamanho in const [Size(320, 568), Size(667, 375)]) {
+    testWidgets('AppBar e faixa do amigo cabem em $tamanho', (t) async {
+      final s = ServicosFalsos()
+        ..estadoConta = const EstadoConta(
+          temCredencial: true,
+          temToken: true,
+          email: 'eu@gmail.com',
+          status: StatusSync.ok,
+        );
+      await montarApp(t, servicos: s, plataforma: _web(), tamanho: tamanho);
+      await t.pumpAndSettle();
+      final estado = Provider.of<EstadoApp>(
+        t.element(find.byType(Casca)),
+        listen: false,
+      );
+      await estado.trocarVisao('nome.bem.comprido.de.verdade@exemplo.com');
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      expect(find.text('Voltar aos meus'), findsOneWidget);
+      expect(find.byTooltip('Atualizar'), findsWidgets);
     });
   }
 
