@@ -395,30 +395,39 @@ class EstadoApp extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    await _abrirAmigo(email, geracao);
+  }
+
+  /// Baixa os dados de [email] e os abre; devolve se deu certo (falso no
+  /// erro e no pedido superado).
+  Future<bool> _abrirAmigo(String email, int geracao) async {
     carregandoAmigo = true;
     _pedido = email;
     notifyListeners();
+    var aberto = false;
     try {
       final resumo = await _servicos.carregarAmigo(email);
-      if (geracao != _geracaoVisao) return;
+      if (geracao != _geracaoVisao) return false;
       amigo = email;
       mes = resumo.mesInicial;
+      aberto = true;
     } catch (e) {
-      if (geracao != _geracaoVisao) return;
+      if (geracao != _geracaoVisao) return false;
       if (!_superado(e)) avisar('Não foi possível carregar', textoErro(e));
     }
     _pedido = null;
     carregandoAmigo = false;
     notifyListeners();
+    return aberto;
   }
 
   /// "Atualizar" da visão de amigo: baixa os dados dele de novo. O e-mail não
-  /// muda, então `versaoDados` avança para Apuração, Caixa e Radar recarregarem.
+  /// muda, então `versaoDados` avança para Apuração, Caixa e Radar
+  /// recarregarem; na falha nada recarrega.
   Future<void> atualizarAmigo() async {
     final email = amigo;
     if (email == null) return;
-    await trocarVisao(email);
-    if (amigo != email) return;
+    if (!await _abrirAmigo(email, ++_geracaoVisao)) return;
     versaoDados++;
     notifyListeners();
   }

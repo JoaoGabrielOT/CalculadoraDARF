@@ -68,7 +68,7 @@ void main() {
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       expect(find.text('Voltar aos meus'), findsOneWidget);
-      expect(find.byTooltip('Atualizar'), findsWidgets);
+      expect(find.byTooltip('Atualizar dados do amigo'), findsOneWidget);
     });
   }
 

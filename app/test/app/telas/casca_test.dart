@@ -246,8 +246,32 @@ void main() {
       await _estado(t).trocarVisao('nome.bem.comprido.de.verdade@exemplo.com');
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
-      expect(find.byTooltip('Atualizar'), findsOneWidget);
+      expect(find.byTooltip('Atualizar dados do amigo'), findsOneWidget);
     });
+
+    // logo acima do corte: a barra lateral e o padding também comem largura
+    for (final largura in [1200.0, 1260.0]) {
+      testWidgets('$largura com amigo, saldo grande e hora não estoura', (
+        t,
+      ) async {
+        const longo = 'nome.bem.comprido.de.verdade@exemplo.com';
+        final s = ServicosFalsos()
+          ..metasAtivasFalsas = 12
+          ..estadoConta = const EstadoConta(
+            email: 'outro.nome.bem.comprido.demais@gmail.com',
+            status: StatusSync.ok,
+            ultimaSync: 1700000000,
+          );
+        await _montarCabecalho(t, s, tamanho: Size(largura, 768));
+        _estado(t).textoSaldo = 'Saldo: -R\$ 1.234.567,89';
+        await _estado(t).trocarVisao(longo);
+        await t.pumpAndSettle();
+        expect(t.takeException(), isNull);
+        expect(find.text('Saldo: -R\$ 1.234.567,89'), findsOneWidget);
+        expect(find.byTooltip('Atualizar dados do amigo'), findsOneWidget);
+        expect(find.textContaining('Sincronizado às'), findsOneWidget);
+      });
+    }
 
     testWidgets('e-mails de 40 caracteres a 1366 não estouram', (t) async {
       const longo = 'nome.bem.comprido.de.verdade@exemplo.com';
@@ -312,7 +336,7 @@ void main() {
       final s = comAmigos();
       await montarApp(t, servicos: s);
       await t.pumpAndSettle();
-      expect(find.byTooltip('Atualizar'), findsNothing);
+      expect(find.byTooltip('Atualizar dados do amigo'), findsNothing);
       await _estado(t).trocarVisao('ana@exemplo.com');
       await t.pumpAndSettle();
       final botao = t.widget<BotaoLeve>(_seletorPc);
@@ -324,7 +348,7 @@ void main() {
       final antes = carregas();
       s.visoes['2026-10'] = _visaoComValores(amigo: 'ana@exemplo.com');
       expect(find.text('R\$ 1.234,56'), findsNothing);
-      await t.tap(find.byTooltip('Atualizar'));
+      await t.tap(find.byTooltip('Atualizar dados do amigo'));
       await t.pumpAndSettle();
       expect(carregas(), antes + 1);
       expect(find.text('R\$ 1.234,56'), findsOneWidget);
@@ -387,16 +411,16 @@ void main() {
         final s = comAmigos();
         await montarApp(t, servicos: s, tamanho: _pequeno);
         await t.pumpAndSettle();
-        expect(find.byTooltip('Atualizar'), findsNothing);
+        expect(find.byTooltip('Atualizar dados do amigo'), findsNothing);
         await _estado(t).trocarVisao('ana@exemplo.com');
         await t.pumpAndSettle();
         expect(
           find.text('Dados de ana@exemplo.com · somente leitura'),
           findsOneWidget,
         );
-        expect(find.byTooltip('Atualizar'), findsOneWidget);
+        expect(find.byTooltip('Atualizar dados do amigo'), findsOneWidget);
         s.visoes['2026-10'] = _visaoComValores(amigo: 'ana@exemplo.com');
-        await t.tap(find.byTooltip('Atualizar'));
+        await t.tap(find.byTooltip('Atualizar dados do amigo'));
         await t.pumpAndSettle();
         expect(find.text('R\$ 1.234,56'), findsOneWidget);
         await t.tap(find.text('Voltar aos meus'));

@@ -306,9 +306,9 @@ class _BarraLateral extends StatelessWidget {
 }
 
 /// Calculadora_darf.py:1297-1322, numa linha: título e subtítulo à esquerda;
-/// status, saldo, metas, seletor de dados e conta à direita. Abaixo de
-/// [_larguraCabecalhoCheio] as metas e o seletor viram ícone e o status vira
-/// só o ponto, com o texto no tooltip.
+/// status, saldo, metas, seletor de dados e conta à direita. Com menos de
+/// [_larguraCabecalhoCheio] de largura disponível as metas e o seletor viram
+/// ícone e o status vira só o ponto, com o texto no tooltip.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho(this.estado);
 
@@ -316,10 +316,17 @@ class _Cabecalho extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // decide pela largura que sobra ao lado da barra lateral, não pela janela
+    return LayoutBuilder(
+      builder: (context, restricoes) =>
+          _linha(context, restricoes.maxWidth < _larguraCabecalhoCheio),
+    );
+  }
+
+  Widget _linha(BuildContext context, bool estreito) {
     final cores = CoresApp.de(context);
     final amigo = estado.amigo;
     final ativas = estado.metasAtivas;
-    final estreito = MediaQuery.sizeOf(context).width < _larguraCabecalhoCheio;
     final status = textoStatusSync(estado.conta);
     final corStatus = corSync(cores, estado.conta.status);
     final metas = ativas > 0 ? 'Meta de lucro · $ativas' : 'Meta de lucro';
@@ -367,12 +374,17 @@ class _Cabecalho extends StatelessWidget {
               ),
             )
           else
-            Text(
-              status,
-              style: TextStyle(
-                color: corStatus,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 180),
+              child: Text(
+                status,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: corStatus,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
           BotaoLeve(
@@ -402,8 +414,9 @@ class _Cabecalho extends StatelessWidget {
   }
 }
 
-/// Abaixo desta largura de janela o cabeçalho do PC encolhe para ícones.
-const _larguraCabecalhoCheio = 1200.0;
+/// Largura do cabeçalho (sem a barra lateral de 210 px) abaixo da qual ele
+/// encolhe para ícones: a janela de 1200 px do spec.
+const _larguraCabecalhoCheio = 990.0;
 
 /// "Atualizar" da visão de amigo (cabeçalho do PC e faixa do celular).
 class _BotaoAtualizarAmigo extends StatelessWidget {
@@ -414,7 +427,7 @@ class _BotaoAtualizarAmigo extends StatelessWidget {
   @override
   Widget build(BuildContext context) => BotaoIcone(
     icone: Icons.refresh,
-    tooltip: 'Atualizar',
+    tooltip: 'Atualizar dados do amigo',
     onPressed: estado.carregandoAmigo
         ? null
         : () => unawaited(estado.atualizarAmigo()),

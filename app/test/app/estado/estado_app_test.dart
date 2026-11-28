@@ -199,6 +199,21 @@ void main() {
       expect(avisos, greaterThan(0));
     });
 
+    test(
+      'atualizarAmigo com falha no carregamento não avança versaoDados',
+      () async {
+        final (e, s, _) = await _criar();
+        await e.trocarVisao('bia@gmail.com');
+        final versao = e.versaoDados;
+        s.erros['carregarAmigo'] = Offline('x');
+        await e.atualizarAmigo();
+        expect(e.versaoDados, versao);
+        expect(e.amigo, 'bia@gmail.com');
+        expect(e.carregandoAmigo, isFalse);
+        expect(e.avisos.single.titulo, 'Não foi possível carregar');
+      },
+    );
+
     test('atualizarAmigo sem amigo aberto não faz nada', () async {
       final (e, s, _) = await _criar();
       final versao = e.versaoDados;
