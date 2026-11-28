@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/cartao.dart';
 import '../../componentes/carregando.dart';
-import '../../componentes/controles.dart' hide Selo;
+import '../../componentes/controles.dart';
 import '../../estado/estado_app.dart';
 import '../../servicos/api.dart';
 import '../../tema/cores_app.dart';
@@ -214,14 +214,23 @@ class _Legenda extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = CoresApp.de(context);
+    final grande = expandido(context);
     final faixas = [
       for (final (i, atr) in _atrDaFaixa.indexed)
         () {
           final risco = classificarRisco(atr);
-          return LegendaPonto(
-            texto: '${risco.rotulo} · ${_faixasRotulo[i]}',
-            cor: corFaixaRisco(risco) ?? c.textoSuave,
-          );
+          final cor = corFaixaRisco(risco) ?? c.textoSuave;
+          // PC: "nome · faixa" numa linha; celular: nome e faixa em 2 linhas
+          return grande
+              ? LegendaPonto(
+                  texto: '${risco.rotulo} · ${_faixasRotulo[i]}',
+                  cor: cor,
+                )
+              : LegendaPonto(
+                  texto: risco.rotulo,
+                  detalhe: _faixasRotulo[i],
+                  cor: cor,
+                );
         }(),
     ];
     return Column(
@@ -236,7 +245,7 @@ class _Legenda extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        if (expandido(context))
+        if (grande)
           Wrap(spacing: 20, runSpacing: 6, children: faixas)
         else
           for (var i = 0; i < faixas.length; i += 2)
@@ -267,7 +276,6 @@ class _Filtros extends StatelessWidget {
       opcoes: [for (final f in filtrosRadar) (f, f)],
       valor: controle.filtro,
       aoMudar: controle.definirFiltro,
-      compacto: !grande,
     );
     Widget ordenar({required bool soIcone}) => BotaoOrdenar<String>(
       key: const Key('menu-ordem'),
@@ -290,14 +298,25 @@ class _Filtros extends StatelessWidget {
             ),
           );
     if (!grande) {
+      // Segmentado de 4 opções não cabe em 360 px sem quebrar o rótulo:
+      // no celular o filtro é uma caixa, na mesma linha do Ordenar
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 10,
         children: [
-          segmentado,
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ordenar(soIcone: false),
+          Row(
+            spacing: 8,
+            children: [
+              Expanded(
+                child: SeletorCaixa<String>(
+                  rotulo: 'Mostrar',
+                  valor: controle.filtro,
+                  itens: [for (final f in filtrosRadar) (f, f)],
+                  aoMudar: controle.definirFiltro,
+                ),
+              ),
+              ordenar(soIcone: false),
+            ],
           ),
           ?resumo,
         ],
@@ -353,8 +372,9 @@ class _AdicionarState extends State<_Adicionar> {
 
   @override
   Widget build(BuildContext context) {
+    final altura = expandido(context) ? 40.0 : 48.0;
     final campo = SizedBox(
-      height: 40,
+      height: altura,
       child: TextField(
         key: const Key('campo-ticker'),
         controller: _campo,
@@ -366,9 +386,7 @@ class _AdicionarState extends State<_Adicionar> {
         minLines: null,
         onSubmitted: (_) => unawaited(_enviar()),
         decoration: InputDecoration(
-          hintText: widget.compacto
-              ? 'Adicionar ticker (ex.: VALE3)'
-              : 'Ticker (ex.: VALE3)',
+          hintText: 'Ticker (ex.: VALE3)',
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
         ),
@@ -384,8 +402,8 @@ class _AdicionarState extends State<_Adicionar> {
             icon: const Icon(Icons.add),
             tooltip: 'Adicionar',
             style: IconButton.styleFrom(
-              fixedSize: const Size.square(40),
-              minimumSize: const Size.square(40),
+              fixedSize: Size.square(altura),
+              minimumSize: Size.square(altura),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),

@@ -661,31 +661,52 @@ class Selo extends StatelessWidget {
   );
 }
 
-/// Legenda não clicável: ponto colorido e texto suave.
+/// Legenda não clicável: ponto colorido e texto suave. Com [detalhe], o
+/// texto vira o nome (linha 1) e o detalhe fica na linha 2, e o ponto
+/// acompanha a primeira linha.
 class LegendaPonto extends StatelessWidget {
-  const LegendaPonto({super.key, required this.texto, required this.cor});
+  const LegendaPonto({
+    super.key,
+    required this.texto,
+    required this.cor,
+    this.detalhe,
+  });
 
   final String texto;
   final Color cor;
+  final String? detalhe;
 
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      _Ponto(cor),
-      const SizedBox(width: 6),
-      // quebra em vez de estourar quando a coluna é estreita
-      Flexible(
-        child: Text(
-          texto,
-          style: TextStyle(
-            color: CoresApp.de(context).textoSuave,
-            fontSize: 12,
-          ),
+  Widget build(BuildContext context) {
+    final suave = CoresApp.de(context).textoSuave;
+    final estilo = TextStyle(color: suave, fontSize: 12);
+    final d = detalhe;
+    // quebra em vez de estourar quando a coluna é estreita
+    final corpo = d == null
+        ? Text(texto, style: estilo)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(texto, style: estilo.copyWith(fontWeight: FontWeight.w700)),
+              Text(d, style: estilo),
+            ],
+          );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: d == null
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(top: d == null ? 0 : 4),
+          child: _Ponto(cor),
         ),
-      ),
-    ],
-  );
+        const SizedBox(width: 6),
+        Flexible(child: corpo),
+      ],
+    );
+  }
 }
 
 class _Ponto extends StatelessWidget {

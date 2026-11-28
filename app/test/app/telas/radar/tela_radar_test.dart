@@ -169,14 +169,14 @@ void main() {
     expect(t.getTopLeft(refresh).dx, greaterThan(t.getTopRight(principal).dx));
   });
 
-  testWidgets('celular: campo e + roxo de 40 px na mesma linha', (t) async {
+  testWidgets('celular: campo e + roxo de 48 px na mesma linha', (t) async {
     final s = ServicosFalsos();
     await _montar(t, servicos: s, tamanho: const Size(360, 800));
     final campo = find.byKey(const Key('campo-ticker'));
     final mais = find.byTooltip('Adicionar');
     expect(mais, findsOneWidget);
-    expect(t.getSize(campo).height, 40);
-    expect(t.getSize(mais), const Size(40, 40));
+    expect(t.getSize(campo).height, 48);
+    expect(t.getSize(mais), const Size(48, 48));
     expect(t.getCenter(campo).dy, t.getCenter(mais).dy);
     final cores = CoresApp.de(t.element(find.byType(TelaRadar)));
     expect(Theme.of(t.element(mais)).colorScheme.primary, cores.destaque);
@@ -191,13 +191,59 @@ void main() {
     for (final tamanho in [const Size(360, 800), const Size(840, 800), _pc]) {
       await _montar(t, tamanho: tamanho);
       expect(t.takeException(), isNull, reason: '$tamanho');
-      expect(find.byType(Segmentado<String>), findsOneWidget);
       final ordenar = t.widget<BotaoOrdenar<String>>(
         find.byKey(const Key('menu-ordem')),
       );
       expect(ordenar.aoInverter, isNull);
-      expect(find.text('Em carteira'), findsOneWidget);
+      if (tamanho.width < 400) {
+        expect(find.byType(Segmentado<String>), findsNothing);
+        final caixa = find.byType(SeletorCaixa<String>);
+        expect(caixa, findsOneWidget);
+        expect(find.text('Mostrar'), findsOneWidget);
+        expect(t.getSize(caixa).height, 48);
+        expect(t.getSize(find.byKey(const Key('menu-ordem'))).height, 48);
+        expect(
+          t.getTopLeft(caixa).dy,
+          t.getTopLeft(find.byKey(const Key('menu-ordem'))).dy,
+        );
+      } else {
+        expect(find.byType(Segmentado<String>), findsOneWidget);
+        expect(find.text('Em carteira'), findsOneWidget);
+      }
     }
+  });
+
+  testWidgets('celular 360: rótulo do filtro numa linha só', (t) async {
+    await _montar(t, tamanho: const Size(360, 800));
+    final caixa = find.byType(SeletorCaixa<String>);
+    final h = t
+        .getSize(find.descendant(of: caixa, matching: find.text('Todos')))
+        .height;
+    expect(h, lessThan(22));
+    await t.tap(caixa);
+    await t.pumpAndSettle();
+    for (final o in ['Em alta', 'Em queda', 'Em carteira']) {
+      expect(find.text(o), findsOneWidget);
+    }
+    await t.tap(find.text('Em alta'));
+    await t.pumpAndSettle();
+    expect(find.text('Em alta'), findsOneWidget);
+  });
+
+  testWidgets('celular: cartão com Comprar principal, Vender secundário e '
+      'Remover em ícone de 48 px', (t) async {
+    await _montar(t, tamanho: const Size(360, 1800));
+    final c = _cartao('PETR4');
+    expect(
+      _na(c, find.widgetWithText(BotaoPrincipal, 'Comprar')),
+      findsOneWidget,
+    );
+    expect(
+      _na(c, find.widgetWithText(BotaoSecundario, 'Vender')),
+      findsOneWidget,
+    );
+    final r = _na(c, find.byTooltip('Remover'));
+    expect(t.getSize(r).height, 48);
   });
 
   testWidgets('PC: linhas com Comprar tonal, Vender secundário e Remover em '
@@ -231,14 +277,32 @@ void main() {
       final faixas = find.byType(LegendaPonto);
       expect(titulo, findsOneWidget);
       expect(faixas, findsNWidgets(4));
-      const textos = [
-        'Menor Risco · < 2,2%',
-        'Médio Risco · 2,2% a 3,0%',
-        'Alto Risco · 3,0% a 4,5%',
-        'Alto Risco / Muito Alto · > 4,5%',
+      const nomes = [
+        'Menor Risco',
+        'Médio Risco',
+        'Alto Risco',
+        'Alto Risco / Muito Alto',
       ];
+      const faixasTxt = ['< 2,2%', '2,2% a 3,0%', '3,0% a 4,5%', '> 4,5%'];
       for (var i = 0; i < 4; i++) {
-        expect(t.widget<LegendaPonto>(faixas.at(i)).texto, textos[i]);
+        final l = t.widget<LegendaPonto>(faixas.at(i));
+        if (tamanho == _pc) {
+          expect(l.texto, '${nomes[i]} · ${faixasTxt[i]}');
+          expect(l.detalhe, isNull);
+        } else {
+          expect(l.texto, nomes[i]);
+          expect(l.detalhe, faixasTxt[i]);
+          // cada nome cabe numa linha
+          final h = t
+              .getSize(
+                find.descendant(
+                  of: faixas.at(i),
+                  matching: find.text(nomes[i]),
+                ),
+              )
+              .height;
+          expect(h, lessThan(22), reason: nomes[i]);
+        }
       }
       final dy = [for (var i = 0; i < 4; i++) t.getTopLeft(faixas.at(i)).dy];
       final dx = [for (var i = 0; i < 4; i++) t.getTopLeft(faixas.at(i)).dx];

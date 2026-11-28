@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 import '../../../integracoes/integracoes.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../componentes/cartao.dart';
-import '../../componentes/controles.dart' hide Selo;
+import '../../componentes/controles.dart'
+    show BotaoIcone, BotaoPrincipal, BotaoSecundario;
 import '../../componentes/grafico_linha.dart';
 import '../../componentes/logo_ativo.dart';
 import '../../servicos/api.dart';
@@ -69,18 +70,36 @@ Color? _corHex(String hex) {
 /// Cor da faixa de risco (a mesma nos três temas, como no Python).
 Color? corFaixaRisco(Risco risco) => _corHex(risco.fundo);
 
-/// Rótulo de risco com as cores da faixa.
+/// Etiqueta chapada da faixa: fundo da cor da faixa a 18% e texto na mesma
+/// cor, puxada para o texto do tema para ler bem no claro (amarelo e laranja
+/// sobre branco).
 class SeloRisco extends StatelessWidget {
   const SeloRisco(this.risco, {super.key});
 
   final Risco risco;
 
   @override
-  Widget build(BuildContext context) => Pilula(
-    texto: risco.rotulo,
-    fundo: _corHex(risco.fundo),
-    cor: _corHex(risco.texto),
-  );
+  Widget build(BuildContext context) {
+    final c = CoresApp.de(context);
+    final cor = corFaixaRisco(risco) ?? c.textoSuave;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: .18),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        child: Text(
+          risco.rotulo,
+          style: TextStyle(
+            color: Color.lerp(cor, c.texto, .45),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// O que as colunas mostram, já formatado.
@@ -565,7 +584,6 @@ class _AcoesCartao extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = CoresApp.de(context);
     if (amigo) {
       final importar = acoes.aoImportar;
       return importar == null
@@ -581,29 +599,25 @@ class _AcoesCartao extends StatelessWidget {
             );
     }
     return Row(
+      spacing: 6,
       children: [
-        Expanded(
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              FilledButton.icon(
-                onPressed: acoes.aoComprar,
-                icon: const Icon(Icons.add_shopping_cart),
-                label: const Text('Comprar'),
-              ),
-              OutlinedButton.icon(
-                onPressed: acoes.aoVender,
-                icon: const Icon(Icons.sell),
-                label: const Text('Vender'),
-              ),
-            ],
-          ),
+        BotaoPrincipal(
+          icone: Icons.add_shopping_cart,
+          rotulo: 'Comprar',
+          onPressed: acoes.aoComprar,
         ),
-        IconButton(
+        BotaoSecundario(
+          compacto: true,
+          icone: Icons.sell,
+          rotulo: 'Vender',
+          onPressed: acoes.aoVender,
+        ),
+        const Spacer(),
+        BotaoIcone(
+          icone: Icons.delete_outline,
+          tooltip: 'Remover',
+          destrutivo: true,
           onPressed: acoes.aoRemover,
-          icon: Icon(Icons.delete_outline, color: c.queda),
-          tooltip: 'Remover do radar',
         ),
       ],
     );
