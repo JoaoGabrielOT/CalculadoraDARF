@@ -31,7 +31,7 @@ class ListaMetas extends StatelessWidget {
             Text(
               'METAS',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.bold,
                 color: c.textoSuave,
               ),
@@ -181,13 +181,11 @@ class _CartaoMeta extends StatelessWidget {
           if (meta.statusOuAtiva == 'ativa')
             Align(
               alignment: Alignment.centerRight,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: c.queda,
-                  side: BorderSide(color: c.queda),
-                ),
+              child: BotaoIcone(
+                icone: Icons.delete_outline,
+                tooltip: 'Cancelar meta',
+                destrutivo: true,
                 onPressed: aoCancelar,
-                child: const Text('Cancelar meta'),
               ),
             ),
         ],

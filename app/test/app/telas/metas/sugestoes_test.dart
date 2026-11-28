@@ -457,6 +457,41 @@ void main() {
   });
 
   group('criar meta de alvo e stop', () {
+    for (final (nome, tamanho) in [
+      ('PC', _pc),
+      ('celular 360', const Size(360, 900)),
+    ]) {
+      testWidgets('$nome: Criar meta é o principal; os stops são secundários '
+          'com ícone, um por linha', (t) async {
+        final s = ServicosFalsos()
+          ..visaoSugestoes = _visao([_ativo('PETR4', topo: 12.5)]);
+        await _abrir(t, s, tamanho: tamanho);
+        await _expandir(t, 'PETR4');
+        final meta = find.widgetWithText(
+          BotaoPrincipal,
+          'Criar meta de alvo e stop',
+        );
+        final fixo = find.widgetWithText(BotaoSecundario, 'Criar stop fixo');
+        final movel = find.widgetWithText(BotaoSecundario, 'Criar stop móvel');
+        for (final f in [meta, fixo, movel]) {
+          await t.ensureVisible(f);
+          expect(f, findsOneWidget);
+        }
+        await t.pumpAndSettle();
+        expect(find.byType(BotaoPrincipal), findsOneWidget);
+        final altura = tamanho == _pc ? 40.0 : 48.0;
+        for (final f in [meta, fixo, movel]) {
+          expect(t.getSize(f).height, altura);
+        }
+        // a coluna do diálogo é estreita: um por linha, mesma largura
+        expect(t.getSize(fixo).width, t.getSize(meta).width);
+        expect(t.getSize(movel).width, t.getSize(meta).width);
+        expect(t.getTopLeft(fixo).dy, greaterThan(t.getTopLeft(meta).dy));
+        expect(t.getTopLeft(movel).dy, greaterThan(t.getTopLeft(fixo).dy));
+        expect(t.takeException(), isNull);
+      });
+    }
+
     testWidgets('sem oportunidade fica desativado; com oportunidade usa o '
         'alvo e o stop do cenário, depois da confirmação', (t) async {
       final bom = _ativo('PETR4', topo: 12.5);
@@ -739,6 +774,30 @@ void main() {
       findsOneWidget,
     );
     expect(find.widgetWithText(Selo, 'Sem dados'), findsOneWidget);
+  });
+
+  testWidgets('celular 360: abas do cartão aberto viram caixa, sem quebra', (
+    t,
+  ) async {
+    final s = ServicosFalsos()..visaoSugestoes = _visao([_ativo('PETR4')]);
+    await _abrir(t, s, tamanho: const Size(360, 900));
+    await _expandir(t, 'PETR4');
+    final abas = find.byKey(const ValueKey('abas-PETR4'));
+    expect(t.widget(abas).runtimeType.toString(), startsWith('SeletorCaixa'));
+    expect(t.getSize(abas).height, 48);
+    expect(
+      find.descendant(of: abas, matching: find.text('Mercado')),
+      findsOneWidget,
+    );
+    await t.tap(abas);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Meta financeira').last);
+    await t.pumpAndSettle();
+    expect(
+      find.descendant(of: abas, matching: find.text('Meta financeira')),
+      findsOneWidget,
+    );
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('abas do cartão aberto são um Segmentado', (t) async {

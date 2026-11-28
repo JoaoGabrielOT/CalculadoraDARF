@@ -28,35 +28,23 @@ class AbaCalculadora extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: 4,
         children: [
-          const _Rotulo('ATIVO / COMPRA'),
-          InputDecorator(
-            decoration: const InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                key: const ValueKey('meta-compra'),
-                isExpanded: true,
-                isDense: true,
-                value: sem ? null : controle.loteId,
-                disabledHint: const Text('Nenhuma compra em aberto'),
-                onChanged: sem
-                    ? null
-                    : (id) => unawaited(controle.escolherLote(id)),
-                items: [
-                  for (final l in lotes)
-                    DropdownMenuItem(
-                      value: l.lote.id,
-                      child: Text(
+          const SizedBox(height: 6),
+          SeletorCaixa<String>(
+            key: const ValueKey('meta-compra'),
+            rotulo: 'Ativo / compra',
+            // sem compra, a caixa desabilitada mostra a dica
+            valor: sem ? '' : (controle.loteId ?? ''),
+            itens: sem
+                ? const [('', 'Nenhuma compra em aberto')]
+                : [
+                    for (final l in lotes)
+                      (
+                        l.lote.id,
                         '${l.lote.ticker} · ${fmtData(l.lote.dataCompra)} · '
-                        '${brl(l.lote.preco)} · ${l.livre} livres',
-                        overflow: TextOverflow.ellipsis,
+                            '${brl(l.lote.preco)} · ${l.livre} livres',
                       ),
-                    ),
-                ],
-              ),
-            ),
+                  ],
+            aoMudar: sem ? null : (id) => unawaited(controle.escolherLote(id)),
           ),
           const _Rotulo('QUANTIDADE'),
           TextField(

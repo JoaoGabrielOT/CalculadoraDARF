@@ -281,7 +281,7 @@ void main() {
             t.getTopLeft(find.textContaining('$tk · 10 un.')).dy,
         ];
         expect(y[0] < y[1] && y[1] < y[2], isTrue);
-        expect(find.text('Cancelar meta'), findsOneWidget);
+        expect(find.byTooltip('Cancelar meta'), findsOneWidget);
         final cores = CoresApp.de(t.element(find.text('Ativa')));
         expect(t.widget<Text>(find.text('Ativa')).style?.color, cores.aviso);
         expect(
@@ -309,7 +309,7 @@ void main() {
       final s = ServicosFalsos()
         ..visaoMetas = _visao([_meta('A', '2026-10-23T11:00:00-03:00')]);
       await _abrir(t, servicos: s);
-      await t.tap(find.text('Cancelar meta'));
+      await t.tap(find.byTooltip('Cancelar meta'));
       await t.pumpAndSettle();
       expect(
         find.text(
@@ -323,7 +323,7 @@ void main() {
       expect(s.chamadas.where((c) => c.startsWith('cancelarMeta')), isEmpty);
       // confirmar cancela e relê a lista
       final antes = s.chamadas.where((c) => c == 'metas()').length;
-      await t.tap(find.text('Cancelar meta'));
+      await t.tap(find.byTooltip('Cancelar meta'));
       await t.pumpAndSettle();
       await t.tap(find.widgetWithText(FilledButton, 'Cancelar meta'));
       await t.pumpAndSettle();
@@ -341,7 +341,7 @@ void main() {
         ..visaoMetas = _visao([_meta('A', '2026-10-23T11:00:00-03:00')])
         ..erros['cancelarMeta'] = ErroValidacao('Essa meta já foi executada.');
       await _abrir(t, servicos: s);
-      await t.tap(find.text('Cancelar meta'));
+      await t.tap(find.byTooltip('Cancelar meta'));
       await t.pumpAndSettle();
       await t.tap(find.widgetWithText(FilledButton, 'Cancelar meta'));
       await t.pumpAndSettle();
@@ -351,6 +351,50 @@ void main() {
   });
 
   group('Calculadora', () {
+    testWidgets('Ativo / compra é um SeletorCaixa, desabilitado sem compras', (
+      t,
+    ) async {
+      await _abrir(t, servicos: ServicosFalsos());
+      await _irParaCalculadora(t);
+      final caixa = find.byKey(const ValueKey('meta-compra'));
+      expect(t.widget(caixa), isA<SeletorCaixa<String>>());
+      expect(t.getSize(caixa).height, 40);
+      expect(
+        find.descendant(of: caixa, matching: find.text('Ativo / compra')),
+        findsOneWidget,
+      );
+      expect(find.byType(DropdownButton<String>), findsNothing);
+    });
+
+    testWidgets('sem compras em aberto: caixa desabilitada com a dica', (
+      t,
+    ) async {
+      final s = ServicosFalsos()..visaoMetas = _visao([], lotes: []);
+      await _abrir(t, servicos: s);
+      await _irParaCalculadora(t);
+      final caixa = t.widget<SeletorCaixa<String>>(
+        find.byKey(const ValueKey('meta-compra')),
+      );
+      expect(caixa.aoMudar, isNull);
+      expect(find.text('Nenhuma compra em aberto'), findsOneWidget);
+    });
+
+    testWidgets('360 px: calculadora sem overflow, com o principal à direita', (
+      t,
+    ) async {
+      await _abrir(t, tamanho: const Size(360, 850));
+      await _irParaCalculadora(t);
+      final criar = find.widgetWithText(
+        BotaoPrincipal,
+        'Criar venda automática com este preço',
+      );
+      await t.ensureVisible(criar);
+      await t.pumpAndSettle();
+      expect(t.getSize(criar).height, 48);
+      expect(t.getTopRight(criar).dx, lessThanOrEqualTo(360 - 16));
+      expect(t.takeException(), isNull);
+    });
+
     ServicosFalsos servicos() => ServicosFalsos()
       ..precoAlvo = _alvo(irrf: 0.5)
       ..projecaoFn = (preco) =>
@@ -538,6 +582,35 @@ void main() {
       expect(find.text('METAS'), findsOneWidget);
       final dialogo = t.getSize(find.byKey(const ValueKey('metas-dialogo')));
       expect(dialogo.width, 900);
+    });
+
+    testWidgets('PC: METAS é título de seção, centrado na linha de 40 px', (
+      t,
+    ) async {
+      await _abrir(t);
+      final titulo = find.text('METAS');
+      final seg = find.byType(Segmentado<ModoMetas>);
+      expect(t.getCenter(titulo).dy, closeTo(t.getCenter(seg).dy, 1));
+      expect(t.widget<Text>(titulo).style?.fontSize, 12);
+      expect(
+        t
+            .widget<Text>(find.text('SUGESTÕES DE SAÍDA POR ATIVO'))
+            .style
+            ?.fontSize,
+        12,
+      );
+    });
+
+    testWidgets('Cancelar meta é ícone destrutivo', (t) async {
+      final s = ServicosFalsos()
+        ..visaoMetas = _visao([_meta('A', '2026-10-23T11:00:00-03:00')]);
+      await _abrir(t, servicos: s);
+      final b = t.widget<BotaoIcone>(
+        find.widgetWithIcon(BotaoIcone, Icons.delete_outline),
+      );
+      expect(b.destrutivo, isTrue);
+      expect(b.tooltip, 'Cancelar meta');
+      expect(find.text('Cancelar meta'), findsNothing);
     });
 
     testWidgets('PC: Segmentado Sugestões | Calculadora na linha do Verificar '

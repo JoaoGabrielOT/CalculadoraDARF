@@ -381,7 +381,7 @@ void main() {
         expect(find.byKey(const ValueKey('abas-PETR4')), findsOneWidget);
         if (compras) {
           expect(
-            find.widgetWithText(OutlinedButton, 'Criar meta de alvo e stop'),
+            find.widgetWithText(FilledButton, 'Criar meta de alvo e stop'),
             findsOneWidget,
           );
         }

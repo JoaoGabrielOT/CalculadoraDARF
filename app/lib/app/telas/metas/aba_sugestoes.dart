@@ -55,7 +55,7 @@ class PainelSugestoes extends StatelessWidget {
                     Text(
                       'SUGESTÕES DE SAÍDA POR ATIVO',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: c.textoSuave,
                       ),

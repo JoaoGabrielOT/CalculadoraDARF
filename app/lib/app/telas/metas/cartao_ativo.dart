@@ -12,7 +12,8 @@ import 'package:flutter/material.dart';
 import '../../../nucleo/nucleo.dart';
 import '../../servicos/api.dart';
 import '../../componentes/cartao.dart' hide Selo, Pilula;
-import '../../componentes/controles.dart' show Segmentado, Selo;
+import '../../componentes/controles.dart'
+    show BotaoPrincipal, BotaoSecundario, SeletorCaixa, Segmentado, Selo;
 import '../../componentes/sinal.dart';
 import '../../regras/apresentacao.dart';
 import '../../tema/cores_app.dart';
@@ -158,14 +159,23 @@ class _CartaoAtivoState extends State<CartaoAtivo> {
       children: [
         if (!oportunidade && r.cenario != null)
           _SemOportunidade(motivo: r.cenario!.motivo),
-        Segmentado<_Aba>(
-          key: ValueKey('abas-$ticker'),
-          opcoes: abas,
-          valor: aba,
-          expandir: true,
-          compacto: !expandido(context),
-          aoMudar: (v) => setState(() => _aba = v),
-        ),
+        // "Meta financeira" quebraria a linha em 360 px: no celular, caixa
+        if (expandido(context))
+          Segmentado<_Aba>(
+            key: ValueKey('abas-$ticker'),
+            opcoes: abas,
+            valor: aba,
+            expandir: true,
+            aoMudar: (v) => setState(() => _aba = v),
+          )
+        else
+          SeletorCaixa<_Aba>(
+            key: ValueKey('abas-$ticker'),
+            rotulo: 'Visão',
+            valor: aba,
+            itens: abas,
+            aoMudar: (v) => setState(() => _aba = v),
+          ),
         conteudoAba,
         _Expansivel(
           chave: 'como-$ticker',
@@ -1034,32 +1044,33 @@ class _LinhaCompra extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                OutlinedButton(
-                  onPressed: pode
-                      ? () => unawaited(
-                          controle.criarMetasDoCenario(
-                            context,
-                            resultado,
-                            compra,
-                          ),
-                        )
-                      : null,
-                  child: const Text('Criar meta de alvo e stop'),
-                ),
-                OutlinedButton(
+            child: _BotoesCompra(
+              meta: BotaoPrincipal(
+                icone: Icons.flag,
+                onPressed: pode
+                    ? () => unawaited(
+                        controle.criarMetasDoCenario(
+                          context,
+                          resultado,
+                          compra,
+                        ),
+                      )
+                    : null,
+                rotulo: 'Criar meta de alvo e stop',
+              ),
+              stops: [
+                BotaoSecundario(
+                  icone: Icons.horizontal_rule,
                   onPressed: podeStop
                       ? () => unawaited(
                           controle.criarStopAvulso(context, resultado, compra),
                         )
                       : null,
-                  child: const Text('Criar stop fixo'),
+                  rotulo: 'Criar stop fixo',
                 ),
                 if (resultado.horizonte == Horizonte.swing)
-                  OutlinedButton(
+                  BotaoSecundario(
+                    icone: Icons.trending_up,
                     onPressed: podeStop && movel
                         ? () => unawaited(
                             controle.criarStopAvulso(
@@ -1070,7 +1081,7 @@ class _LinhaCompra extends StatelessWidget {
                             ),
                           )
                         : null,
-                    child: const Text('Criar stop móvel'),
+                    rotulo: 'Criar stop móvel',
                   ),
               ],
             ),
@@ -1079,4 +1090,32 @@ class _LinhaCompra extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Com largura para os três, uma linha com a principal na ponta direita;
+/// senão (celular e a coluna de 420 px do diálogo), um botão por linha, todos
+/// com a largura toda.
+class _BotoesCompra extends StatelessWidget {
+  const _BotoesCompra({required this.meta, required this.stops});
+
+  final Widget meta;
+  final List<Widget> stops;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, caixa) {
+      if (caixa.maxWidth >= 560) {
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          spacing: 8,
+          children: [...stops, meta],
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [meta, ...stops],
+      );
+    },
+  );
 }
