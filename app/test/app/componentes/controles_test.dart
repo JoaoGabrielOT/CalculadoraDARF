@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:calculadoradarf/app/componentes/controles.dart';
 import 'package:calculadoradarf/app/tema/cores_app.dart';
 import 'package:calculadoradarf/app/tema/tema_visual.dart';
@@ -12,11 +14,11 @@ const _temas = [TemaVisual.terminal, TemaVisual.claro, TemaVisual.moderno];
 
 void main() {
   group('altura', () {
-    final casos = <String, (Widget Function(), Type)>{
+    final casos = <String, (Widget Function(), List<Finder>)>{
       'BotaoPrincipal': (
         () =>
             BotaoPrincipal(icone: Icons.add, rotulo: 'Novo', onPressed: () {}),
-        BotaoPrincipal,
+        [find.byType(FilledButton)],
       ),
       'BotaoSecundario': (
         () => BotaoSecundario(
@@ -24,7 +26,7 @@ void main() {
           rotulo: 'Outro',
           onPressed: () {},
         ),
-        BotaoSecundario,
+        [find.byType(OutlinedButton)],
       ),
       'Segmentado': (
         () => Segmentado<int>(
@@ -32,7 +34,7 @@ void main() {
           valor: 1,
           aoMudar: (_) {},
         ),
-        Segmentado<int>,
+        [find.byType(SegmentedButton<int>), find.byType(TextButton)],
       ),
       'CampoBusca': (
         () => SizedBox(
@@ -42,7 +44,7 @@ void main() {
             dica: 'Buscar',
           ),
         ),
-        CampoBusca,
+        [find.byType(TextField)],
       ),
       'BotaoMenu': (
         () => BotaoMenu<String>(
@@ -51,7 +53,7 @@ void main() {
           itens: const [('a', 'A')],
           aoEscolher: (_) {},
         ),
-        BotaoMenu<String>,
+        [find.byType(OutlinedButton)],
       ),
       'SeletorCaixa': (
         () => SizedBox(
@@ -63,7 +65,7 @@ void main() {
             aoMudar: (_) {},
           ),
         ),
-        SeletorCaixa<String>,
+        [find.byType(InputDecorator)],
       ),
     };
     for (final tema in _temas) {
@@ -78,7 +80,11 @@ void main() {
               tema: tema,
               tamanho: tamanho,
             );
-            expect(t.getSize(find.byType(e.value.$2)).height, h);
+            for (final f in e.value.$2) {
+              for (final el in f.evaluate()) {
+                expect(t.getSize(find.byWidget(el.widget)).height, h);
+              }
+            }
           });
         }
       }
@@ -96,7 +102,48 @@ void main() {
     h.dispose();
   });
 
+  testWidgets('BotaoIcone habilitado tem ação de toque semântica', (t) async {
+    final h = t.ensureSemantics();
+    await montarComponente(
+      t,
+      BotaoIcone(icone: Icons.delete, tooltip: 'Excluir', onPressed: () {}),
+    );
+    final no = t.getSemantics(find.bySemanticsLabel('Excluir'));
+    expect(no.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    expect(no.label, 'Excluir');
+    h.dispose();
+  });
+
   for (final tema in _temas) {
+    testWidgets('SeletorCaixa: rótulo cabe na caixa (${tema.chave})', (
+      t,
+    ) async {
+      for (final tam in [_pc, _celular]) {
+        await montarComponente(
+          t,
+          SizedBox(
+            width: 200,
+            child: SeletorCaixa<String>(
+              rotulo: 'Tipo',
+              valor: 'a',
+              itens: const [('a', 'Alfa'), ('b', 'B')],
+              aoMudar: (_) {},
+            ),
+          ),
+          tema: tema,
+          tamanho: tam,
+        );
+        final caixa = t.getRect(find.byType(InputDecorator));
+        final rotulo = t.getRect(find.text('Tipo'));
+        final valor = t.getRect(find.text('Alfa'));
+        expect(caixa.height, tam == _pc ? 40 : 48);
+        expect(rotulo.top, greaterThanOrEqualTo(caixa.top - 8));
+        expect(rotulo.bottom, lessThanOrEqualTo(caixa.bottom));
+        expect(valor.top, greaterThanOrEqualTo(caixa.top));
+        expect(valor.bottom, lessThanOrEqualTo(caixa.bottom));
+        expect(rotulo.bottom, lessThanOrEqualTo(valor.top + 1));
+      }
+    });
     testWidgets('BotaoIcone destrutivo usa queda (${tema.chave})', (t) async {
       late Color queda;
       await montarComponente(

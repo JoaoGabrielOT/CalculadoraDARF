@@ -91,7 +91,6 @@ class BotaoIcone extends StatelessWidget {
     final c = CoresApp.de(context);
     final h = _altura(context);
     final botao = IconButton(
-      tooltip: tooltip,
       onPressed: onPressed,
       icon: Icon(icone, size: 20, color: destrutivo ? c.queda : null),
       style: ButtonStyle(
@@ -103,13 +102,18 @@ class BotaoIcone extends StatelessWidget {
     );
     // O tooltip do Material só vira `tooltip` semântico, não rótulo: o
     // rótulo explícito faz o leitor de tela falar o nome do botão.
-    final comRotulo = Semantics(
-      button: true,
-      enabled: onPressed != null,
-      label: tooltip,
-      onTap: onPressed,
-      excludeSemantics: true,
-      child: botao,
+    // O rótulo se funde (MergeSemantics) ao nó do IconButton, que mantém as
+    // ações de toque e foco; o Tooltip fica fora da semântica para não
+    // duplicar o texto.
+    final comRotulo = MergeSemantics(
+      child: Semantics(
+        label: tooltip,
+        child: Tooltip(
+          message: tooltip,
+          excludeFromSemantics: true,
+          child: botao,
+        ),
+      ),
     );
     if (!marcado) return comRotulo;
     return Stack(
@@ -193,10 +197,11 @@ class Segmentado<T> extends StatelessWidget {
     child: SegmentedButton<T>(
       showSelectedIcon: !compacto,
       // O SegmentedButton ignora fixedSize: a altura é 40 mais o ajuste da
-      // densidade vertical (2 = +8 px, o que dá 48 no celular).
+      // densidade vertical; 1,75 dá exatamente 48 no segmento (medido: 2 dá
+      // 50 e 1,5 dá 46).
       style: ButtonStyle(
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity(vertical: expandido(context) ? 0 : 2),
+        visualDensity: VisualDensity(vertical: expandido(context) ? 0 : 1.75),
         padding: compacto
             ? const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 10))
             : null,
@@ -503,6 +508,7 @@ class SeletorCaixa<T> extends StatelessWidget {
                   child: Text(
                     atual.isEmpty ? '' : atual.first,
                     maxLines: 1,
+                    style: TextStyle(color: ativo ? c.texto : c.textoSuave),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
